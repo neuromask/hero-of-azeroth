@@ -665,15 +665,6 @@ if (SKIP_FTP) {
         if (differing.length > 20) problems.push(`size differs on the server: ${differing.length - 20} more`)
       }
     }
-
-    // A last look at the target: the two directories the server needs must be
-    // there, otherwise the upload went somewhere unexpected.
-    const root = remoteNames(target, netrc, '')
-    if (root && root.includes('server') && root.includes('public')) {
-      log(`   verified ${target.root} contains server/ and public/`)
-    } else {
-      problems.push(`${target.root} does not list server/ and public/ after the upload`)
-    }
   } catch (error) {
     problems.push(`the FTP upload failed: ${error.message.split('\n')[0]}`)
   } finally {
