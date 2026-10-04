@@ -73,16 +73,14 @@ function fail(message) {
   process.exit(1)
 }
 
-/** Runs a command in the repository root with its output passed through. */
-function run(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: ROOT,
-    stdio: 'inherit',
-    shell: process.platform === 'win32'
-  })
+/** Runs a command line in the repository root with its output passed through. */
+function run(line) {
+  // The shell is what resolves `npm` to npm.cmd on Windows. The line is passed as
+  // one string on purpose: Node deprecates an argument list together with `shell`.
+  const result = spawnSync(line, { cwd: ROOT, stdio: 'inherit', shell: true })
 
-  if (result.error) fail(`Could not run \`${command}\`: ${result.error.message}`)
-  if (result.status !== 0) fail(`\`${command} ${args.join(' ')}\` failed with code ${result.status}`)
+  if (result.error) fail(`Could not run \`${line}\`: ${result.error.message}`)
+  if (result.status !== 0) fail(`\`${line}\` failed with code ${result.status}`)
 }
 
 /** Runs git in the repository root and returns its trimmed stdout, or throws. */
@@ -179,7 +177,7 @@ if (SKIP_BUILD) {
   step('Skipping the build (dry run)')
 } else {
   step('Building (`npm run build`)')
-  run('npm', ['run', 'build'])
+  run('npm run build')
 }
 
 const outputStats = fs.existsSync(path.join(OUTPUT, 'server', 'index.mjs')) ? measure(OUTPUT) : null
