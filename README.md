@@ -126,7 +126,9 @@ FTP_USERNAME=...
 FTP_PASSWORD=...
 FTP_PATH=/data02/virt32423/domeenid/www.example.com/heroofazeroth/
 # FTP_PORT=21        # optional, 21 by default
-# FTP_SECURE=explicit  # optional: false (default), explicit (FTPS on 21), implicit (FTPS on 990)
+FTP_SECURE=explicit  # FTPS on port 21 (false, explicit or implicit)
+FTP_INSECURE=true    # waive the certificate check when the host's certificate
+                     # is issued for another name (shared hosting, usually)
 ```
 
 `FTP_PATH` is the directory the server runs from, and it receives the *contents*

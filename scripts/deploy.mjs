@@ -36,6 +36,8 @@
  *   FTP_PORT             optional, 21 by default
  *   FTP_SECURE           optional: `false` (default), `explicit` (FTPS on 21) or
  *                        `implicit` (FTPS on 990)
+ *   FTP_INSECURE         optional, `true` skips the TLS certificate check, for a
+ *                        host whose certificate is issued for another name
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -213,6 +215,7 @@ function ftpTarget() {
   const base = setting('FTP_PATH')
   const port = setting('FTP_PORT') || '21'
   const secure = (setting('FTP_SECURE') || 'false').toLowerCase()
+  const insecure = ['true', '1', 'yes'].includes((setting('FTP_INSECURE') || '').toLowerCase())
 
   if (!server || !user || !password || !base) {
     fail('FTP_SERVER, FTP_USERNAME, FTP_PASSWORD and FTP_PATH must be set, in .env or the environment.')
@@ -226,7 +229,7 @@ function ftpTarget() {
   // same directory; URLs are built from it, so it needs its trailing slash.
   const root = `/${base.replace(/\\/g, '/').split('/').filter(Boolean).join('/')}/`
 
-  return { server, user, password, port, secure, root }
+  return { server, user, password, port, secure, insecure, root }
 }
 
 /** `ftp://host:21/dir/`, or `ftps://` when implicit TLS is configured. */
@@ -252,6 +255,10 @@ function ftpArgs(target, netrc) {
   // `--ssl-reqd` upgrades a plain connection on port 21; an `ftps://` URL already
   // wraps the whole session, so it must not be combined with the flag.
   if (target.secure === 'explicit') args.push('--ssl-reqd')
+
+  // Shared hosting certificates are usually issued for another name than the FTP
+  // host, so the check can be waived explicitly with FTP_INSECURE=true.
+  if (target.insecure) args.push('--insecure')
 
   return args
 }
@@ -438,7 +445,10 @@ if (SKIP_FTP) {
 } else {
   target = ftpTarget()
   const scheme = target.secure === 'implicit' ? 'ftps' : 'ftp'
-  log(`   ftp    : ${scheme}://${target.server}:${target.port}${target.root}`)
+  const tls = target.secure === 'false'
+    ? 'no TLS'
+    : `${target.secure} TLS${target.insecure ? ', certificate check off' : ''}`
+  log(`   ftp    : ${scheme}://${target.server}:${target.port}${target.root} (${tls})`)
 }
 
 const inRepo = gitTry(['rev-parse', '--is-inside-work-tree']).stdout === 'true'
