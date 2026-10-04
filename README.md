@@ -129,6 +129,8 @@ FTP_PATH=/data02/virt32423/domeenid/www.example.com/heroofazeroth/
 FTP_SECURE=explicit  # FTPS on port 21 (false, explicit or implicit)
 FTP_INSECURE=true    # waive the certificate check when the host's certificate
                      # is issued for another name (shared hosting, usually)
+# FTP_TLS_MAX=1.2    # highest TLS version for FTPS (1.2, because 1.3 data
+                     # connections tend to be aborted by these hosts)
 ```
 
 `FTP_PATH` is the directory the server runs from, and it receives the *contents*

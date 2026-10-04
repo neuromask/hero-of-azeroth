@@ -38,6 +38,8 @@
  *                        `implicit` (FTPS on 990)
  *   FTP_INSECURE         optional, `true` skips the TLS certificate check, for a
  *                        host whose certificate is issued for another name
+ *   FTP_TLS_MAX          optional, the highest TLS version for FTPS (1.2 by
+ *                        default, because 1.3 data connections get aborted)
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -281,6 +283,14 @@ function ftpArgs(target, netrc) {
   // `--ssl-reqd` upgrades a plain connection on port 21; an `ftps://` URL already
   // wraps the whole session, so it must not be combined with the flag.
   if (target.secure === 'explicit') args.push('--ssl-reqd')
+
+  // FTPS data connections are fragile over TLS 1.3: this kind of host answers
+  // `451 Error during read from data connection` and leaves a zero-byte file
+  // behind, so TLS is capped at 1.2 unless FTP_TLS_MAX asks for another version.
+  if (target.secure !== 'false') {
+    const tlsMax = setting('FTP_TLS_MAX') || '1.2'
+    if (tlsMax !== 'off') args.push('--tls-max', tlsMax)
+  }
 
   // Shared hosting certificates are usually issued for another name than the FTP
   // host, so the check can be waived explicitly with FTP_INSECURE=true.
