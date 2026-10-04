@@ -308,7 +308,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
     <div class="fixed inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(8,10,15,0.65)_100%)]"></div>
 
     <!-- The form is the same liquid glass as the boxes on the character page. -->
-    <div class="relative z-11 max-w-md w-full rounded-2xl border border-white/10 bg-white/[0.06] p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl backdrop-saturate-150">
+    <div class="relative z-20 max-w-md w-full rounded-2xl border border-white/10 bg-white/[0.06] p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl backdrop-saturate-150">
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
           <!-- The wordmark carries the brand, so the heading is the artwork: it is
