@@ -690,9 +690,8 @@ if (SKIP_FTP) {
 } else {
   log(`   ftp    : ${uploadedFiles} files, ${human(uploadedBytes)} uploaded to ${target.server}${target.root}`)
   log(`   server : cd into that directory and run  node server/index.mjs`)
-  log('            with NUXT_BLIZZARD_CLIENT_ID, NUXT_BLIZZARD_CLIENT_SECRET and')
-  log('            (for account-wide totals) NUXT_WARBAND_CHARACTERS in its environment;')
-  log('            it listens on 3100 unless the environment sets PORT or NITRO_PORT')
+  log('            with NUXT_BLIZZARD_CLIENT_ID and NUXT_BLIZZARD_CLIENT_SECRET in its')
+  log('            environment; it listens on 3100 unless the environment sets PORT or NITRO_PORT')
 }
 
 if (DRY_RUN) {

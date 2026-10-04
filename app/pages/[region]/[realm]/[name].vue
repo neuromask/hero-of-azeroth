@@ -139,6 +139,8 @@ interface StatTile {
   /** File name in `~/assets/icons`, which `<AppIcon>` draws. */
   icon: string
   label: string
+  /** The scope in small print under the label: whose numbers this tile shows. */
+  note: string
   color: string
   display: string
   percent: number
@@ -147,18 +149,26 @@ interface StatTile {
 /**
  * The stat tiles with their progress bars, split into the two columns they are
  * laid out in around the character. Achievements lead the right column.
+ *
+ * Every tile names the scope of its number in small print, because the six do not come
+ * from the same place: pets, toys and decor arrive account-wide from Blizzard - they are
+ * identical for every character of an account - while mounts, reputations and the
+ * achievement points are the character's own.
  */
 const tileColumns = computed<StatTile[][]>(() => {
   const c = character.value
   if (!c) return []
 
+  const accountWide = t('accountWide')
+  const perCharacter = t('perCharacter')
+
   const tiles = [
-    { key: 'mounts', icon: 'mounts', label: t('mounts'), count: c.stats.mounts.count, total: c.stats.mounts.total, color: 'text-amber-500' },
-    { key: 'toys', icon: 'toys', label: t('toys'), count: c.stats.toys.count, total: c.stats.toys.total, color: 'text-amber-500' },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
-    { key: 'achievements', icon: 'achievments', label: t('achievements'), count: c.stats.achievements.count, total: c.stats.achievements.total, color: 'text-wow-gold' },
-    { key: 'pets', icon: 'pets', label: t('pets'), count: c.stats.pets.count, total: c.stats.pets.total, color: 'text-purple-400' },
-    { key: 'decor', icon: 'decor', label: t('decor'), count: c.stats.decor.count, total: c.stats.decor.total, color: 'text-amber-500' }
+    { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total, color: 'text-amber-500' },
+    { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total, color: 'text-amber-500' },
+    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
+    { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total, color: 'text-wow-gold' },
+    { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total, color: 'text-purple-400' },
+    { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total, color: 'text-amber-500' }
   ]
 
   const withBar = tiles.map((tile) => ({
@@ -481,7 +491,12 @@ onBeforeUnmount(() => {
               <div class="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-2">
                 <span class="flex min-w-0 items-center gap-2.5 text-base font-bold uppercase tracking-wider text-gray-200 sm:text-lg">
                   <AppIcon :name="tile.icon" class="h-[1.725em] w-[1.725em] shrink-0" />
-                  <span class="truncate">{{ tile.label }}</span>
+                  <span class="min-w-0">
+                    <span class="block truncate">{{ tile.label }}</span>
+                    <!-- Whose numbers the tile shows, in small print: the whole
+                         account or this character alone. -->
+                    <span class="block truncate text-[10px] font-medium normal-case tracking-normal text-gray-500">{{ tile.note }}</span>
+                  </span>
                 </span>
                 <span class="text-2xl sm:text-3xl font-extrabold whitespace-nowrap text-right" :class="tile.color">{{ tile.display }}</span>
                 <span aria-hidden="true"></span>

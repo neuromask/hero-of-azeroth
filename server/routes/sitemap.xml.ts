@@ -1,10 +1,11 @@
 /**
  * The sitemap `robots.txt` points crawlers at.
  *
- * Only what can be written down without guessing is listed here: the home page and the
- * characters of the configured warband. Any other character page is reached through the
- * search form, and each one names itself with a canonical URL and hreflang links, so a
- * crawler picks those up while following links.
+ * Only what can be written down without guessing is listed here: the home page. A
+ * character page is reached through the search form, and each one names itself with a
+ * canonical URL and hreflang links, so a crawler picks those up while following links.
+ * Listing characters would mean listing somebody's account, which the deployment does
+ * not know and should not carry.
  *
  * Every page appears once per language and each copy names the others, which is how a
  * crawler learns the two are the same page in different languages rather than duplicates
@@ -21,13 +22,8 @@ const DEFAULT_LANGUAGE = 'en'
 export default defineEventHandler((event) => {
   const siteUrl = String(useRuntimeConfig(event).public.siteUrl || '').replace(/\/+$/, '')
 
-  /** The site's own pages: the front door, then the warband's characters. */
-  const paths = [
-    '/',
-    ...warbandMembers().map(
-      (member) => `/${regionPath(member.region)}/${member.realm}/${encodeURIComponent(member.name)}`
-    )
-  ]
+  /** The site's own pages: the front door, which is the only one that exists unwritten. */
+  const paths = ['/']
 
   /**
    * A page as an absolute URL in `language`. The front door is the bare host in English
@@ -54,7 +50,7 @@ export default defineEventHandler((event) => {
   )
 
   setHeader(event, 'content-type', 'application/xml; charset=utf-8')
-  // The list only changes when the warband does, so a day of caching costs nothing.
+  // The list never changes, so a day of caching costs nothing.
   setHeader(event, 'cache-control', 'public, max-age=86400')
 
   return `<?xml version="1.0" encoding="UTF-8"?>

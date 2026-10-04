@@ -30,17 +30,15 @@ NUXT_BLIZZARD_CLIENT_SECRET=...
 ```
 
 Blizzard reports mounts and reputations per character, while the game shows an
-account-wide mount journal and reputation tab. To show the account-wide numbers,
-list the account's own characters as `region/realm/name`, comma separated, and
-their collections are merged into every page of that account:
+account-wide mount journal and reputation tab; pets, toys and decor come back
+account-wide already. Every character page reports the character the way the API
+returns it, and each tile says in small print whose numbers it shows: `account-wide`
+for pets, toys and decor, `per character` for mounts, reputations and achievement
+points.
 
-```bash
-NUXT_WARBAND_CHARACTERS=eu/gordunni/main,eu/eversong/alt
-```
-
-Leaving it empty means every character is reported exactly as the API returns it.
-The warband is a private account detail, so it is not meant to be set on a public
-deployment that serves other people's characters.
+Reading an account's whole journal instead would need a user OAuth login
+(`/profile/user/wow/collections/mounts` answers 403 to a client-credentials token),
+so a public deployment shows one character at a time.
 
 The two facts a deployment has of its own — where it is published and which tag
 manager container it reports to — are configuration as well, so a staging copy or a
@@ -183,7 +181,6 @@ cd /data02/virt32423/domeenid/www.example.com/heroofazeroth
 
 NUXT_BLIZZARD_CLIENT_ID=... \
 NUXT_BLIZZARD_CLIENT_SECRET=... \
-NUXT_WARBAND_CHARACTERS=eu/gordunni/нейромаск \
 node server/index.mjs
 ```
 

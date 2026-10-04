@@ -45,11 +45,6 @@ export default defineNuxtConfig({
     port: PORT,
     blizzardClientId: process.env.NUXT_BLIZZARD_CLIENT_ID,
     blizzardClientSecret: process.env.NUXT_BLIZZARD_CLIENT_SECRET,
-    // The account's own characters (comma separated `region/realm/name`), whose
-    // mounts and reputations are merged into every page of that account: Blizzard
-    // reports those two collections per character while the game shows the
-    // account-wide journal. Empty means "report the character as it arrives".
-    warbandCharacters: process.env.NUXT_WARBAND_CHARACTERS || '',
     public: {
       // Absolute host of the public site: canonical URLs, hreflang links, the
       // sitemap and the structured data are all built on it, so none of them

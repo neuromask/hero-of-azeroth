@@ -169,116 +169,21 @@ const CHARACTER_DEFAULT_TOTALS = { mounts: 1676, pets: 2179, toys: 1135, decor: 
 const FALLBACK_REGIONS = ['eu', 'us']
 
 /**
- * A character that shares the account with the one being viewed, listed in
- * `NUXT_WARBAND_CHARACTERS` as `region/realm/name`.
- */
-export interface WarbandMember {
-  region: string
-  realm: string
-  name: string
-}
-
-/** Mount ids and Exalted reputation ids collected by an account. */
-interface WarbandUnion {
-  mounts: Set<number>
-  exalted: Set<number>
-}
-
-const cachedWarband = new Map<string, { data: WarbandUnion; expires_at: number }>()
-
-/**
- * The account's own characters, from the `NUXT_WARBAND_CHARACTERS` environment
- * variable (comma separated `region/realm/name`, e.g.
- * `eu/gordunni/neromask,eu/eversong/altmask`).
- */
-export function warbandMembers(): WarbandMember[] {
-  const raw = String(useRuntimeConfig().warbandCharacters || '')
-
-  return raw
-    .split(',')
-    .map((entry) => entry.trim().toLowerCase())
-    .map((entry) => entry.split('/'))
-    .filter((parts) => parts.length === 3 && parts.every(Boolean))
-    .map(([region, realm, name]) => ({ region, realm, name }))
-}
-
-/** Whether the character being viewed belongs to the configured warband. */
-function isWarbandMember(region: string, realm: string, name: string): boolean {
-  return warbandMembers().some(
-    (member) => member.region === region && member.realm === realm && member.name === name
-  )
-}
-
-/**
- * Mounts and reputations are the only two collections Blizzard still reports per
- * character rather than per account: measured on one account, its characters come
- * back with 1201 to 1214 mounts and 82 to 195 reputations each, while toys, decor
- * and pets are identical for all of them. The mount journal and the reputation tab
- * in the game are account-wide, so a single character under-reports the warband.
+ * Mounts and reputations are the two collections Blizzard still reports per character
+ * rather than per account: measured on one account, its characters come back with 1201
+ * to 1214 mounts and 82 to 195 reputations each, while toys, decor and pets are
+ * identical for all of them. A page therefore reports the character the way the API
+ * returns it.
  *
- * Blizzard's account-wide equivalents (`/profile/user/wow/collections/mounts`)
- * answer 403 to a client-credentials token and need a user OAuth login, which a
- * public page cannot have. The account's characters are therefore listed in
- * `NUXT_WARBAND_CHARACTERS` and merged, which reproduces the journal exactly (the
- * same account measures 1214 mounts on its main against 1263 for the warband).
+ * The account-wide equivalents (`/profile/user/wow/collections/mounts`) answer 403 to a
+ * client-credentials token and need a user OAuth login, which a public page cannot have,
+ * so the account's own journal cannot be read from here.
  */
 const EXALTED_NAMES = new Set(['Exalted', 'Превознесение'])
 
 /** "Exalted" is tier 7; the name is a fallback for factions that report no tier. */
 function isExalted(standing: any): boolean {
   return standing?.tier === 7 || EXALTED_NAMES.has(standing?.name)
-}
-
-/** Mount ids and Exalted faction ids of one character, or empty sets on failure. */
-async function getMemberCollectionIds(member: WarbandMember, token: string) {
-  const headers = { Authorization: `Bearer ${token}` }
-  const ns = `namespace=profile-${member.region}&locale=en_US`
-  const base = `https://${member.region}.api.blizzard.com/profile/wow/character/${member.realm}/${encodeURIComponent(member.name)}`
-
-  try {
-    const [mounts, reps] = await Promise.all([
-      $fetch<any>(`${base}/collections/mounts?${ns}`, { headers }),
-      $fetch<any>(`${base}/reputations?${ns}`, { headers })
-    ])
-
-    return {
-      mounts: (mounts?.mounts || []).map((mount: any) => mount.mount?.id).filter(Boolean) as number[],
-      exalted: (reps?.reputations || [])
-        .filter((rep: any) => isExalted(rep.standing))
-        .map((rep: any) => rep.faction?.id)
-        .filter(Boolean) as number[]
-    }
-  } catch {
-    // A character that was deleted or moved must not take the whole warband down.
-    return { mounts: [] as number[], exalted: [] as number[] }
-  }
-}
-
-/**
- * Merges the warband's characters of one region. Cached, because reading a mount
- * journal of ~1300 entries per character is a lot of API calls for a page view.
- */
-async function getWarbandUnion(region: string, token: string): Promise<WarbandUnion> {
-  const now = Math.floor(Date.now() / 1000)
-  const cached = cachedWarband.get(region)
-
-  if (cached && cached.expires_at > now) {
-    return cached.data
-  }
-
-  const members = warbandMembers().filter((member) => member.region === region)
-  const collected = await Promise.all(members.map((member) => getMemberCollectionIds(member, token)))
-
-  const data: WarbandUnion = { mounts: new Set(), exalted: new Set() }
-
-  for (const ids of collected) {
-    for (const id of ids.mounts) data.mounts.add(id)
-    for (const id of ids.exalted) data.exalted.add(id)
-  }
-
-  cachedWarband.set(region, { data, expires_at: now + 6 * 60 * 60 })
-
-  return data
 }
 
 /**
@@ -333,28 +238,18 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
   )
 
   /**
-   * Mounts and reputations do arrive per character, so when the character belongs
-   * to the configured warband the rest of the account is merged in (see
-   * `getWarbandUnion`) and the character's own collection is always part of the
-   * result. The game shows the account-wide journal and reputation tab, which is
-   * what these two tiles are meant to mirror.
+   * Mounts and reputations arrive per character, so both tiles report the character
+   * exactly as Blizzard returns it.
    */
-  let mountIds = new Set<number>(
+  const mountIds = new Set<number>(
     (mountsData?.mounts || []).map((mount: any) => mount.mount?.id).filter(Boolean)
   )
-  let exaltedIds = new Set<number>(
+  const exaltedIds = new Set<number>(
     (repsData?.reputations || [])
       .filter((rep: any) => isExalted(rep.standing))
       .map((rep: any) => rep.faction?.id)
       .filter(Boolean)
   )
-
-  if (isWarbandMember(region, realm, name)) {
-    const warband = await getWarbandUnion(region, token)
-
-    mountIds = new Set([...warband.mounts, ...mountIds])
-    exaltedIds = new Set([...warband.exalted, ...exaltedIds])
-  }
 
   const mPlusScore = mplusData?.current_mythic_rating?.rating
     ? Math.round(mplusData.current_mythic_rating.rating)
