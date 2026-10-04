@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
             <NuxtLink
               :to="localeUrl('/')"
               aria-label="HeroOfAzeroth"
-              class="w-24 h-24 rounded-full border border-wow-border bg-black/40 flex items-center justify-center hover:border-wow-gold transition-colors"
+              class="w-20 h-20 rounded-full border border-wow-border bg-black/40 flex items-center justify-center hover:border-wow-gold transition-colors"
             >
               <AppIcon name="emblem" class="h-14 w-14" />
             </NuxtLink>
@@ -442,7 +442,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <main class="relative z-20 container mx-auto px-4 py-6 flex-1 flex flex-col justify-end lg:justify-center">
+      <main class="relative z-20 container mx-auto px-4 py-6 flex-1 flex flex-col justify-center">
         <!-- The tile columns carry a 20% wider box than the original (100% - 45vw) / 2
              rows, which is about 32% of the row here: a column of (100% - gap) / 2
              with a 36% gap works out at 32%, and that lands within a percent of the
@@ -483,8 +483,11 @@ onBeforeUnmount(() => {
       </main>
 
       <!-- Card actions: the download and the share tray sit centred under the character.
-           The negative top margin pulls them up towards the model. -->
-      <div class="relative z-30 container mx-auto px-4 -mt-5 sm:-mt-8 pb-6 flex flex-col items-center gap-2">
+           Only from `lg` up does the two-column grid leave the middle of the row free,
+           so that is where the negative top margin may pull them up towards the model;
+           while the tiles are still stacked in one column (phones and tablets) the
+           button keeps an ordinary gap so it never rests on the last box. -->
+      <div class="relative z-30 container mx-auto px-4 mt-6 sm:mt-8 lg:-mt-8 pb-6 flex flex-col items-center gap-2">
         <div ref="actionsEl" class="relative">
           <div class="flex items-stretch overflow-hidden rounded-2xl border border-white/15 bg-white/[0.08] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_12px_34px_rgba(0,0,0,0.45)]">
             <button
@@ -586,7 +589,7 @@ onBeforeUnmount(() => {
         <span class="flex items-center gap-1.5">
           <a href="https://heroofazeroth.com" class="transition-colors hover:text-wow-goldLight">heroofazeroth.com</a>
           <span aria-hidden="true">&middot;</span>
-          <span>&copy; {{ new Date().getFullYear() }}</span>
+          <span>copyright &copy; {{ new Date().getFullYear() }}</span>
         </span>
       </footer>
     </template>
