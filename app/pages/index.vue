@@ -1,20 +1,35 @@
 <script setup lang="ts">
+// The Russian copy of this page is the same component under `/ru`; the middleware reads
+// the language off whichever of the two addresses was asked for.
+definePageMeta({ alias: '/ru' })
+
+// The home page has no rendered card of its own, so its preview image is a still of
+// the site. Vite resolves the file to a URL carrying a content hash, which `usePageSeo`
+// then makes absolute on the public host - a new picture is a new URL, so a network
+// reading the old one picks the new artwork up on its own.
+import hoaPrev from '~/assets/img/hoa-prev.jpg'
+
 interface RealmOption {
   slug: string
   name: string
   region: 'eu' | 'us'
+  /** The realm's other name: Russian for the realms the game has one for. */
+  nameRu?: string
 }
 
-const { locale, setLocale, t } = useI18n()
+const { locale, t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const publicConfig = useRuntimeConfig().public
 
-// The language travels in the URL as ?lang=..., so switching it only rewrites the
-// query of the current page instead of navigating to a /<lang> prefixed route.
-const changeLocale = async (code: 'en' | 'ru') => {
+// The language is the first path segment, so switching it is a move between the two
+// addresses of this page (`/` and `/ru`). Both of them are one route - the Russian one
+// is an alias of the English one - and a router navigation to the route it is already
+// on is dropped as a duplicate, so the address changes with a real page load. Nothing
+// is lost by it: what the form remembers lives in `sessionStorage`.
+const changeLocale = (code: 'en' | 'ru') => {
   if (code === locale.value) return
-  await setLocale(code)
-  await router.replace({ query: langQuery(code) })
+  window.location.assign(localePath(code, stripLocalePrefix(route.path)))
 }
 
 const realmQuery = ref('')
@@ -26,6 +41,43 @@ const activeIndex = ref(-1)
 const rootEl = ref<HTMLElement | null>(null)
 const realmInput = ref<HTMLInputElement | null>(null)
 const nameInput = ref<HTMLInputElement | null>(null)
+
+/**
+ * The names looked up earlier in this session, offered under the name field. A flat
+ * list rather than one per realm: it is a hint of what was typed, and the browser's
+ * own filter over it is what narrows it down.
+ */
+const nameSuggestions = ref<string[]>([])
+
+/**
+ * What the page remembers for the length of a visit: the realm that was picked and
+ * the names that were looked up in it. `sessionStorage` rather than a cookie or
+ * `localStorage` - nothing here has to reach the server, and a session is exactly as
+ * long as the visit.
+ */
+const SESSION_REALM = 'hoa:realm'
+const SESSION_NAMES = 'hoa:names'
+const MAX_SUGGESTIONS = 8
+
+/**
+ * A browser can refuse storage outright (a private window, site data blocked), and
+ * the form has to keep working without it, so both directions are wrapped.
+ */
+const readSession = (key: string): string => {
+  try {
+    return sessionStorage.getItem(key) || ''
+  } catch {
+    return ''
+  }
+}
+
+const writeSession = (key: string, value: string) => {
+  try {
+    sessionStorage.setItem(key, value)
+  } catch {
+    // Nothing to do: the form simply does not remember anything this time.
+  }
+}
 
 const realmsUrl = computed(() => `/api/realms?locale=${locale.value === 'ru' ? 'ru_RU' : 'en_US'}`)
 const { data: realms, pending: realmsPending } = await useFetch<RealmOption[]>(realmsUrl, {
@@ -44,6 +96,10 @@ const { data: realms, pending: realmsPending } = await useFetch<RealmOption[]>(r
 usePageSeo({
   title: () => t('homeTitle'),
   description: () => t('homeDescription'),
+  // 1200x630, the size every network lays a large preview out for, and a JPEG while
+  // the default is the PNG of the shared card, so the tags describe this file.
+  image: hoaPrev,
+  imageType: 'image/jpeg',
   jsonLd: () => ({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
@@ -54,12 +110,20 @@ usePageSeo({
   })
 })
 
-/** Realms matching what has been typed so far (both regions). */
+/**
+ * Realms matching what has been typed so far (both regions), under either of their
+ * names: a Russian realm is found as `Гордунни` and as `Gordunni` alike.
+ */
 const matches = computed<RealmOption[]>(() => {
   const list = realms.value || []
   const query = realmQuery.value.trim().toLowerCase()
   if (!query) return list
-  return list.filter((realm) => realm.name.toLowerCase().includes(query) || realm.slug.includes(query))
+  return list.filter(
+    (realm) =>
+      realm.name.toLowerCase().includes(query) ||
+      (realm.nameRu || '').toLowerCase().includes(query) ||
+      realm.slug.includes(query)
+  )
 })
 
 /** Matches split into the EU / US blocks shown in the dropdown. */
@@ -107,12 +171,23 @@ const highlight = (text: string) => {
   ].filter((part) => part.text)
 }
 
+/**
+ * The second name in a realm row: the Russian one, wherever it says something the first
+ * does not, so a Russian realm reads `Gordunni · Гордунни`. When the two names are the
+ * same string the slug stands in, which keeps every row naming the realm the address
+ * will carry.
+ */
+const realmSecondary = (realm: RealmOption) =>
+  realm.nameRu && realm.nameRu.toLowerCase() !== realm.name.toLowerCase() ? realm.nameRu : realm.slug
+
 const selectRealm = (realm: RealmOption) => {
   selectedRealm.value = realm
   realmQuery.value = realm.name
   realmError.value = false
   open.value = false
   activeIndex.value = -1
+  // A realm that was chosen is remembered as such, whether or not it is searched.
+  writeSession(SESSION_REALM, realm.slug)
   nameInput.value?.focus()
 }
 
@@ -142,6 +217,49 @@ const onEnter = () => {
   handleSearch()
 }
 
+/**
+ * Remembers a search that is about to be followed: the name joins the suggestions and
+ * the realm is written on its own, so the next visit to this page comes back with the
+ * form already filled in.
+ */
+const rememberSearch = (realm: RealmOption, character: string) => {
+  nameSuggestions.value = [
+    character,
+    ...nameSuggestions.value.filter((entry) => entry !== character)
+  ].slice(0, MAX_SUGGESTIONS)
+
+  writeSession(SESSION_REALM, realm.slug)
+  writeSession(SESSION_NAMES, JSON.stringify(nameSuggestions.value))
+}
+
+/**
+ * Puts back what an earlier visit to the page left behind. A remembered slug that is
+ * not in the realm list - the API renamed a realm, say - selects nothing rather than
+ * filling the field with something that cannot be searched.
+ */
+const restoreSession = () => {
+  const slug = readSession(SESSION_REALM)
+  const realm = slug ? (realms.value || []).find((entry) => entry.slug === slug) : undefined
+
+  if (realm) {
+    selectedRealm.value = realm
+    realmQuery.value = realm.name
+  }
+
+  const stored = readSession(SESSION_NAMES)
+  if (!stored) return
+
+  try {
+    const names: unknown = JSON.parse(stored)
+    if (Array.isArray(names)) {
+      nameSuggestions.value = names.filter((entry): entry is string => typeof entry === 'string')
+    }
+  } catch {
+    // A value that is not the array this wrote - an older shape, a hand edit - is
+    // ignored rather than breaking the form.
+  }
+}
+
 const handleSearch = () => {
   const realm = resolvedRealm.value || (matches.value.length === 1 ? matches.value[0]! : null)
   if (!realm) {
@@ -151,25 +269,32 @@ const handleSearch = () => {
     realmInput.value?.focus()
     return
   }
-  if (!name.value.trim()) return
 
-  router.push({
-    path: `/${realm.region}/${realm.slug}/${name.value.trim()}`,
-    query: langQuery(locale.value)
-  })
+  const character = name.value.trim()
+  if (!character) return
+
+  // Recorded before the navigation, which leaves this page behind.
+  rememberSearch(realm, character)
+
+  router.push(localePath(locale.value, `/${regionPath(realm.region)}/${realm.slug}/${character}`))
 }
 
 const onDocumentClick = (event: MouseEvent) => {
   if (!rootEl.value?.contains(event.target as Node)) open.value = false
 }
 
-onMounted(() => document.addEventListener('mousedown', onDocumentClick))
+onMounted(() => {
+  // Only in the browser: the server has no session to read, and filling the fields
+  // after hydration keeps the rendered page the same for everyone.
+  restoreSession()
+  document.addEventListener('mousedown', onDocumentClick)
+})
 onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick))
 </script>
 
 
 <template>
-  <div class="relative min-h-screen bg-wow-dark flex items-center justify-center p-4">
+  <div class="relative min-h-screen bg-wow-dark flex flex-col items-center justify-center p-4">
     <!-- The community artwork (`app/assets/img/bg-01.jpg`) covers the whole page.
          It is a bright sunset scene, so a flat scrim plus a vignette dim it just
          enough for the glass box and the gold accents to stay readable. -->
@@ -261,7 +386,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
                     @click="selectRealm(r)"
                   >
                     <span v-for="(part, i) in highlight(r.name)" :key="i" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
-                    <span class="text-gray-500 text-xs"> · {{ r.slug }}</span>
+                    <span class="text-gray-500 text-xs"> · <span v-for="(part, j) in highlight(realmSecondary(r))" :key="j" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
                   </button>
                 </div>
               </template>
@@ -275,10 +400,18 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
             ref="nameInput"
             v-model="name"
             type="text"
+            list="character-names"
             :placeholder="$t('characterNamePlaceholder')"
             required
             class="w-full bg-black/60 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
           />
+          <!-- The names looked up earlier in the session, offered by the browser's own
+               suggestion list. `datalist` keeps this to one attribute and one element:
+               the browser draws and filters the list, and a name that is not in it can
+               still be typed. -->
+          <datalist id="character-names">
+            <option v-for="character in nameSuggestions" :key="character" :value="character" />
+          </datalist>
         </div>
 
         <button 
@@ -289,5 +422,14 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
         </button>
       </form>
     </div>
+
+    <!-- The brand line under the box, exactly the one the character page carries in
+         its footer. The column above centres the box and the line as one block, so
+         the box keeps its place while the brand reads the same on both pages. -->
+    <footer class="relative z-10 mt-4 flex items-center gap-1.5 text-xs text-gray-500">
+      <a href="https://heroofazeroth.com" class="transition-colors hover:text-wow-goldLight">heroofazeroth.com</a>
+      <span aria-hidden="true">&middot;</span>
+      <span>copyright &copy; {{ new Date().getFullYear() }}</span>
+    </footer>
   </div>
 </template>

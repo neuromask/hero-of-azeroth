@@ -1,14 +1,19 @@
 <script setup lang="ts">
+// The Russian copy of this page is the same component under `/ru`; the middleware reads
+// the language off whichever of the two addresses was asked for.
+definePageMeta({ alias: '/ru/:region/:realm/:name' })
+
 const route = useRoute()
 const { locale, t } = useI18n()
 const localeUrl = useLocaleUrl()
-// The region is the first path segment (/eu/gordunni/neromask), so it is part of
-// the shared URL and no longer needs to be guessed from the character.
-const region = String(route.params.region || '').toLowerCase()
+// The region is the second path segment (`/region-eu/gordunni/neromask`, or
+// `/ru/region-eu/gordunni/neromask` in Russian), so it is part of the shared URL and
+// no longer needs to be guessed from the character.
+const region = regionFromPath(String(route.params.region || ''))
 const realm = String(route.params.realm || '')
 const name = String(route.params.name || '')
 
-if (region !== 'eu' && region !== 'us') {
+if (!region) {
   throw createError({ statusCode: 404, statusMessage: 'Unknown region' })
 }
 
@@ -392,12 +397,22 @@ onBeforeUnmount(() => {
       <header class="relative z-20 container mx-auto px-4 pt-6">
         <div class="rounded-xl border border-white/10 bg-white/[0.06] p-4 sm:p-6 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
+            <!-- The brand mark is the artwork itself (`app/assets/img/emblem.png`).
+                 It carries its own rounded-square frame, so the circular glass plate
+                 that used to hold the flat white SVG has nothing left to frame. -->
             <NuxtLink
               :to="localeUrl('/')"
               aria-label="HeroOfAzeroth"
-              class="w-20 h-20 rounded-full border border-wow-border bg-black/40 flex items-center justify-center hover:border-wow-gold transition-colors"
+              class="block h-20 w-20 shrink-0 transition-transform hover:scale-105"
             >
-              <AppIcon name="emblem" class="h-14 w-14" />
+              <img
+                src="~/assets/img/emblem.png"
+                alt=""
+                aria-hidden="true"
+                width="512"
+                height="512"
+                class="h-full w-full"
+              />
             </NuxtLink>
 
             <div>

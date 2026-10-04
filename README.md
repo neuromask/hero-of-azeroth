@@ -57,6 +57,18 @@ host literally, so the two have to be changed together. The Google Tag Manager
 snippet itself (the loader in `<head>`, the `<noscript>` frame right after `<body>`)
 is set up in `nuxt.config.ts` under `app.head`; the container carries the tags.
 
+An address names its language and its region: a character page is
+`/region-eu/gordunni/neromask`, a front door that stays on `/`. Only the non-default
+language spells itself out, so the Russian copy of every page sits under `/ru`
+(`/ru`, `/ru/region-eu/gordunni/neromask`) and the English one is the plain address.
+The region is the bare `eu` / `us` of the Blizzard API spelled as `region-eu`, which
+leaves room for a language in the first segment and keeps `/api/card/eu/...` and the
+page that shows it telling the same story. The pages serve the Russian address as an
+alias of the English one and `app/middleware/lang.global.ts` applies the language an
+address names. Addresses from before the change - `/eu/gordunni/neromask`, `?lang=ru`
+- are answered with a permanent redirect by `server/middleware/legacy-urls.ts`, so a
+link shared earlier still lands on the right page.
+
 The built server listens on `PORT`, else on `NITRO_PORT`, else on **3100**: Nitro's
 own fallback is 3000, which the second application on this host already owns, so
 `server/plugins/port.ts` supplies the number (from `runtimeConfig.port`, set in

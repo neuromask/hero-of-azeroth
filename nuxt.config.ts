@@ -93,9 +93,10 @@ export default defineNuxtConfig({
     ],
     lazy: true,
     langDir: 'locales',
-    // The language travels in the URL as ?lang=ru (English by default) instead of
-    // as a path prefix, which frees the first path segment for the region:
-    // /eu/gordunni/neromask?lang=ru
+    // The language is the first path segment and only Russian spells one out:
+    // /region-eu/gordunni/neromask is English, /ru/region-eu/gordunni/neromask is
+    // Russian. `no_prefix` keeps i18n out of the router: the pages carry their own
+    // language (see `app/pages/index.vue`) and the middleware applies it.
     defaultLocale: 'en',
     strategy: 'no_prefix',
     detectBrowserLanguage: false

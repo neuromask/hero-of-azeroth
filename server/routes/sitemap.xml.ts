@@ -1,14 +1,15 @@
 /**
  * The sitemap `robots.txt` points crawlers at.
  *
- * Only what can be written down without guessing is listed here: the home page and
- * the characters of the configured warband. Any other character page is reached
- * through the search form, and each one names itself with a canonical URL and
- * hreflang links, so a crawler picks those up while following links.
+ * Only what can be written down without guessing is listed here: the home page and the
+ * characters of the configured warband. Any other character page is reached through the
+ * search form, and each one names itself with a canonical URL and hreflang links, so a
+ * crawler picks those up while following links.
  *
- * Every page appears once per language and each copy names the others, which is how
- * a crawler learns the two are the same page in different languages rather than
- * duplicates of each other.
+ * Every page appears once per language and each copy names the others, which is how a
+ * crawler learns the two are the same page in different languages rather than duplicates
+ * of each other. Only the non-default language carries its code in the address, so the
+ * English copy of a page is the plain one and the Russian copy sits under `/ru`.
  */
 
 /** Mirrors `SUPPORTED_LOCALES` in `app/composables/lang.ts`. */
@@ -24,13 +25,20 @@ export default defineEventHandler((event) => {
   const paths = [
     '/',
     ...warbandMembers().map(
-      (member) => `/${member.region}/${member.realm}/${encodeURIComponent(member.name)}`
+      (member) => `/${regionPath(member.region)}/${member.realm}/${encodeURIComponent(member.name)}`
     )
   ]
 
-  /** A page as an absolute URL in `language` (the default one carries no query). */
-  const urlFor = (path: string, language: string) =>
-    `${siteUrl}${path}${language === DEFAULT_LANGUAGE ? '' : `?lang=${language}`}`
+  /**
+   * A page as an absolute URL in `language`. The front door is the bare host in English
+   * and `/ru` in Russian - no trailing slash, which is the address the page's own
+   * canonical link names.
+   */
+  const urlFor = (path: string, language: string) => {
+    const prefix = language === DEFAULT_LANGUAGE ? '' : `/${language}`
+    if (path === '/') return prefix ? `${siteUrl}${prefix}` : `${siteUrl}/`
+    return `${siteUrl}${prefix}${path}`
+  }
 
   const entries = paths.flatMap((path) =>
     LANGUAGES.map((language) => {

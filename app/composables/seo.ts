@@ -1,8 +1,8 @@
 import type { MaybeRefOrGetter } from 'vue'
 
 /**
- * `og:locale` is `language_TERRITORY`, while a URL of this site carries the plain
- * language code (`?lang=ru`), so one has to be mapped onto the other.
+ * `og:locale` is `language_TERRITORY`, while the language of an address is the plain
+ * code in its first segment (`/ru/...`), so one has to be mapped onto the other.
  */
 const OG_LOCALES: Record<string, string> = { en: 'en_US', ru: 'ru_RU' }
 
@@ -39,29 +39,24 @@ interface PageSeoOptions {
 /**
  * The SEO head of a page, in one place for the whole site.
  *
- * Every URL is absolute and built on `siteUrl` from the runtime config rather than
- * on the host the request arrived at: the language travels in `?lang=`, the public
- * name of the site is a single one, and a canonical or an `og:image` that took its
- * origin from the request would change with the visitor (a preview build has to
- * never be the host a crawler is sent to).
+ * Every URL is absolute and built on `siteUrl` from the runtime config rather than on
+ * the host the request arrived at: the language is part of the path but the public name
+ * of the site is a single one, and a canonical or an `og:image` that took its origin
+ * from the request would change with the visitor (a preview build has to never be the
+ * host a crawler is sent to).
  */
 export function usePageSeo(options: PageSeoOptions) {
   const route = useRoute()
   const { siteUrl } = useRuntimeConfig().public
 
-  /** The language the URL asked for, which is the one the page rendered in. */
-  const lang = computed(() => (isAppLocale(route.query.lang) ? route.query.lang : DEFAULT_LOCALE))
+  /** The language this page is served in, which its own address names. */
+  const lang = computed(() => localeFromPath(route.path))
 
-  /** This page in `code`, as an absolute URL on the public host. */
-  const urlFor = (code: string) => {
-    const url = new URL(route.path, siteUrl)
-
-    for (const [key, value] of Object.entries(langQuery(code))) {
-      url.searchParams.set(key, value)
-    }
-
-    return url.href
-  }
+  /**
+   * This page in `code`, as an absolute URL on the public host. The language the page
+   * currently carries comes off first, so what is left is the page itself.
+   */
+  const urlFor = (code: string) => new URL(localePath(code, stripLocalePrefix(route.path)), siteUrl).href
 
   const canonical = computed(() => urlFor(lang.value))
 
@@ -112,8 +107,8 @@ export function usePageSeo(options: PageSeoOptions) {
   })
 
   useHead({
-    // The i18n module writes `<html lang>` only when it builds the head itself,
-    // and here the head is built from the `?lang=` in the URL.
+    // The i18n module writes `<html lang>` only when it builds the head itself, and
+    // here the head is built from the language the address names.
     htmlAttrs: { lang: () => lang.value },
 
     link: () => [
