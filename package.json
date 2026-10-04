@@ -1,0 +1,27 @@
+{
+  "name": "hero-of-azeroth",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "deploy": "node scripts/deploy-github.mjs",
+    "deploy:bundle": "node scripts/deploy-github.mjs --no-source",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "refresh:achievements": "node scripts/refresh-achievement-points.mjs"
+  },
+  "dependencies": {
+    "@nuxtjs/i18n": "^10.6.0",
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "@pinia/nuxt": "^1.0.2",
+    "@resvg/resvg-js": "^2.6.2",
+    "nuxt": "^4.5.2",
+    "vue": "^3.5.43",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js-linux-x64-gnu": "^2.6.2"
+  }
+}
