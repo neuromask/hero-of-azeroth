@@ -57,9 +57,15 @@ host literally, so the two have to be changed together. The Google Tag Manager
 snippet itself (the loader in `<head>`, the `<noscript>` frame right after `<body>`)
 is set up in `nuxt.config.ts` under `app.head`; the container carries the tags.
 
+The built server listens on `PORT`, else on `NITRO_PORT`, else on **3100**: Nitro's
+own fallback is 3000, which the second application on this host already owns, so
+`server/plugins/port.ts` supplies the number (from `runtimeConfig.port`, set in
+`nuxt.config.ts`). A host that assigns a port through `PORT` or `NITRO_PORT` still
+overrides it. `nuxt dev` uses the same 3100 through `devServer.port`.
+
 ## Development Server
 
-Start the development server on `http://localhost:3000`:
+Start the development server on `http://localhost:3100`:
 
 ```bash
 # npm
@@ -169,9 +175,10 @@ NUXT_WARBAND_CHARACTERS=eu/gordunni/нейромаск \
 node server/index.mjs
 ```
 
-The server listens on `PORT` (3000 by default); set `HOST` to choose the address it
-binds. The variables are read per request (`useRuntimeConfig()`), so changing them
-needs a restart, not a rebuild — and shipping a new version is another
+The server listens on `PORT`, else on `NITRO_PORT`, and on 3100 when neither is set
+(the host's other application owns Nitro's 3000 default); set `HOST` to choose the
+address it binds. The variables are read per request (`useRuntimeConfig()`), so
+changing them needs a restart, not a rebuild — and shipping a new version is another
 `npm run deploy`.
 
 ### Options

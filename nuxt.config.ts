@@ -7,6 +7,17 @@ const SITE_URL = (process.env.NUXT_PUBLIC_SITE_URL || 'https://heroofazeroth.com
 const GTM_ID = process.env.NUXT_PUBLIC_GTM_ID || 'GTM-WXMVB755'
 
 /**
+ * The port the server binds.
+ *
+ * Nitro's `node-server` entry listens on `NITRO_PORT`, else on `PORT`, else on 3000,
+ * and that last fallback is hard-coded: no Nitro setting changes it. This host runs
+ * a second application on 3000, so the number lives here and `server/plugins/port.ts`
+ * hands it to Nitro when the host names no port of its own - `PORT` and `NITRO_PORT`
+ * still win, which keeps a panel or a process manager in charge where it assigns one.
+ */
+const PORT = 3100
+
+/**
  * Google Tag Manager. The loader goes into `<head>` and Nitro prints the
  * `<noscript>` half right after `<body>` (see `app.head.noscript`), which is the
  * position Google asks for. The container id is interpolated into both, so the
@@ -29,6 +40,9 @@ export default defineNuxtConfig({
     '@pinia/nuxt'
   ],
   runtimeConfig: {
+    // Read by `server/plugins/port.ts`, which is the port the built server binds
+    // when neither `PORT` nor `NITRO_PORT` is set on the host.
+    port: PORT,
     blizzardClientId: process.env.NUXT_BLIZZARD_CLIENT_ID,
     blizzardClientSecret: process.env.NUXT_BLIZZARD_CLIENT_SECRET,
     // The account's own characters (comma separated `region/realm/name`), whose
@@ -45,6 +59,8 @@ export default defineNuxtConfig({
     }
   },
   css: ['~/assets/css/main.css'],
+  /** `nuxt dev` (and `nuxt preview`, which runs the built server) on the same port. */
+  devServer: { port: PORT },
   /**
    * The head tags that belong to the site rather than to a page: the tag manager,
    * the icons a browser and a crawler look for, and the `theme-color` a mobile
