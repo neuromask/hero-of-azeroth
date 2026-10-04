@@ -92,49 +92,94 @@ function toDataUri(buffer: Buffer, mime: string): string {
 }
 
 /**
- * Where the icon artwork lives, relative to the project root, plus the files that
- * have already been read: rendering a card is a hot path, so every `<name>.svg`
- * is parsed once and reused.
+ * Where the icon artwork lives in the checkout, plus the files that have already
+ * been read: rendering a card is a hot path, so every `<name>.svg` is parsed once
+ * and reused.
  */
 const ICON_DIR = 'app/assets/icons'
-const iconCache = new Map<string, { viewBox: string; ratio: number; body: string } | null>()
+
+interface Icon {
+  viewBox: string
+  ratio: number
+  body: string
+}
+
+const iconCache = new Map<string, Icon>()
+
+/** Strips `<name>.svg` down to the shapes that can be nested into the card. */
+function prepareIcon(raw: string): Icon {
+  const viewBox = /viewBox="([^"]+)"/.exec(raw)?.[1] || '0 0 512 512'
+  const [, , boxWidth, boxHeight] = viewBox.split(/[\s,]+/).map(Number)
+
+  return {
+    viewBox,
+    ratio: boxWidth && boxHeight ? boxWidth / boxHeight : 1,
+    // The artwork paints itself white from a <style> block and names its layers;
+    // neither survives being nested into the card, where the colour is set on
+    // the `<svg>` that wraps these paths instead.
+    body: raw
+      .replace(/<\?xml[^?]*\?>/, '')
+      .replace(/<defs[\s\S]*?<\/defs>/, '')
+      .replace(/\s(?:id|data-name|class)="[^"]*"/g, '')
+      .replace(/^[\s\S]*?<svg[^>]*>/, '')
+      .replace(/<\/svg>[\s\S]*$/, '')
+      .trim()
+  }
+}
+
+/** The text a `getItemRaw` hands back, whichever storage driver answered. */
+function iconText(raw: unknown): string {
+  if (typeof raw === 'string') return raw
+  if (raw instanceof Uint8Array) return Buffer.from(raw).toString('utf8')
+  if (raw instanceof ArrayBuffer) return Buffer.from(new Uint8Array(raw)).toString('utf8')
+  return ''
+}
+
+/**
+ * Reads every icon once. `nuxt.config.ts` lists `app/assets/icons` as a Nitro
+ * server asset, so the artwork is bundled into the build and reaches a host that
+ * only receives `.output`; the icons are read through the `assets:icons` storage
+ * for that reason. A server started from the checkout as `nuxt dev` does reaches
+ * the same folder through the filesystem fallback in `loadIcon`.
+ */
+let iconsLoaded: Promise<void> | null = null
+
+function loadIcons(): Promise<void> {
+  if (!iconsLoaded) {
+    iconsLoaded = (async () => {
+      const storage = useStorage()
+      const keys = await storage.getKeys('assets:icons').catch(() => [] as string[])
+
+      await Promise.all(keys.map(async (key) => {
+        const name = key.split(/[/:]/).pop()?.replace(/\.svg$/, '')
+        if (!name) return
+
+        const text = iconText(await storage.getItemRaw(key).catch(() => ''))
+        if (text) iconCache.set(name, prepareIcon(text))
+      }))
+    })()
+  }
+
+  return iconsLoaded
+}
 
 /** Reads `<name>.svg` from `~/assets/icons` and strips it down to its shapes. */
-function loadIcon(name: string) {
+function loadIcon(name: string): Icon | null {
   if (iconCache.has(name)) return iconCache.get(name)!
 
-  // The server normally runs from the project root; the parent directory is tried
-  // as well, for a server started from inside `.output`.
-  const roots = [process.cwd(), join(process.cwd(), '..')]
-  let prepared: { viewBox: string; ratio: number; body: string } | null = null
-
-  for (const root of roots) {
+  // Only reached for an icon that is not part of the build: the server normally
+  // runs from the project root, and the parent directory is tried as well, for a
+  // server started from inside `.output`.
+  for (const root of [process.cwd(), join(process.cwd(), '..')]) {
     const file = join(root, ICON_DIR, `${name}.svg`)
     if (!existsSync(file)) continue
 
-    const raw = readFileSync(file, 'utf8')
-    const viewBox = /viewBox="([^"]+)"/.exec(raw)?.[1] || '0 0 512 512'
-    const [, , boxWidth, boxHeight] = viewBox.split(/[\s,]+/).map(Number)
-
-    prepared = {
-      viewBox,
-      ratio: boxWidth && boxHeight ? boxWidth / boxHeight : 1,
-      // The artwork paints itself white from a <style> block and names its layers;
-      // neither survives being nested into the card, where the colour is set on
-      // the `<svg>` that wraps these paths instead.
-      body: raw
-        .replace(/<\?xml[^?]*\?>/, '')
-        .replace(/<defs[\s\S]*?<\/defs>/, '')
-        .replace(/\s(?:id|data-name|class)="[^"]*"/g, '')
-        .replace(/^[\s\S]*?<svg[^>]*>/, '')
-        .replace(/<\/svg>[\s\S]*$/, '')
-        .trim()
-    }
-    break
+    const icon = prepareIcon(readFileSync(file, 'utf8'))
+    iconCache.set(name, icon)
+    return icon
   }
 
-  iconCache.set(name, prepared)
-  return prepared
+  return null
 }
 
 /**
@@ -194,6 +239,8 @@ async function loadRender(url: string): Promise<string> {
 }
 
 export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU'): Promise<Buffer> {
+  await loadIcons()
+
   const L = LABELS[locale] || LABELS.ru_RU
   const classColor = CLASS_COLORS[data.class] || '#f8b700'
 

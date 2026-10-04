@@ -18,8 +18,6 @@ const { data: character, pending, error } = await useFetch(
   () => `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}`
 )
 
-const cardUrl = computed(() => `/api/card/${region}/${realm}/${name}?locale=${apiLocale.value}`)
-
 const descriptor = computed(() => {
   const c = character.value
   if (!c) return ''
@@ -27,6 +25,19 @@ const descriptor = computed(() => {
 })
 
 const requestURL = useRequestURL()
+const shareUrl = computed(() => new URL(route.fullPath, requestURL.origin).href)
+
+/**
+ * A network caches a preview image by its URL, so the card carries the build id:
+ * every deployment changes the URL and the crawlers read the artwork again
+ * instead of showing whatever they stored for the previous build.
+ */
+const { app: appConfig } = useRuntimeConfig()
+const cardUrl = computed(() => {
+  const build = String(appConfig?.buildId || '')
+  return `/api/card/${region}/${realm}/${name}?locale=${apiLocale.value}${build ? `&v=${build}` : ''}`
+})
+
 const ogImage = computed(() => new URL(cardUrl.value, requestURL.origin).href)
 
 useSeoMeta({
@@ -35,9 +46,14 @@ useSeoMeta({
   ogTitle: () => (character.value?.title ? `${character.value.name} ${character.value.title}` : (character.value?.name || name)),
   ogDescription: () => descriptor.value,
   ogType: 'profile',
+  ogUrl: () => shareUrl.value,
+  ogSiteName: 'HeroOfAzeroth',
+  ogLocale: () => (locale.value === 'ru' ? 'ru_RU' : 'en_US'),
   ogImage: () => ogImage.value,
   ogImageWidth: 1200,
   ogImageHeight: 630,
+  ogImageType: 'image/png',
+  ogImageAlt: () => `${character.value?.name || name} · HeroOfAzeroth`,
   twitterCard: 'summary_large_image',
   twitterTitle: () => (character.value?.name || name),
   twitterDescription: () => descriptor.value,
@@ -131,7 +147,6 @@ const metaParts = computed<MetaPart[]>(() => {
   ].filter((part) => part.text)
 })
 
-const shareUrl = computed(() => new URL(route.fullPath, requestURL.origin).href)
 const shareTitle = computed(() => (character.value?.title ? `${character.value.name} ${character.value.title}` : (character.value?.name || name)))
 const shareText = computed(() => `${shareTitle.value} — ${descriptor.value}`)
 

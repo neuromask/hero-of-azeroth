@@ -29,5 +29,15 @@ export default defineNuxtConfig({
     defaultLocale: 'en',
     strategy: 'no_prefix',
     detectBrowserLanguage: false
+  },
+  /**
+   * The character card draws the same SVGs the page shows from `~/assets/icons`.
+   * A deployment ships `.output` alone, so there is no `app/` directory next to
+   * the running server: Nitro bundles every `serverAssets` folder into the build,
+   * which is what makes the artwork readable on the host. `dir` is relative to
+   * the `server/` directory.
+   */
+  nitro: {
+    serverAssets: [{ baseName: 'icons', dir: '../app/assets/icons' }]
   }
 })
