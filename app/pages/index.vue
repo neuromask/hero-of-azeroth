@@ -7,6 +7,7 @@ interface RealmOption {
 
 const { locale, setLocale, t } = useI18n()
 const router = useRouter()
+const publicConfig = useRuntimeConfig().public
 
 // The language travels in the URL as ?lang=..., so switching it only rewrites the
 // query of the current page instead of navigating to a /<lang> prefixed route.
@@ -30,6 +31,27 @@ const realmsUrl = computed(() => `/api/realms?locale=${locale.value === 'ru' ? '
 const { data: realms, pending: realmsPending } = await useFetch<RealmOption[]>(realmsUrl, {
   key: 'realm-list',
   default: () => []
+})
+
+/**
+ * The search page is the site's front door, so it carries the site-wide title and
+ * description and the `WebSite` node behind the brand in a search result. The
+ * characters are described by their own pages, which is where the content is.
+ *
+ * The `WebSite` node is the one piece of structured data a page without a subject
+ * can offer: it names the site and the languages it serves.
+ */
+usePageSeo({
+  title: () => t('homeTitle'),
+  description: () => t('homeDescription'),
+  jsonLd: () => ({
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'HeroOfAzeroth',
+    url: publicConfig.siteUrl,
+    description: t('homeDescription'),
+    inLanguage: [...SUPPORTED_LOCALES]
+  })
 })
 
 /** Realms matching what has been typed so far (both regions). */
@@ -169,7 +191,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
           <h1>
             <AppIcon name="hoa-logotype" alt="HeroOfAzeroth" class="h-16 w-auto" />
           </h1>
-          <p class="text-xs text-gray-400 mt-2">{{ $t('tagline') }}</p>
+          <p class="text-xs text-white-400 mt-2">{{ $t('tagline') }}</p>
         </div>
 
         <div class="flex gap-1.5 shrink-0">

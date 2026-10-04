@@ -151,7 +151,7 @@ const FALLBACK_REGIONS = ['eu', 'us']
  * A character that shares the account with the one being viewed, listed in
  * `NUXT_WARBAND_CHARACTERS` as `region/realm/name`.
  */
-interface WarbandMember {
+export interface WarbandMember {
   region: string
   realm: string
   name: string
@@ -170,7 +170,7 @@ const cachedWarband = new Map<string, { data: WarbandUnion; expires_at: number }
  * variable (comma separated `region/realm/name`, e.g.
  * `eu/gordunni/neromask,eu/eversong/altmask`).
  */
-function warbandMembers(): WarbandMember[] {
+export function warbandMembers(): WarbandMember[] {
   const raw = String(useRuntimeConfig().warbandCharacters || '')
 
   return raw

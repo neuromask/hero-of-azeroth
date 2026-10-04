@@ -1,2 +1,10 @@
+# Everything may be crawled; the JSON endpoints exist for the app itself, so they
+# are kept out of the index. `/api/card/` is deliberately left readable: a social
+# network fetches the preview image from that path, and a blocked path would leave
+# every shared link without one.
 User-Agent: *
-Disallow:
+Disallow: /api/character/
+Disallow: /api/realms
+
+# Must name the same host as `NUXT_PUBLIC_SITE_URL` in `nuxt.config.ts`.
+Sitemap: https://heroofazeroth.com/sitemap.xml

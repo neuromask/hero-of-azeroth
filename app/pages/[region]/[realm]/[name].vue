@@ -24,6 +24,17 @@ const descriptor = computed(() => {
   return `${t('itemLevel')}: ${c.ilvl} · ${t('mPlus')}: ${c.mPlusScore} · ${t('achievements')}: ${c.ap.toLocaleString('en-US')} · ${c.realm}`
 })
 
+/**
+ * A shared link previews as "Name - Class": the class reads instantly and is the
+ * same in both languages, unlike the earned title, which the Armoury returns in
+ * the requested language and can be long or obscure.
+ */
+const headline = computed(() => {
+  const c = character.value
+  if (!c) return name
+  return c.class ? `${c.name} - ${c.class}` : c.name
+})
+
 const requestURL = useRequestURL()
 const shareUrl = computed(() => new URL(route.fullPath, requestURL.origin).href)
 
@@ -32,32 +43,63 @@ const shareUrl = computed(() => new URL(route.fullPath, requestURL.origin).href)
  * every deployment changes the URL and the crawlers read the artwork again
  * instead of showing whatever they stored for the previous build.
  */
-const { app: appConfig } = useRuntimeConfig()
+const { app: appConfig, public: publicConfig } = useRuntimeConfig()
 const cardUrl = computed(() => {
   const build = String(appConfig?.buildId || '')
   return `/api/card/${region}/${realm}/${name}?locale=${apiLocale.value}${build ? `&v=${build}` : ''}`
 })
 
-const ogImage = computed(() => new URL(cardUrl.value, requestURL.origin).href)
+/** The card as a crawler has to reach it: absolute, on the public host. */
+const ogImage = computed(() => new URL(cardUrl.value, publicConfig.siteUrl).href)
 
-useSeoMeta({
-  title: () => `${character.value?.name || name} · HeroOfAzeroth`,
+/**
+ * Nothing to index: the Armoury does not know this name, or the call behind the page
+ * failed. `pending` is only true while a navigation is still in flight, where the
+ * answer is not known yet.
+ */
+const missing = computed(() => !pending.value && (Boolean(error.value) || !character.value))
+
+// A character that does not exist has to answer 404 rather than 200, otherwise a
+// crawler keeps a URL whose only content is a "not found" note.
+if (error.value) {
+  const event = useRequestEvent()
+  if (event) setResponseStatus(event, 404)
+}
+
+/**
+ * The character page is a profile: the card is its preview image, the class and the
+ * statistics describe the character to a search engine, and a page with nothing to
+ * show turns itself into a `noindex` response. The shared half of the head – the
+ * canonical URL, the hreflang links, the brand – lives in `usePageSeo`.
+ */
+usePageSeo({
+  title: () => headline.value,
   description: () => descriptor.value,
-  ogTitle: () => (character.value?.title ? `${character.value.name} ${character.value.title}` : (character.value?.name || name)),
-  ogDescription: () => descriptor.value,
+  image: () => ogImage.value,
   ogType: 'profile',
-  ogUrl: () => shareUrl.value,
-  ogSiteName: 'HeroOfAzeroth',
-  ogLocale: () => (locale.value === 'ru' ? 'ru_RU' : 'en_US'),
-  ogImage: () => ogImage.value,
-  ogImageWidth: 1200,
-  ogImageHeight: 630,
-  ogImageType: 'image/png',
-  ogImageAlt: () => `${character.value?.name || name} · HeroOfAzeroth`,
-  twitterCard: 'summary_large_image',
-  twitterTitle: () => (character.value?.name || name),
-  twitterDescription: () => descriptor.value,
-  twitterImage: () => ogImage.value
+  noindex: () => missing.value,
+  jsonLd: (canonical) => {
+    const c = character.value
+    if (!c) return null
+
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      url: canonical,
+      name: headline.value,
+      description: descriptor.value,
+      inLanguage: locale.value,
+      // The page is about one character, and a `Person` is the closest thing
+      // schema.org has for one of the game's avatars.
+      mainEntity: {
+        '@type': 'Person',
+        name: c.name,
+        url: canonical,
+        image: ogImage.value,
+        description: `${c.race} ${c.class} · ${t('itemLevel')} ${c.ilvl} · ${c.realm}`
+      }
+    }
+  }
 })
 
 const getClassColor = (className: string) => {

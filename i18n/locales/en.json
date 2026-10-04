@@ -31,5 +31,7 @@
   "language": "Language",
   "tagline": "Your WoW character card and stats",
   "loading": "Loading...",
-  "backToSearch": "Back to search"
+  "backToSearch": "Back to search",
+  "homeTitle": "WoW character cards: mounts, pets and M+ score",
+  "homeDescription": "Look up any World of Warcraft character on EU and US realms: item level, M+ score, achievements, mounts, pets, toys, decor and reputations, and share it as an image card."
 }

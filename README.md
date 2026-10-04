@@ -42,6 +42,21 @@ Leaving it empty means every character is reported exactly as the API returns it
 The warband is a private account detail, so it is not meant to be set on a public
 deployment that serves other people's characters.
 
+The two facts a deployment has of its own — where it is published and which tag
+manager container it reports to — are configuration as well, so a staging copy or a
+second host needs no code change:
+
+```bash
+NUXT_PUBLIC_SITE_URL=https://heroofazeroth.com
+NUXT_PUBLIC_GTM_ID=GTM-WXMVB755
+```
+
+`NUXT_PUBLIC_SITE_URL` is what canonical links, `og:url`, the hreflang alternates,
+the JSON-LD nodes and `sitemap.xml` are built on. `public/robots.txt` names the same
+host literally, so the two have to be changed together. The Google Tag Manager
+snippet itself (the loader in `<head>`, the `<noscript>` frame right after `<body>`)
+is set up in `nuxt.config.ts` under `app.head`; the container carries the tags.
+
 ## Development Server
 
 Start the development server on `http://localhost:3000`:
