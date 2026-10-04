@@ -22,8 +22,8 @@
  *   --no-ftp             skip step 3, push the sources only
  *   --prune              after uploading, delete the remote files below `public/`
  *                        and `server/chunks/` that this build no longer contains
- *   --verify             read every directory back and report files that did not
- *                        arrive (one listing per directory, so it is opt-in)
+ *   --verify             read the upload back afterwards: every file present, at
+ *                        the size it was built with (one request per file)
  *   --dry-run            report what would happen; nothing is built or uploaded
  *   -m, --message <text> commit message (default: `Deploy <date> <time>`)
  *
@@ -58,6 +58,10 @@ const FTP_TRANSFER_TIMEOUT = 60 * 60
 
 /** Transfers per curl call: Windows caps a whole command line at ~32k characters. */
 const FTP_BATCH = 20
+
+/** FTP hosts throttle bursts; a dropped data connection should not cost the deploy. */
+const FTP_ATTEMPTS = 3
+const FTP_RETRY_DELAY_MS = 2000
 
 const argv = process.argv.slice(2)
 const hasFlag = (flag) => argv.includes(flag)
@@ -112,6 +116,28 @@ function curl(args, { allowFailure = false } = {}) {
   }
 
   return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '' }
+}
+
+/** Waits without turning the whole script asynchronous. */
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/**
+ * Runs a curl call until it succeeds or the attempts run out. FTP hosts answer 451
+ * (and similar) when they throttle a burst of uploads, which is worth retrying;
+ * whatever is still failing afterwards is reported.
+ */
+function curlWithRetry(args, attempts = FTP_ATTEMPTS) {
+  let result = null
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    result = curl(args, { allowFailure: true })
+    if (result.status === 0) return result
+    if (attempt < attempts) sleep(FTP_RETRY_DELAY_MS * attempt)
+  }
+
+  return result
 }
 
 /** Runs git in the repository root and returns its trimmed stdout, or throws. */
@@ -301,10 +327,10 @@ function upload(target, netrc, files) {
 
       for (const file of batch) {
         args.push('--upload-file', path.join(OUTPUT, file))
-        args.push(`${ftpUrl(target, dir)}${encodeURIComponent(path.posix.basename(file))}`)
+        args.push(fileUrl(target, file))
       }
 
-      const result = curl(args, { allowFailure: true })
+      const result = curlWithRetry(args)
 
       if (result.status === 0) {
         uploaded += batch.length
@@ -318,6 +344,13 @@ function upload(target, netrc, files) {
   }
 
   return { uploaded, failures }
+}
+
+/** The URL of one file on the server. */
+function fileUrl(target, file) {
+  const dir = path.posix.dirname(file)
+  const key = dir === '.' ? '' : `${dir}/`
+  return `${ftpUrl(target, key)}${encodeURIComponent(path.posix.basename(file))}`
 }
 
 /** Names in a remote directory, or null when the directory is not there yet. */
@@ -408,11 +441,27 @@ function prune(target, netrc, directories) {
 }
 
 /**
+ * The size the server reports for a file, or null when it will not say: the file is
+ * not there, or the server has no SIZE command. That is one request per file, which
+ * is why it only runs under `--verify`.
+ */
+function remoteSize(target, netrc, file) {
+  const result = curl([...ftpArgs(target, netrc), '--head', fileUrl(target, file)], { allowFailure: true })
+
+  if (result.status !== 0) return null
+
+  const match = /content-length:\s*(\d+)/i.exec(result.stdout)
+  return match ? Number(match[1]) : null
+}
+
+/**
  * Reads every directory back from the server and reports the files that did not
- * make it. One listing per directory, so it is opt-in: `--verify`.
+ * arrive, plus the ones whose size is not the size they were built with — a
+ * transfer that was cut short leaves exactly that behind.
  */
 function verify(target, netrc, directories) {
   const missing = []
+  const differing = []
   let checked = 0
 
   for (const [dir, names] of directories) {
@@ -424,13 +473,23 @@ function verify(target, netrc, directories) {
     }
 
     const found = new Set(present)
+
     for (const name of names) {
+      const file = `${dir}${name}`
       checked += 1
-      if (!found.has(name)) missing.push(`${dir}${name}`)
+
+      if (!found.has(name)) {
+        missing.push(file)
+        continue
+      }
+
+      const size = remoteSize(target, netrc, file)
+      const local = fs.statSync(path.join(OUTPUT, file)).size
+      if (size !== null && size !== local) differing.push(`${file} (${size} on the server, ${local} here)`)
     }
   }
 
-  return { checked, missing }
+  return { checked, missing, differing }
 }
 
 if (SKIP_GITHUB && SKIP_FTP) fail('--no-github and --no-ftp together leave nothing to publish.')
@@ -584,13 +643,16 @@ if (SKIP_FTP) {
     }
 
     if (VERIFY) {
-      const { checked, missing } = verify(target, netrc, directories)
-      log(`   checked ${checked} files back`)
-      if (!missing.length) {
-        log(`   every file of this build is on ${target.server}${target.root}`)
+      const { checked, missing, differing } = verify(target, netrc, directories)
+      log(`   checked ${checked} files back, sizes included`)
+
+      if (!missing.length && !differing.length) {
+        log(`   every file is on ${target.server}${target.root}, at the size it was built`)
       } else {
         for (const entry of missing.slice(0, 20)) problems.push(`missing on the server: ${entry}`)
         if (missing.length > 20) problems.push(`missing on the server: ${missing.length - 20} more`)
+        for (const entry of differing.slice(0, 20)) problems.push(`size differs on the server: ${entry}`)
+        if (differing.length > 20) problems.push(`size differs on the server: ${differing.length - 20} more`)
       }
     }
 

@@ -173,7 +173,11 @@ npm run deploy -- -m "Fix the card"
 `npm run deploy:ftp` uploads without building and without touching GitHub;
 `npm run deploy:github` pushes the sources only.
 
-`--verify` costs one directory listing per directory and is the way to confirm an
-upload end to end. `--prune` never deletes directories, and only deletes files
+`--verify` reads the upload back: every file has to be present, at the size it was
+built with (one request per file, so it is the slow part of a deploy). Transfers
+are retried a few times as well, because FTP hosts throttle a burst of uploads and
+answer 451 for a while.
+
+`--prune` never deletes directories, and only deletes files
 inside `public/` and `server/chunks/` — the content-hashed bundles that change on
 every build — so a mistyped `FTP_PATH` cannot wipe anything else.
