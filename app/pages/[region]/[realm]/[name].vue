@@ -482,27 +482,23 @@ onBeforeUnmount(() => {
               :key="tile.key"
               class="rounded-xl border border-white/10 bg-white/[0.06] p-3 sm:p-4 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] transition-colors hover:border-wow-gold/60 hover:bg-white/[0.09]"
             >
-              <!-- Two columns of two rows: the glyph and the label share the first
-                   row with the big number so their centres line up, and the
-                   `total / %` line stays under the number. The glyph is 1.5x the
-                   1.15em it used to be (1.725em, so it scales with the label at
-                   both breakpoints) and sits in a square box, which is the 1:1
+              <!-- Two columns of two rows. The first row carries the glyph, the label
+                   and the big number, which share one line so their centres line up.
+                   The second row carries the scope of the number and the `total / %`,
+                   written in the same style so the two read as one line. The glyph is
+                   1.5x the 1.15em it used to be (1.725em, so it scales with the label
+                   at both breakpoints) and sits in a square box, which is the 1:1
                    `viewBox` every icon file is drawn on, so nothing is stretched. -->
               <div class="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-2">
                 <span class="flex min-w-0 items-center gap-2.5 text-base font-bold uppercase tracking-wider text-gray-200 sm:text-lg">
                   <AppIcon :name="tile.icon" class="h-[1.725em] w-[1.725em] shrink-0" />
-                  <span class="min-w-0">
-                    <span class="block truncate">{{ tile.label }}</span>
-                    <!-- Whose numbers the tile shows, in small print: the whole
-                         account or this character alone. -->
-                    <span class="block truncate text-[10px] font-medium normal-case tracking-normal text-gray-500">{{ tile.note }}</span>
-                  </span>
+                  <span class="truncate">{{ tile.label }}</span>
                 </span>
                 <span class="text-2xl sm:text-3xl font-extrabold whitespace-nowrap text-right" :class="tile.color">{{ tile.display }}</span>
-                <span aria-hidden="true"></span>
-                <!-- Under the big number: everything there is to collect, and how
-                     full that makes the bar below. -->
-                <span class="text-[11px] font-semibold text-gray-400 whitespace-nowrap text-right tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
+                <!-- Under the first row: whose numbers the tile shows, and how much of
+                     everything there is to collect they cover. -->
+                <span class="truncate text-[11px] font-semibold text-gray-400">{{ tile.note }}</span>
+                <span class="whitespace-nowrap text-right text-[11px] font-semibold text-gray-400 tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
               </div>
               <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/5">
                 <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" :style="{ width: tile.percent + '%' }"></div>
