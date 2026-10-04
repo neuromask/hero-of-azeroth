@@ -96,63 +96,82 @@ bun run preview
 
 Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
 
-## Deploying to GitHub
+## Deploying
 
-`npm run deploy` builds the project and publishes it in one step, so the machine
-that serves the site needs no toolchain:
+`npm run deploy` builds the project, pushes the sources to GitHub and uploads the
+build to the FTP target, so the machine that serves the site needs no toolchain:
 
 ```bash
 npm run deploy
 ```
 
-1. `nuxt build` writes `.output` (the Nitro `node-server` preset).
-2. The sources are committed and pushed to the current branch, `main`.
-3. `.output` is committed to the `deploy` branch as a ready-to-run bundle, next
-   to a `deploy.json` that records which source commit it was built from, and a
-   `README.md` that repeats the instructions below.
+1. `nuxt build` writes `.output`, the Nitro `node-server` preset.
+2. The sources are committed and pushed to the current branch, `main`. GitHub
+   holds the project only: `.output` is ignored by git and is never committed.
+3. The contents of `.output` are uploaded over FTP to `FTP_PATH`, together with a
+   `deploy.json` that records which source commit they were built from.
 
 The build output of a Nuxt server app cannot be served by GitHub Pages: the pages
-are server-rendered and `/api/card`, `/api/character` and `/api/realms` are real
-endpoints that call the Blizzard API with your client secret. That is why the
-bundle goes to a branch instead of a static site.
+are server-rendered, and `/api/card`, `/api/character` and `/api/realms` are real
+endpoints that call the Blizzard API with your client secret. A Node process has
+to run the build, which is why the build goes to FTP instead of the repository.
 
-### Running the bundle
+### FTP settings
+
+The upload reads these from the environment, falling back to `.env` (gitignored):
 
 ```bash
-git clone --branch deploy --single-branch https://github.com/neuromask/hero-of-azeroth.git
-cd hero-of-azeroth
+FTP_SERVER=www.example.com
+FTP_USERNAME=...
+FTP_PASSWORD=...
+FTP_PATH=/data02/virt32423/domeenid/www.example.com/heroofazeroth/
+# FTP_PORT=21        # optional, 21 by default
+# FTP_SECURE=explicit  # optional: false (default), explicit (FTPS on 21), implicit (FTPS on 990)
+```
+
+`FTP_PATH` is the directory the server runs from, and it receives the *contents*
+of `.output`: `server/`, `public/` and `nitro.json` land directly inside it. The
+transfers are plain `curl` calls (Windows 10+ ships curl, and it speaks FTP and
+FTPS); the password is passed to curl through a throwaway netrc file, so it never
+appears on a command line or in the process list.
+
+### Running what was uploaded
+
+The uploaded directory is the application. No `npm install` and no build tools are
+needed there, because `.output` carries its own `node_modules`, including both the
+linux-x64 and the win32-x64 resvg binaries:
+
+```bash
+cd /data02/virt32423/domeenid/www.example.com/heroofazeroth
 
 NUXT_BLIZZARD_CLIENT_ID=... \
 NUXT_BLIZZARD_CLIENT_SECRET=... \
-NUXT_WARBAND_CHARACTERS=eu/gordunni/neromask \
+NUXT_WARBAND_CHARACTERS=eu/gordunni/нейромаск \
 node server/index.mjs
 ```
 
-No `npm install` is needed: the bundle carries its own `node_modules`, including
-both the linux-x64 and the win32-x64 resvg binaries, so the same bundle runs on a
-Linux server and on Windows. Updating a running server is a fetch and a restart:
-
-```bash
-git fetch origin deploy && git reset --hard FETCH_HEAD
-```
-
-The variables are read by the running server (`useRuntimeConfig()` per request),
-so a change to them needs a restart, not a rebuild. Nothing secret is committed:
-`.env` stays ignored, and the bundle holds no credentials.
+The server listens on `PORT` (3000 by default); set `HOST` to choose the address it
+binds. The variables are read per request (`useRuntimeConfig()`), so changing them
+needs a restart, not a rebuild — and shipping a new version is another
+`npm run deploy`.
 
 ### Options
 
 ```bash
-npm run deploy -- --dry-run          # report what would happen, push nothing
-npm run deploy -- --no-build         # publish the `.output` that already exists
-npm run deploy -- --no-source        # bundle only (same as npm run deploy:bundle)
-npm run deploy -- --no-bundle        # sources only
-npm run deploy -- --branch gh-pages  # publish the bundle somewhere else
-npm run deploy -- -m "Fix the card"  # set the commit message
+npm run deploy                     # build, GitHub, FTP
+npm run deploy -- --dry-run        # report what would happen, change nothing
+npm run deploy -- --no-build       # upload the `.output` that already exists
+npm run deploy -- --no-github      # sources stay local
+npm run deploy -- --no-ftp         # sources only
+npm run deploy -- --prune          # also delete remote files this build no longer has
+npm run deploy -- --verify         # read every directory back and report missing files
+npm run deploy -- -m "Fix the card"
 ```
 
-The bundle commit is written through a temporary index and a temporary work tree,
-so the script never switches branches and never touches your working files, and
-line endings are not converted: the server runs the exact bytes the build wrote.
-Each deploy is a child of the previous bundle commit, so the remote stays
-fast-forwardable; add `--force` only if the branch was rewritten somewhere else.
+`npm run deploy:ftp` uploads without building and without touching GitHub;
+`npm run deploy:github` pushes the sources only.
+
+`--verify` costs one directory listing per directory and is the way to confirm an
+upload end to end. `--prune` never deletes directories, and only deletes files
+inside `public/` and `server/chunks/` — the content-hashed bundles that change on
+every build — so a mistyped `FTP_PATH` cannot wipe anything else.

@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "deploy": "node scripts/deploy-github.mjs",
-    "deploy:bundle": "node scripts/deploy-github.mjs --no-source",
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:ftp": "node scripts/deploy.mjs --no-build --no-github",
+    "deploy:github": "node scripts/deploy.mjs --no-build --no-ftp",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
