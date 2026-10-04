@@ -77,6 +77,21 @@ export interface Realm {
   name: string
 }
 
+/**
+ * A realm a player can pick, told apart from the rest of Blizzard's realm index.
+ *
+ * The index is not only the realms: it also carries the shards behind them and the
+ * realms that exist for a development build or an event. Those are named after the
+ * hardware or after what they are for - `eu5b2inst`, `us1a-account-realm`, `eu7abgru`,
+ * `rdb-eu`, `eu-arena-pass-csbg`, `eu-auxiliary-70` - while a playable realm is named
+ * after the place it stands for. The distinction is the shard number: a region code
+ * directly followed by a digit is a machine, and no playable realm is named like that
+ * (`Area 52` is the only one with a digit at all, and it is not the second character).
+ * The handful that are not numbered are the development host and the event realms.
+ */
+const REALM_SHARD = /^(eu|us|au|kr|tw|cn)\d/i
+const REALM_SPECIAL = /^rdb-|arena-pass|auxiliary/i
+
 const cachedRealms = new Map<string, { data: Realm[]; expires_at: number }>()
 
 export async function getRealms(region = 'eu', locale = 'en_US'): Promise<Realm[]> {
@@ -94,7 +109,13 @@ export async function getRealms(region = 'eu', locale = 'en_US'): Promise<Realm[
     { headers: { Authorization: `Bearer ${token}` } }
   )
 
+  // The filter runs on the raw entries, so a shard never reaches the cache and no
+  // answer built on the list - the combobox, its search - has to know about them.
   const realms: Realm[] = (data.realms || [])
+    .filter(
+      (r: any) =>
+        r?.slug && !REALM_SHARD.test(r.slug) && !REALM_SPECIAL.test(r.slug)
+    )
     .map((r: any) => ({
       slug: r.slug,
       name: typeof r.name === 'string'
