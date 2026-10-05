@@ -476,5 +476,7 @@ onBeforeUnmount(() => {
       <span aria-hidden="true">&middot;</span>
       <span>copyright &copy; {{ new Date().getFullYear() }}</span>
     </footer>
+
+    <SupportButton />
   </div>
 </template>

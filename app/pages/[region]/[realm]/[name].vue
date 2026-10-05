@@ -625,6 +625,8 @@ onBeforeUnmount(() => {
           <span>copyright &copy; {{ new Date().getFullYear() }}</span>
         </span>
       </footer>
+
+      <SupportButton />
     </template>
   </div>
 </template>

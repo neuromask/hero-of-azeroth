@@ -35,7 +35,7 @@ const LOCALE = 'en-gb'
 
 if (!REALM || !NAME) {
   console.error('Usage: npm run refresh:armoury-totals [region] [realm] [name]')
-  console.error('Example: npm run refresh:armoury-totals eu gordunni Нейромаск')
+  console.error('Example: npm run refresh:armoury-totals eu silvermoon exent')
   process.exit(1)
 }
 
