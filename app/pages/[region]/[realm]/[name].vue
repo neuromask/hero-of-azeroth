@@ -152,8 +152,12 @@ interface StatTile {
  *
  * Every tile names the scope of its number in small print, because the six do not come
  * from the same place: pets, toys and decor arrive account-wide from Blizzard - they are
- * identical for every character of an account - while mounts, reputations and the
- * achievement points are the character's own.
+ * identical for every character of an account - while mounts and the achievement points
+ * are the character's own. Reputations are the account-wide Exalted Reputations counter
+ * whenever Blizzard reports it, because achievements are account-wide and that is the
+ * number the game itself shows; when the counter cannot be read the tile falls back to
+ * the character's own Exalted factions, and the note follows the stat to say which one
+ * arrived.
  */
 const tileColumns = computed<StatTile[][]>(() => {
   const c = character.value
@@ -165,7 +169,7 @@ const tileColumns = computed<StatTile[][]>(() => {
   const tiles = [
     { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total, color: 'text-amber-500' },
     { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total, color: 'text-amber-500' },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
+    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: c.stats.reputations.accountWide ? accountWide : perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
     { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total, color: 'text-wow-gold' },
     { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total, color: 'text-purple-400' },
     { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total, color: 'text-amber-500' }

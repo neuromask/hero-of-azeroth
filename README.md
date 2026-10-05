@@ -31,10 +31,19 @@ NUXT_BLIZZARD_CLIENT_SECRET=...
 
 Blizzard reports mounts and reputations per character, while the game shows an
 account-wide mount journal and reputation tab; pets, toys and decor come back
-account-wide already. Every character page reports the character the way the API
-returns it, and each tile says in small print whose numbers it shows: `account-wide`
-for pets, toys and decor, `per character` for mounts, reputations and achievement
-points.
+account-wide already. Most tiles therefore report the character the way the API returns
+it, and each says in small print whose numbers it shows: `account-wide` for pets, toys,
+decor and reputations, `per character` for mounts and achievement points.
+
+Reputations are the exception among the per-character collections. The account-wide
+"Exalted Reputations" counter rides along with the character's achievements - every
+`5 Exalted Reputations` ... `110 Exalted Reputations` achievement carries the account's
+live number in the amount of its criterion - so the tile shows what the game's own
+achievement pane shows: every faction any character of the account has brought to Exalted.
+That is why it runs ahead of the character's own reputation list (129 against 105 when
+this was measured). When that list cannot be read, the tile falls back to the factions in
+the character's reputation payload that are at their top tier, and its note switches to
+`per character`.
 
 Reading an account's whole journal instead would need a user OAuth login
 (`/profile/user/wow/collections/mounts` answers 403 to a client-credentials token),
