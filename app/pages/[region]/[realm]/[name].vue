@@ -153,12 +153,12 @@ interface StatTile {
  * Every tile names the scope of its number in small print, because the six do not come
  * from the same place: pets, toys and decor arrive account-wide from Blizzard - they are
  * identical for every character of an account - while mounts and the achievement points
- * are the character's own. Reputations are the account-wide Exalted Reputations counter
- * whenever Blizzard reports it, because achievements are account-wide and that is the
- * number the game itself shows, plus the ladders of this character that have no Exalted
- * tier at all (a renown faction at its last renown level, a delve companion at its last
- * level). When the counter cannot be read the tile falls back to what this character has
- * maxed on its own, and the note follows the stat to say which one arrived. Its
+ * are the character's own, and reputations are too - deliberately so, because a character
+ * is only ever on one side of the faction war while the account's characters are not, so a
+ * count across the account would mix the two sides and have no reachable total to sit
+ * under. The tile counts the ladders this character has finished itself - the Exalted
+ * factions, plus a renown faction at its last renown level and a delve companion at its
+ * last level, which have no Exalted tier at all. Its
  * denominator is what a character of this faction can reach, not Blizzard's whole
  * faction index - see `reputationTotal`.
  */
@@ -172,7 +172,7 @@ const tileColumns = computed<StatTile[][]>(() => {
   const tiles = [
     { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total, color: 'text-amber-500' },
     { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total, color: 'text-amber-500' },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: c.stats.reputations.accountWide ? accountWide : perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
+    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
     { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total, color: 'text-wow-gold' },
     { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total, color: 'text-purple-400' },
     { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total, color: 'text-amber-500' }
@@ -504,8 +504,8 @@ onBeforeUnmount(() => {
                 <span class="text-2xl sm:text-3xl font-extrabold whitespace-nowrap text-right" :class="tile.color">{{ tile.display }}</span>
                 <!-- Under the first row: whose numbers the tile shows, and how much of
                      everything there is to collect they cover. -->
-                <span class="truncate text-[11px] font-semibold text-gray-400">{{ tile.note }}</span>
-                <span class="whitespace-nowrap text-right text-[11px] font-semibold text-gray-400 tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
+                <span class="truncate text-[12px] uppercase px-10 font-semibold text-gray-400">{{ tile.note }}</span>
+                <span class="whitespace-nowrap text-right text-[12px] font-semibold text-gray-400 tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
               </div>
               <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/5">
                 <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" :style="{ width: tile.percent + '%' }"></div>
