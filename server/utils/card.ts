@@ -8,6 +8,12 @@ const CARD_WIDTH = 1200
 const CARD_HEIGHT = 630
 
 /**
+ * The type the card is set in: what every `<text>` inherits, and what `measuredTextWidth`
+ * renders its probe with, so a width measured there is the width the card draws.
+ */
+const FONT_FAMILY = 'Segoe UI, Arial, Helvetica, sans-serif'
+
+/**
  * Where the character is drawn: a waist-up portrait filling the right of the card.
  *
  * `RENDER_BODY_HEIGHT` is the height the model's bounding box ends up with on the
@@ -57,7 +63,7 @@ const CLASS_COLORS: Record<string, string> = {
 
 const LABELS: Record<string, Record<string, string>> = {
   ru_RU: {
-    achievements: 'Очки достижений',
+    achievements: 'Достижения',
     itemLevel: 'Уровень предметов',
     mPlus: 'Рейтинг M+',
     mounts: 'Маунты',
@@ -115,19 +121,63 @@ function textWidth(value: string, fontSize: number): number {
  * `value` cut to what fits into `maxWidth`, with an ellipsis when something was dropped.
  * A name, a guild and a race-spec-class line all arrive at a length the card cannot
  * know in advance, and every one of them has a fixed place to sit in.
+ *
+ * `measure` is how a letter is counted: the estimate of `textWidth` by default, and a width
+ * read back from the renderer in `measuredTextWidth` where a guess is not good enough.
  */
-function fitText(value: unknown, maxWidth: number, fontSize: number): string {
+function fitText(
+  value: unknown,
+  maxWidth: number,
+  fontSize: number,
+  measure: (text: string, fontSize: number) => number = textWidth
+): string {
   const text = String(value ?? '')
-  if (textWidth(text, fontSize) <= maxWidth) return text
+  if (measure(text, fontSize) <= maxWidth) return text
 
   let kept = ''
 
   for (const char of text) {
-    if (textWidth(`${kept}${char}…`, fontSize) > maxWidth) break
+    if (measure(`${kept}${char}…`, fontSize) > maxWidth) break
     kept += char
   }
 
   return `${kept}…`
+}
+
+/** Renders a document the way the card is rendered: system fonts, at the card's own width. */
+function renderSvg(svg: string): Buffer {
+  return new Resvg(svg, {
+    font: { loadSystemFonts: true, defaultFontFamily: 'Arial' },
+    fitTo: { mode: 'width', value: CARD_WIDTH }
+  }).render().asPng()
+}
+
+/**
+ * The width a run of text draws at, read back from the renderer that draws the card.
+ *
+ * `textWidth` above is a guess, and a good enough one to decide how much of a line survives:
+ * a heading centred on it, though, lands visibly off, because a run of capitals is up to a
+ * fifth wider than its two buckets say. SVG has no text metrics to query, so the run is drawn
+ * on its own - in the card's own font, size, weight and letter spacing - and the ink of that
+ * render is measured. It is what puts a summary number under the caps of its heading.
+ *
+ * The probe is a 1200px-wide render of a label, and rendering a card is a hot path, so a
+ * width is measured once and kept.
+ */
+const measuredWidths = new Map<string, number>()
+
+function measuredTextWidth(value: string, fontSize: number, letterSpacing = 0): number {
+  const key = `${fontSize}/${letterSpacing}/${value}`
+  const cached = measuredWidths.get(key)
+  if (cached !== undefined) return cached
+
+  const height = Math.ceil(fontSize * 3)
+  const probe = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${height}" font-family="${FONT_FAMILY}"><text x="${CARD_WIDTH / 2}" y="${fontSize * 2}" font-size="${fontSize}" font-weight="700" letter-spacing="${letterSpacing}" text-anchor="middle" fill="#ffffff">${esc(value)}</text></svg>`
+  const bounds = value ? pngAlphaBounds(renderSvg(probe)) : null
+  const width = bounds ? bounds.w : textWidth(value, fontSize)
+
+  measuredWidths.set(key, width)
+  return width
 }
 
 function percent(count: number, total: number): number {
@@ -243,6 +293,77 @@ function iconElement(name: string, x: number, y: number, height: number, fill: s
   return `<svg x="${x}" y="${y}" width="${width}" height="${height}" viewBox="${icon.viewBox}" fill="${fill}" overflow="visible">${icon.body}</svg>`
 }
 
+/** The width `<name>` is drawn at for a given height, which is what centres it in a box. */
+function iconWidth(name: string, height: number): number {
+  const icon = loadIcon(name)
+  return icon ? height * icon.ratio : 0
+}
+
+/** Rounds a coordinate to the hundredth the rest of the card's geometry is drawn at. */
+function round2(value: number): number {
+  return +value.toFixed(2)
+}
+
+/**
+ * A heading: the glyph in its rounded box with the uppercase label beside it, the two lined
+ * up on the cap height of the label. Every tile is titled with one of these, which is what
+ * keeps the card's headings the same size and weight.
+ *
+ * `x` is the left edge of the box, `y` the baseline of the label and `width` the room the
+ * whole heading has: the label is cut to what is left of that after the box, so a long one
+ * ends in an ellipsis rather than running into whatever sits beside it.
+ */
+function headingSvg(icon: string, label: string, x: number, y: number, width: number): string {
+  const top = headingBoxTop(y)
+  // The glyph is centred in its box on both axes; every icon file is drawn on a square.
+  const glyph = iconElement(
+    icon,
+    round2(x + (HEADING_ICON_BOX - iconWidth(icon, HEADING_ICON_GLYPH)) / 2),
+    top + (HEADING_ICON_BOX - HEADING_ICON_GLYPH) / 2,
+    HEADING_ICON_GLYPH,
+    '#e2e8f0'
+  )
+  return `<rect x="${round2(x)}" y="${top}" width="${HEADING_ICON_BOX}" height="${HEADING_ICON_BOX}" rx="9" fill="#0b1220" stroke="#1e293b" stroke-width="1.5"/>
+  ${glyph}
+  <text x="${round2(x + HEADING_ICON_BOX + HEADING_ICON_GAP)}" y="${round2(y)}" font-size="${HEADING_LABEL_SIZE}" font-weight="700" letter-spacing="${HEADING_LETTER_SPACING}" fill="#e2e8f0">${esc(headingLabel(label, width))}</text>`
+}
+
+/** One collection of the tile grid. */
+interface Tile {
+  label: string
+  icon: string
+  count: number
+  total: number
+  color: string
+}
+
+/**
+ * One tile: its heading, the count centred in the room under it, and the bar along the
+ * bottom edge.
+ *
+ * `numberSize` is the size every tile's count is set at (`tileNumberSize`); it is handed in
+ * rather than picked here because all six have to hold the same one, and it is what the count
+ * is centred on between the heading and the bar. The count is set in the stat's own colour, the
+ * way the page's tiles set theirs, and the bar's fill is the share of the collection that is
+ * complete. The tile carries no small print: at this width there is no room for the total and
+ * the percentage beside the label, which is what the bar is for.
+ */
+function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: number): string {
+  const inset = width - TILE_PAD * 2
+  const barX = round2(x + TILE_PAD)
+  const barWidth = round2(inset)
+  const filled = round2((barWidth * percent(tile.count, tile.total)) / 100)
+  const barY = y + TILE_BAR_Y
+  // The dark track with its hairline edge, then the fill twice: blurred underneath for the
+  // bloom the bars have on the page, and crisp on top of it so the fill keeps its edges.
+  return `<rect x="${round2(x)}" y="${y}" width="${round2(width)}" height="${TILE_HEIGHT}" rx="14" fill="#05070b" fill-opacity="0.6" stroke="#1e293b" stroke-width="2"/>
+  ${headingSvg(tile.icon, tile.label, x + TILE_PAD, y + TILE_LABEL_Y, inset)}
+  <text x="${round2(x + width / 2)}" y="${round2(y + tileNumberY(numberSize))}" font-size="${numberSize}" font-weight="700" fill="${tile.color}" text-anchor="middle">${tile.count.toLocaleString('en-US')}</text>
+  <rect x="${barX}" y="${barY}" width="${barWidth}" height="${TILE_BAR_HEIGHT}" rx="4" fill="#0b1220" stroke="#334155" stroke-width="1"/>
+  <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)" filter="url(#barGlow)"/>
+  <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)"/>`
+}
+
 /** Downloads the Armoury class backdrop (JPEG) used behind the character. */
 async function loadBackground(url: string): Promise<string> {
   if (!url) return ''
@@ -291,63 +412,181 @@ async function loadRender(url: string): Promise<string> {
 const NAME_SIZES = [46, 40, 34]
 
 /**
- * The left column: the three summary numbers on a panel, the five ladders beneath it and
- * the foot band with the address. The ladders are what the card is read for, so they take
- * the room the portrait leaves over - a bar runs the full width of the column - and the
+ * The left column: the three summary numbers on a panel, the collection tiles beneath it
+ * and the foot band with the address. The tiles are what the card is read for, so they
+ * take the room the portrait leaves over - a row spans the width of the column - and the
  * panel and the band are inset from the column's edges.
  */
 const COLUMN_X = 44
 const COLUMN_WIDTH = 712
 const COLUMN_RIGHT = COLUMN_X + COLUMN_WIDTH
-const COLUMN_PAD = 12
 
 /**
- * Where the first ladder sits, the height of each step, and the height of a bar.
+ * The header: the name and the title against the left edge, then a rule, and past it the two
+ * headline figures - the item level and the Mythic+ rating - with a second rule between them.
+ * The wordmark sits in the top-right corner, and the figures are spread over the room that is
+ * left of it, one centred in each half, which is how the character page sets the same pair.
  *
- * A rung is one unit: its label and its number ride `LADDER_LABEL_DROP` below the top of
- * the step and its bar sits `LADDER_BAR_DROP` further down. The two offsets are what tie
- * a label to the bar it belongs to - a label left at the step top reads as a heading of
- * the bar above it, since that is where the gap between two rungs puts it - and the bar
- * was given the room the drop freed.
- */
-const LADDER_TOP = 300
-const LADDER_STEP = 54
-const LADDER_LABEL_DROP = 8
-const LADDER_BAR_DROP = 18
-const LADDER_BAR_HEIGHT = 12
-
-/** The three summary numbers, one x each, spread over the panel. */
-const SUMMARY_X = [76, 312, 548] as const
-
-/**
- * The panel holds a heading with its glyph and the number under it, and the pair is
- * centred in the panel as one block: `SUMMARY_LABEL_Y` and `SUMMARY_NUMBER_Y` are the
- * distances from `PANEL_TOP` to the two baselines of that block.
- */
-const SUMMARY_GLYPH_Y = 25
-const SUMMARY_LABEL_Y = 38
-const SUMMARY_NUMBER_Y = 88
-
-/**
- * The header: the name and the title stand on the left of a vertical rule, the level,
- * race, spec and class line plus the guild across from the wordmark on the right. Both
- * boxes are measured to end before what follows them.
+ * `STATS_LABEL_Y` and `STATS_NUMBER_Y` are the baselines of a figure's label and of its number.
+ * A figure is centred on `STATS_CENTER` as one group - the glyph that stands with the number is
+ * part of the group - so the number sits under the label over it whatever size it is set at.
  */
 const DIVIDER_X = 372
 const NAME_WIDTH = DIVIDER_X - 76
-const META_X = DIVIDER_X + 26
 const LOGO_X = 964
-const META_WIDTH = LOGO_X - 20 - META_X
+const STATS_X = DIVIDER_X + 26
+const STATS_RIGHT = LOGO_X - 20
+const STATS_WIDTH = STATS_RIGHT - STATS_X
+const STATS_COLUMNS = 2
+const STATS_COLUMN_WIDTH = STATS_WIDTH / STATS_COLUMNS
+const STATS_CENTER = Array.from(
+  { length: STATS_COLUMNS },
+  (_, column) => STATS_X + STATS_COLUMN_WIDTH * (column + 0.5)
+)
+const STATS_LABEL_Y = 62
+const STATS_LABEL_SIZE = 15
+const STATS_LETTER_SPACING = 1
+const STATS_NUMBER_Y = 108
+const STATS_NUMBER_SIZES = [40, 36, 32]
+/** The glyph beside a figure is drawn in the number's own colour, at this share of its size. */
+const STATS_ICON_RATIO = 0.85
+const STATS_ICON_GAP_RATIO = 0.3
 
-/** The panel the summary numbers sit on, and the band the address line sits in. */
-const PANEL_TOP = 154
-const PANEL_HEIGHT = 114
+/** Every rule of the card is a two-pixel hairline that fades out at both ends, as `#rule` is. */
+const RULE_WIDTH = 2
+
+/**
+ * The rule after the name stands the height of the name and the title; the one between the two
+ * figures stands the height of a label and a number.
+ */
+const HEADER_RULE_TOP = 40
+const HEADER_RULE_HEIGHT = 92
+const STATS_RULE_X = STATS_X + STATS_COLUMN_WIDTH
+const STATS_RULE_TOP = STATS_LABEL_Y - STATS_LABEL_SIZE - 3
+const STATS_RULE_HEIGHT = STATS_NUMBER_Y + 6 - STATS_RULE_TOP
+
+/**
+ * The description under the name: the level, race, spec and class line and, beneath it, the
+ * guild and realm line. Both are set off the name's own left edge and measured to end before
+ * the portrait.
+ */
+const DESC_X = 56
+const DESC_WIDTH = 660
+const DESC_SIZE = 24
+const DESC_LINE1_Y = 162
+const DESC_LINE2_Y = 198
+
+/** The band the address line sits in. */
 const FOOTER_TOP = 572
 const FOOTER_HEIGHT = 32
 
-/** The width of a ladder bar, and of the text line above it. */
-const BAR_X = COLUMN_X + COLUMN_PAD
-const BAR_WIDTH = COLUMN_WIDTH - 2 * COLUMN_PAD
+/**
+ * The grid the collection tiles are drawn in: six collections, three across and two down, and
+ * a last row that shares the room it has left over, so the block ends on the column's right
+ * edge whatever the number of stats rather than leaving a hole where the next tile would have
+ * been.
+ *
+ * `TILE_TOP` leaves the gap under the description and `TILE_HEIGHT` is the room between it and
+ * the foot band split over the rows, so the description, the grid and the band keep their
+ * distances to each other.
+ */
+const TILE_GAP = 16
+const TILE_COLUMNS = 3
+const TILE_ROWS = 2
+const TILE_TOP = 236
+const TILE_HEIGHT = (FOOTER_TOP - TILE_GAP - TILE_TOP - (TILE_ROWS - 1) * TILE_GAP) / TILE_ROWS
+
+/**
+ * The sizes a tile's count is set in. All six counts take the largest one of these that still
+ * fits the room a tile has for it, so the numbers are as large as the boxes allow and every
+ * tile holds the same size - a grid of numbers set at different sizes would read as an
+ * accident, and the count is what the card is read for.
+ */
+const TILE_NUMBER_SIZES = [64, 60, 56, 52, 48]
+
+function tileNumberSize(values: string[], maxWidth: number): number {
+  const size = TILE_NUMBER_SIZES.find(candidate =>
+    values.every(value => measuredTextWidth(value, candidate) <= maxWidth)
+  )
+
+  return size || TILE_NUMBER_SIZES[TILE_NUMBER_SIZES.length - 1]
+}
+
+/**
+ * The heading the panel over the tiles and every tile are titled with: the glyph in its
+ * rounded box with the uppercase label beside it. One set of measurements for both is what
+ * keeps them the same size and weight, and a heading is placed by the left edge of its box
+ * and the baseline of its label, so a caller only has to know where its line is set.
+ *
+ * `HEADING_ICON_GLYPH` sits in `HEADING_ICON_BOX` with the same padding on every side, and
+ * `HEADING_CAP_HEIGHT` is the part of the label size a capital rises above the baseline -
+ * which is what `headingBoxTop` centres the box on, rather than the label's line box.
+ * `HEADING_LETTER_SPACING` is what airs a run of capitals out, and it is part of the width
+ * one of them draws at.
+ *
+ * The label is set one step smaller than the room of a tile would take, because a tile is
+ * titled with the name of a collection and the longest of those - achievements - has to sit
+ * whole beside the glyph rather than end in an ellipsis.
+ */
+const HEADING_ICON_BOX = 32
+const HEADING_ICON_GLYPH = 22
+const HEADING_ICON_GAP = 11
+const HEADING_LABEL_SIZE = 18
+const HEADING_LETTER_SPACING = 1
+const HEADING_CAP_HEIGHT = 0.72
+
+/** The top edge of the icon box centred on the cap of a label whose baseline is `baselineY`. */
+function headingBoxTop(baselineY: number): number {
+  return round2(baselineY - (HEADING_LABEL_SIZE * HEADING_CAP_HEIGHT) / 2 - HEADING_ICON_BOX / 2)
+}
+
+/**
+ * The label of a heading as it is drawn: uppercased, and cut to the room that is left of the
+ * icon box. It is measured rather than guessed at, because a heading is placed by the width it
+ * draws at and a label that gets cut has to be measured as it is drawn.
+ */
+function headingLabel(label: string, width: number): string {
+  return fitText(label.toUpperCase(), width - HEADING_ICON_BOX - HEADING_ICON_GAP, HEADING_LABEL_SIZE, (text, size) =>
+    measuredTextWidth(text, size, HEADING_LETTER_SPACING)
+  )
+}
+
+/**
+ * A rule of the card, drawn down the middle of a column boundary: it fades out at both ends,
+ * which is what the `#rule` gradient is for, and `RULE_WIDTH` is what keeps it a hairline.
+ */
+function ruleSvg(x: number, top: number, height: number): string {
+  return `<rect x="${round2(x - RULE_WIDTH / 2)}" y="${round2(top)}" width="${RULE_WIDTH}" height="${round2(height)}" fill="url(#rule)"/>`
+}
+
+/**
+ * The width a headline figure draws at: its glyph, the gap and the number. A figure is centred
+ * on this rather than placed by its number, which is what puts the number under the label over
+ * it, and it is what `buildCardSvg` fits against when it picks the size of the pair.
+ */
+function statWidth(icon: string, value: string, numberSize: number): number {
+  return iconWidth(icon, numberSize * STATS_ICON_RATIO) + numberSize * STATS_ICON_GAP_RATIO + measuredTextWidth(value, numberSize)
+}
+
+/**
+ * What one tile holds: its heading, the count centred in the room under it, and the bar along
+ * the bottom edge. All of it is measured from the tile's own corner, so a tile is drawn the
+ * same at any width in the grid.
+ *
+ * `TILE_NUMBER_CENTER` is the middle of the room between the bottom of the heading's icon box
+ * and the top of the bar, and `tileNumberY` turns it into the baseline a count of a given size
+ * has to sit on to be centred in that room - a line of that size has a cap height of about
+ * 0.72em, so the baseline goes half a cap below the middle.
+ */
+const TILE_PAD = 14
+const TILE_LABEL_Y = 36
+const TILE_BAR_HEIGHT = 8
+const TILE_BAR_Y = TILE_HEIGHT - TILE_PAD - TILE_BAR_HEIGHT
+const TILE_NUMBER_CENTER = round2((headingBoxTop(TILE_LABEL_Y) + HEADING_ICON_BOX + TILE_BAR_Y) / 2)
+
+function tileNumberY(numberSize: number): number {
+  return TILE_NUMBER_CENTER + (numberSize * HEADING_CAP_HEIGHT) / 2
+}
 
 export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU'): Promise<Buffer> {
   await loadIcons()
@@ -360,35 +599,42 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
     loadRender(data.renderUrl)
   ])
 
-  const rows = [
+  /**
+   * The six collections in the order the card reads them, each in the colour its tile has on
+   * the character page: the amber the page sets most of them in, the purple of the pets and the
+   * gold of the achievements.
+   */
+  const tiles: Tile[] = [
     { label: L.mounts, icon: 'mounts', count: data.stats.mounts.count, total: data.stats.mounts.total, color: '#f59e0b' },
-    { label: L.pets, icon: 'pets', count: data.stats.pets.count, total: data.stats.pets.total, color: '#a78bfa' },
-    { label: L.toys, icon: 'toys', count: data.stats.toys.count, total: data.stats.toys.total, color: '#38bdf8' },
-    { label: L.decor, icon: 'decor', count: data.stats.decor.count, total: data.stats.decor.total, color: '#fbbf24' },
-    { label: L.reputations, icon: 'exalted-rep', count: data.stats.reputations.count, total: data.stats.reputations.total, color: '#34d399' }
+    { label: L.pets, icon: 'pets', count: data.stats.pets.count, total: data.stats.pets.total, color: '#c084fc' },
+    { label: L.achievements, icon: 'achievments', count: data.stats.achievements.count, total: data.stats.achievements.total, color: '#f8b700' },
+    { label: L.decor, icon: 'decor', count: data.stats.decor.count, total: data.stats.decor.total, color: '#f59e0b' },
+    { label: L.reputations, icon: 'exalted-rep', count: data.stats.reputations.count, total: data.stats.reputations.total, color: '#f59e0b' },
+    { label: L.toys, icon: 'toys', count: data.stats.toys.count, total: data.stats.toys.total, color: '#f59e0b' }
   ]
 
-  const rowsSvg = rows.map((row, index) => {
-    const y = LADDER_TOP + index * LADDER_STEP
-    const labelY = y + LADDER_LABEL_DROP
-    const barY = y + LADDER_BAR_DROP
-    // The glyph is centred on the cap height of the 19px label beside it.
-    const glyph = iconElement(row.icon, BAR_X, labelY - 17, 21, '#cbd5e1')
-    const labelX = glyph ? BAR_X + 30 : BAR_X
-    const barW = Math.round((BAR_WIDTH * percent(row.count, row.total)) / 100)
-    // The dark track, then the filled part twice: blurred underneath for the bloom the bars
-    // have on the page, and crisp on top of it so the fill keeps its edges.
-    return `${glyph}<text x="${labelX}" y="${labelY}" font-size="19" fill="#cbd5e1">${esc(row.label)}</text>
-  <text x="${COLUMN_RIGHT - COLUMN_PAD}" y="${labelY}" font-size="21" font-weight="700" fill="${row.color}" text-anchor="end">${row.count} / ${row.total}</text>
-  <rect x="${BAR_X}" y="${barY}" width="${BAR_WIDTH}" height="${LADDER_BAR_HEIGHT}" rx="7" fill="#121922"/>
-  <rect x="${BAR_X}" y="${barY}" width="${barW}" height="${LADDER_BAR_HEIGHT}" rx="7" fill="url(#barGrad)" filter="url(#barGlow)"/>
-  <rect x="${BAR_X}" y="${barY}" width="${barW}" height="${LADDER_BAR_HEIGHT}" rx="7" fill="url(#barGrad)"/>`
+  // All six counts are set at one size - the largest that fits a tile's room - and every column
+  // of the grid is the same width, so the room is the column less the padding on either side.
+  const tileWidth = (COLUMN_WIDTH - (TILE_COLUMNS - 1) * TILE_GAP) / TILE_COLUMNS
+  const numberSize = tileNumberSize(tiles.map(tile => tile.count.toLocaleString('en-US')), tileWidth - TILE_PAD * 2)
+
+  /**
+   * The grid, drawn row by row. A last row holding fewer tiles than the grid is wide shares
+   * the room left over between its tiles, so it ends flush with the column's right edge
+   * instead of leaving a hole where the next tile would have been.
+   */
+  const tilesSvg = Array.from({ length: Math.ceil(tiles.length / TILE_COLUMNS) }, (_, row) => {
+    const inRow = tiles.slice(row * TILE_COLUMNS, (row + 1) * TILE_COLUMNS)
+    const width = (COLUMN_WIDTH - (inRow.length - 1) * TILE_GAP) / inRow.length
+    const y = TILE_TOP + row * (TILE_HEIGHT + TILE_GAP)
+
+    return inRow.map((tile, column) => tileSvg(tile, COLUMN_X + column * (width + TILE_GAP), y, width, numberSize)).join('\n  ')
   }).join('\n  ')
 
   // Both lines are measured and cut in `buildCardSvg`, where the boxes they sit in are.
   const metaLine = [data.race, data.spec, data.class].filter(Boolean).join(' · ')
   const guildLine = [data.guild ? `<${data.guild}>` : '', data.realm].filter(Boolean).join(' · ')
-  return buildCardSvg(data, L, classColor, backgroundEl, renderEl, rowsSvg, metaLine, guildLine)
+  return buildCardSvg(data, L, classColor, backgroundEl, renderEl, tilesSvg, metaLine, guildLine)
 }
 
 function buildCardSvg(
@@ -397,21 +643,42 @@ function buildCardSvg(
   classColor: string,
   backgroundEl: string,
   renderEl: string,
-  rowsSvg: string,
+  tilesSvg: string,
   metaLine: string,
   guildLine: string
 ): Buffer {
   /**
-   * The summary headings carry the glyphs the page shows next to them, on the panel
-   * that lifts the three numbers off the artwork behind.
+   * A headline figure of the header: its label in small caps over the number, which is set
+   * beside the glyph the page puts with it. The glyph, the gap and the number are centred on
+   * the figure's own half of the header as one group, which is what puts the number under the
+   * label over it whatever size it is set at.
    */
-  const glyphFor = (name: string, x: number) => {
-    const glyph = iconElement(name, x, PANEL_TOP + SUMMARY_GLYPH_Y, 16, '#94a3b8')
-    return { glyph, labelX: glyph ? x + 22 : x }
+  const statSvg = (icon: string, label: string, value: string, color: string, column: number, numberSize: number) => {
+    const glyphHeight = round2(numberSize * STATS_ICON_RATIO)
+    const glyphWidth = round2(iconWidth(icon, glyphHeight))
+    const gap = round2(numberSize * STATS_ICON_GAP_RATIO)
+    const center = STATS_CENTER[column]
+    const left = round2(center - statWidth(icon, value, numberSize) / 2)
+    // The label is measured rather than guessed at, so a long one is cut to its own half of
+    // the header instead of running into the rule beside it.
+    const caption = fitText(label.toUpperCase(), STATS_COLUMN_WIDTH - 16, STATS_LABEL_SIZE, (text, size) =>
+      measuredTextWidth(text, size, STATS_LETTER_SPACING)
+    )
+
+    return `<text x="${round2(center)}" y="${STATS_LABEL_Y}" font-size="${STATS_LABEL_SIZE}" font-weight="700" letter-spacing="${STATS_LETTER_SPACING}" text-anchor="middle" fill="#94a3b8">${esc(caption)}</text>
+  ${iconElement(icon, left, round2(STATS_NUMBER_Y - (numberSize * HEADING_CAP_HEIGHT) / 2 - glyphHeight / 2), glyphHeight, color)}
+  <text x="${round2(left + glyphWidth + gap)}" y="${STATS_NUMBER_Y}" font-size="${numberSize}" font-weight="700" fill="${color}">${esc(value)}</text>`
   }
-  const achievementsGlyph = glyphFor('achievments', SUMMARY_X[0])
-  const itemLevelGlyph = glyphFor('item-level', SUMMARY_X[1])
-  const mPlusGlyph = glyphFor('key', SUMMARY_X[2])
+
+  /**
+   * Both figures are set at the same size - the largest one that fits either half - because a
+   * pair of numbers set at two sizes reads as an accident.
+   */
+  const statSize = STATS_NUMBER_SIZES.find(size =>
+    statWidth('item-level', String(data.ilvl), size) <= STATS_COLUMN_WIDTH - 16
+    && statWidth('key', String(data.mPlusScore), size) <= STATS_COLUMN_WIDTH - 16
+  ) || STATS_NUMBER_SIZES[STATS_NUMBER_SIZES.length - 1]
+
   const levelLine = `${L.level} ${data.level} · ${metaLine}`
 
   /**
@@ -420,6 +687,7 @@ function buildCardSvg(
    */
   const nameSize = NAME_SIZES.find(size => textWidth(data.name, size) <= NAME_WIDTH) || NAME_SIZES[NAME_SIZES.length - 1]
   const titleSize = nameSize >= 40 ? 21 : 18
+  const titleY = 80 + (nameSize >= 40 ? 28 : 24)
 
   /**
    * The wordmark sits in the top-right corner at twice the height it used to have
@@ -430,7 +698,7 @@ function buildCardSvg(
   const logotype = iconElement('hoa-logotype', LOGO_X, 52, 52, '#94a3b8')
     || '<text font-size="26" fill="#94a3b8" x="1144" y="88" text-anchor="end">HeroOfAzeroth</text>'
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" font-family="Segoe UI, Arial, Helvetica, sans-serif">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" font-family="${FONT_FAMILY}">
   <defs>
     <!-- The artwork is a very dark scene, so the shadows are lifted with a gamma
          curve (which keeps the candles from clipping) before the colours are
@@ -488,32 +756,23 @@ function buildCardSvg(
   <rect y="430" width="${CARD_WIDTH}" height="200" fill="url(#bottomFade)"/>
   <rect x="0" y="0" width="6" height="${CARD_HEIGHT}" fill="${classColor}" fill-opacity="0.9"/>
 
-  <rect x="${DIVIDER_X}" y="42" width="2" height="86" fill="url(#rule)"/>
+  ${ruleSvg(DIVIDER_X, HEADER_RULE_TOP, HEADER_RULE_HEIGHT)}
   <text x="56" y="80" font-size="${nameSize}" font-weight="700" fill="#f8b700">${esc(fitText(data.name, NAME_WIDTH, nameSize))}</text>
-  ${data.title ? `<text x="56" y="108" font-size="${titleSize}" font-style="italic" fill="#ffe395">${esc(fitText(data.title, NAME_WIDTH, titleSize))}</text>` : ''}
-  <text x="${META_X}" y="70" font-size="20" fill="#cbd5e1">${esc(fitText(levelLine, META_WIDTH, 19))}</text>
-  <text x="${META_X}" y="104" font-size="20" fill="#94a3b8">${esc(fitText(guildLine, META_WIDTH, 17))}</text>
+  ${data.title ? `<text x="56" y="${titleY}" font-size="${titleSize}" font-style="italic" fill="#ffe395">${esc(fitText(data.title, NAME_WIDTH, titleSize))}</text>` : ''}
+  ${ruleSvg(STATS_RULE_X, STATS_RULE_TOP, STATS_RULE_HEIGHT)}
+  ${statSvg('item-level', L.itemLevel, String(data.ilvl), '#c084fc', 0, statSize)}
+  ${statSvg('key', L.mPlus, String(data.mPlusScore), '#fbbf24', 1, statSize)}
   ${logotype}
 
-  <rect x="${COLUMN_X}" y="${PANEL_TOP}" width="${COLUMN_WIDTH}" height="${PANEL_HEIGHT}" rx="14" fill="#05070b" fill-opacity="0.6" stroke="#1e293b" stroke-width="2"/>
-  ${achievementsGlyph.glyph}<text x="${achievementsGlyph.labelX}" y="${PANEL_TOP + SUMMARY_LABEL_Y}" font-size="16" fill="#94a3b8">${esc(L.achievements)}</text>
-  <text x="${SUMMARY_X[0]}" y="${PANEL_TOP + SUMMARY_NUMBER_Y}" font-size="40" font-weight="700" fill="#f8b700">${data.ap.toLocaleString('en-US')}</text>
-  ${itemLevelGlyph.glyph}<text x="${itemLevelGlyph.labelX}" y="${PANEL_TOP + SUMMARY_LABEL_Y}" font-size="16" fill="#94a3b8">${esc(L.itemLevel)}</text>
-  <text x="${SUMMARY_X[1]}" y="${PANEL_TOP + SUMMARY_NUMBER_Y}" font-size="40" font-weight="700" fill="#c084fc">${data.ilvl}</text>
-  ${mPlusGlyph.glyph}<text x="${mPlusGlyph.labelX}" y="${PANEL_TOP + SUMMARY_LABEL_Y}" font-size="16" fill="#94a3b8">${esc(L.mPlus)}</text>
-  <text x="${SUMMARY_X[2]}" y="${PANEL_TOP + SUMMARY_NUMBER_Y}" font-size="40" font-weight="700" fill="#fbbf24">${data.mPlusScore}</text>
+  <text x="${DESC_X}" y="${DESC_LINE1_Y}" font-size="${DESC_SIZE}" fill="#cbd5e1">${esc(fitText(levelLine, DESC_WIDTH, DESC_SIZE))}</text>
+  <text x="${DESC_X}" y="${DESC_LINE2_Y}" font-size="${DESC_SIZE}" fill="#94a3b8">${esc(fitText(guildLine, DESC_WIDTH, DESC_SIZE))}</text>
 
-  ${rowsSvg}
+  ${tilesSvg}
 
   <rect x="${COLUMN_X}" y="${FOOTER_TOP}" width="${COLUMN_WIDTH}" height="${FOOTER_HEIGHT}" rx="10" fill="#05070b" fill-opacity="0.6"/>
   <text x="${COLUMN_X + 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="#94a3b8">heroofazeroth.com</text>
   <text x="${COLUMN_RIGHT - 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="${classColor}" text-anchor="end">${esc(fitText(data.class, 260, 15))}</text>
 </svg>`
 
-  const resvg = new Resvg(svg, {
-    font: { loadSystemFonts: true, defaultFontFamily: 'Arial' },
-    fitTo: { mode: 'width', value: 1200 }
-  })
-
-  return resvg.render().asPng()
+  return renderSvg(svg)
 }

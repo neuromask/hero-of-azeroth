@@ -9,6 +9,40 @@ definePageMeta({ alias: '/ru' })
 // reading the old one picks the new artwork up on its own.
 import hoaPrev from '~/assets/img/hoa-prev.jpg'
 
+/**
+ * The artwork the page cycles through behind the form: the six community backgrounds in
+ * `~/assets/img`, one after another and then back to the first. Vite resolves each file to a
+ * URL carrying a content hash, and every picture is in the markup from the first render, so
+ * the browser has all six before the first change and a fade never lands on a half-loaded
+ * image - which is what makes the change a cross-fade rather than a flash.
+ */
+import bg01 from '~/assets/img/bg-01.webp'
+import bg02 from '~/assets/img/bg-02.webp'
+import bg03 from '~/assets/img/bg-03.webp'
+import bg04 from '~/assets/img/bg-04.webp'
+import bg05 from '~/assets/img/bg-05.webp'
+import bg06 from '~/assets/img/bg-06.webp'
+
+const backgrounds = [bg01, bg02, bg03, bg04, bg05, bg06]
+
+/** How long one picture is held before the next one fades in. */
+const SLIDER_INTERVAL = 6000
+
+/**
+ * Which picture is showing, and the id of the timer that walks through them. The server
+ * renders the first one and the browser starts on that same index, so hydration sees the
+ * markup it was given; the timer is only started in `onMounted`, so no rotation runs during
+ * a render. `window` is named the way the character page names it, and it is where the id
+ * of a browser timer comes from.
+ */
+const backgroundIndex = ref(0)
+let backgroundTimer: number | null = null
+
+/** Steps to the next picture, wrapping around at the end and back to the first. */
+const showNextBackground = () => {
+  backgroundIndex.value = (backgroundIndex.value + 1) % backgrounds.length
+}
+
 interface RealmOption {
   slug: string
   name: string
@@ -288,21 +322,32 @@ onMounted(() => {
   // after hydration keeps the rendered page the same for everyone.
   restoreSession()
   document.addEventListener('mousedown', onDocumentClick)
+  // Likewise, the rotation only exists here: a server render has no timer, and the first
+  // picture is already the one the markup was drawn with.
+  backgroundTimer = window.setInterval(showNextBackground, SLIDER_INTERVAL)
 })
-onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick))
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentClick)
+  if (backgroundTimer !== null) window.clearInterval(backgroundTimer)
+})
 </script>
 
 
 <template>
   <div class="relative min-h-screen bg-wow-dark flex flex-col items-center justify-center p-4">
-    <!-- The community artwork (`app/assets/img/bg-01.jpg`) covers the whole page.
-         It is a bright sunset scene, so a flat scrim plus a vignette dim it just
-         enough for the glass box and the gold accents to stay readable. -->
+    <!-- The community artwork (`app/assets/img/bg-01.webp` through `bg-06.webp`) covers the
+         whole page, one picture at a time: the six are stacked on each other and the page
+         fades between them, so the change is a cross-fade and never a blank frame. Every
+         scene is a bright one, so a flat scrim plus a vignette dim whichever is showing
+         just enough for the glass box and the gold accents to stay readable. -->
     <img
-      src="~/assets/img/bg-01.webp"
+      v-for="(picture, index) in backgrounds"
+      :key="picture"
+      :src="picture"
       alt=""
       aria-hidden="true"
-      class="fixed inset-0 h-full w-full object-cover"
+      class="fixed inset-0 h-full w-full object-cover transition-opacity duration-[1600ms] ease-in-out"
+      :class="index === backgroundIndex ? 'opacity-100' : 'opacity-0'"
     />
     <div class="fixed inset-0 bg-wow-dark/45"></div>
     <div class="fixed inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(8,10,15,0.65)_100%)]"></div>
