@@ -299,7 +299,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
          It is a bright sunset scene, so a flat scrim plus a vignette dim it just
          enough for the glass box and the gold accents to stay readable. -->
     <img
-      src="~/assets/img/bg-01.jpg"
+      src="~/assets/img/bg-01.webp"
       alt=""
       aria-hidden="true"
       class="fixed inset-0 h-full w-full object-cover"
