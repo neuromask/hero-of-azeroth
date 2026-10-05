@@ -155,9 +155,12 @@ interface StatTile {
  * identical for every character of an account - while mounts and the achievement points
  * are the character's own. Reputations are the account-wide Exalted Reputations counter
  * whenever Blizzard reports it, because achievements are account-wide and that is the
- * number the game itself shows; when the counter cannot be read the tile falls back to
- * the character's own Exalted factions, and the note follows the stat to say which one
- * arrived.
+ * number the game itself shows, plus the ladders of this character that have no Exalted
+ * tier at all (a renown faction at its last renown level, a delve companion at its last
+ * level). When the counter cannot be read the tile falls back to what this character has
+ * maxed on its own, and the note follows the stat to say which one arrived. Its
+ * denominator is what a character of this faction can reach, not Blizzard's whole
+ * faction index - see `reputationTotal`.
  */
 const tileColumns = computed<StatTile[][]>(() => {
   const c = character.value

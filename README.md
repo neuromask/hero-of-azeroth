@@ -41,9 +41,22 @@ Reputations are the exception among the per-character collections. The account-w
 live number in the amount of its criterion - so the tile shows what the game's own
 achievement pane shows: every faction any character of the account has brought to Exalted.
 That is why it runs ahead of the character's own reputation list (129 against 105 when
-this was measured). When that list cannot be read, the tile falls back to the factions in
-the character's reputation payload that are at their top tier, and its note switches to
-`per character`.
+this was measured). Factions whose ladder has no Exalted tier are missing from that
+counter, so the ladders this character has finished - a renown faction at its last renown
+level, a delve companion at its last level, the brokers of K'aresh at Mastermind - are
+added on top of it. When the achievement list cannot be read, the tile falls back to what
+this character has maxed on its own, and its note switches to `per character`.
+
+The denominator is what a character of that faction can actually reach, not Blizzard's
+whole faction index: that index lists 284 entries, of which 37 belong to the Horde alone
+and 40 to the Alliance alone (a character is only ever on one side) and 18 only group the
+rest (the twelve expansions, the two faction groups, `Guild`, a placeholder). The index
+carries neither the side nor a "this is only a heading" flag, so
+`npm run refresh:reputations` reads every faction once and writes
+`server/utils/reputation-totals.json` - 231 factions as an Alliance character, 228 as a
+Horde one on patch 12.1.0 - and the same read records the top of each faction's ladder.
+The snapshot is also what tells a finished reputation from one the character merely has a
+record with. Refresh it after a patch that adds factions.
 
 Reading an account's whole journal instead would need a user OAuth login
 (`/profile/user/wow/collections/mounts` answers 403 to a client-credentials token),

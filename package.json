@@ -11,7 +11,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "refresh:achievements": "node scripts/refresh-achievement-points.mjs"
+    "refresh:achievements": "node scripts/refresh-achievement-points.mjs",
+    "refresh:reputations": "node scripts/refresh-reputation-totals.mjs"
   },
   "dependencies": {
     "@nuxtjs/i18n": "^10.6.0",

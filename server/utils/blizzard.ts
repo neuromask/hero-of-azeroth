@@ -1,5 +1,6 @@
 import { resolveArmoryBackground } from './armory'
 import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
+import { isExalted, isReputationMaxed, reputationTotal } from './reputations'
 
 let cachedToken: { access_token: string; expires_at: number } | null = null
 
@@ -182,7 +183,7 @@ const FALLBACK_REGIONS = ['eu', 'us']
  * characters come back with 1201 to 1214 mounts and 82 to 195 reputations each, while
  * toys, decor and pets are identical for all of them. The mount tile therefore reports
  * the character the way the API returns it, and the reputation tile does the same
- * whenever the account counter below is out of reach.
+ * whenever the counters below are out of reach.
  *
  * The account-wide equivalents (`/profile/user/wow/collections/mounts`) answer 403 to a
  * client-credentials token and need a user OAuth login, which a public page cannot have,
@@ -190,21 +191,17 @@ const FALLBACK_REGIONS = ['eu', 'us']
  * that is reachable rides along with the character's achievements - see
  * `getAccountExaltedCount`.
  */
-const EXALTED_NAMES = new Set(['Exalted', 'Превознесение'])
-
-/** "Exalted" is tier 7; the name is the fallback for a faction on a shorter tier table. */
-function isExalted(standing: any): boolean {
-  return standing?.tier === 7 || EXALTED_NAMES.has(standing?.name)
-}
 
 /**
  * Achievements are account-wide, and the "5 Exalted Reputations" ... "110 Exalted
  * Reputations" family carries the account's live number of Exalted factions in the
  * `amount` of its criterion. That is the counter the game's own achievement pane shows
- * and the one players compare against other sites, so it is what the tile reports. It
- * counts every character of the account, which makes it run ahead of this character's
- * own reputation list by however many factions the account's other characters brought
- * to Exalted - 129 against 105 on the account this was measured on.
+ * and the one players compare against other sites, so it is the base of what the tile
+ * reports. It counts every character of the account, which makes it run ahead of this
+ * character's own reputation list by however many factions the account's other characters
+ * brought to Exalted - 129 against 105 on the account this was measured on. Ladders that
+ * have no Exalted tier at all - a renown faction, a delve companion, the brokers of
+ * K'aresh - are missing from it, and `isReputationMaxed` catches those on top.
  */
 const EXALTED_REPUTATIONS = /exalted reputations/i
 
@@ -317,18 +314,21 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
 
   /**
    * Mounts arrive per character, so that tile reports the character exactly as Blizzard
-   * returns it. Reputations prefer the account-wide counter the achievements carry and
-   * fall back to this character's own Exalted factions when they do not.
+   * returns it. Reputations are counted in two parts, see the tile below.
    */
   const mountIds = new Set<number>(
     (mountsData?.mounts || []).map((mount: any) => mount.mount?.id).filter(Boolean)
   )
-  const exaltedIds = new Set<number>(
-    (repsData?.reputations || [])
-      .filter((rep: any) => isExalted(rep.standing))
-      .map((rep: any) => rep.faction?.id)
-      .filter(Boolean)
-  )
+
+  /**
+   * The reputations this character has driven to the top of their own ladder: the Exalted
+   * ones, the renown factions at their last renown level, the delve companions at their
+   * last level, the brokers of K'aresh at Mastermind. The Exalted ones are already inside
+   * the account-wide counter the achievements carry, so only the rest are added to it.
+   */
+  const maxedReputations = (repsData?.reputations || [])
+    .filter((rep: any) => isReputationMaxed(rep.faction?.id, rep.standing))
+  const maxedBeyondExalted = maxedReputations.filter((rep: any) => !isExalted(rep.standing)).length
 
   const mPlusScore = mplusData?.current_mythic_rating?.rating
     ? Math.round(mplusData.current_mythic_rating.rating)
@@ -364,8 +364,14 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
       toys: { count: toysData?.toys?.length || 0, total: totalsData.toys },
       decor: { count: decorData?.decor_collected?.length || 0, total: totalsData.decor },
       reputations: {
-        count: accountExaltedCount ?? exaltedIds.size,
-        total: totalsData.reputations,
+        // The account-wide Exalted counter plus the ladders of this character that have no
+        // Exalted tier; without the counter, what this character has maxed on its own.
+        count: accountExaltedCount === null
+          ? maxedReputations.length
+          : accountExaltedCount + maxedBeyondExalted,
+        // What a character of this faction can reach: Blizzard's index minus the other
+        // side's factions and minus the entries that only group the rest.
+        total: reputationTotal(charData.faction?.type || 'NEUTRAL', totalsData.reputations, repsData?.reputations?.length || 0),
         accountWide: accountExaltedCount !== null
       },
       achievements: { count: achievementPoints, total: ACHIEVEMENT_POINTS_TOTAL }
