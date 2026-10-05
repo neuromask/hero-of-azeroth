@@ -7,11 +7,23 @@ import { join } from 'node:path'
 const CARD_WIDTH = 1200
 const CARD_HEIGHT = 630
 
-/** Where the character render is drawn on the card. */
-const RENDER_MAX_HEIGHT = 556
-const RENDER_MAX_WIDTH = 540
-const RENDER_CENTER_X = 872
-const RENDER_BASELINE_Y = 610
+/**
+ * Where the character is drawn: a waist-up portrait filling the right of the card.
+ *
+ * `RENDER_BODY_HEIGHT` is the height the model's bounding box ends up with on the
+ * card, and it is the whole figure most of which sits below the visible area:
+ * `RENDER_CUT` gives the part hanging over the bottom edge, which is what turns the
+ * full body into a waist-up portrait. The hips of a World of Warcraft model sit at
+ * roughly 57% of its height, so cutting 46% off leaves them just above the edge.
+ *
+ * `RENDER_MAX_WIDTH` is generous on purpose: a wide silhouette - a draenei's tail, a
+ * demon hunter's wings - may reach past the right edge, where the card's clip takes
+ * it, rather than being scaled down into a smaller figure than everybody else's.
+ */
+const RENDER_BODY_HEIGHT = 1000
+const RENDER_MAX_WIDTH = 1100
+const RENDER_CENTER_X = 962
+const RENDER_CUT = 0.46
 
 /**
  * Blizzard's character renders and Armoury artwork are always drawn on a
@@ -77,9 +89,45 @@ function esc(value: unknown): string {
     .replace(/'/g, '&apos;')
 }
 
-function truncate(value: string, max: number): string {
-  const str = String(value ?? '')
-  return str.length > max ? `${str.slice(0, max - 1)}…` : str
+/**
+ * The widest letters of the two alphabets the card prints, one per alphabet: SVG has no
+ * text metrics to read back, so `textWidth` estimates by glyph and this is the bucket
+ * that keeps a run of `Ж`/`M`/`W` from running into whatever sits beside it.
+ */
+const WIDE_GLYPHS = /[ЖШЩМЮЫФДЦжшщмюыфдцMWmw@%№&]/
+
+/**
+ * The width a run of text takes at the given font size, in the units the card is drawn
+ * in. Two buckets - wide and ordinary - are close enough to keep every label inside its
+ * box, and this only ever decides how much text survives.
+ */
+function textWidth(value: string, fontSize: number): number {
+  let width = 0
+
+  for (const char of value) {
+    width += fontSize * (WIDE_GLYPHS.test(char) ? 0.72 : 0.54)
+  }
+
+  return width
+}
+
+/**
+ * `value` cut to what fits into `maxWidth`, with an ellipsis when something was dropped.
+ * A name, a guild and a race-spec-class line all arrive at a length the card cannot
+ * know in advance, and every one of them has a fixed place to sit in.
+ */
+function fitText(value: unknown, maxWidth: number, fontSize: number): string {
+  const text = String(value ?? '')
+  if (textWidth(text, fontSize) <= maxWidth) return text
+
+  let kept = ''
+
+  for (const char of text) {
+    if (textWidth(`${kept}${char}…`, fontSize) > maxWidth) break
+    kept += char
+  }
+
+  return `${kept}…`
 }
 
 function percent(count: number, total: number): number {
@@ -216,8 +264,9 @@ async function loadBackground(url: string): Promise<string> {
  * Downloads the character render and builds the `<image>` element drawing it.
  *
  * Blizzard ships a 1600x1200 canvas with the model floating in the middle, so
- * the alpha bounding box is measured and the image is scaled and offset until
- * the character fills the card instead of being a tiny figure in empty space.
+ * the alpha bounding box is measured and the image is scaled and offset until the
+ * character fills the card instead of being a tiny figure in empty space. The box
+ * bottom is the model's feet, which is what the cut below the card is measured from.
  */
 async function loadRender(url: string): Promise<string> {
   if (!url) return ''
@@ -226,17 +275,79 @@ async function loadRender(url: string): Promise<string> {
     const bounds = pngAlphaBounds(image)
     const box = bounds || DEFAULT_RENDER_BOX
 
-    const scale = Math.min(RENDER_MAX_HEIGHT / box.h, RENDER_MAX_WIDTH / box.w)
+    const scale = Math.min(RENDER_BODY_HEIGHT / box.h, RENDER_MAX_WIDTH / box.w)
     const drawWidth = SOURCE_WIDTH * scale
     const drawHeight = SOURCE_HEIGHT * scale
     const x = RENDER_CENTER_X - (box.x + box.w / 2) * scale
-    const y = RENDER_BASELINE_Y - (box.y + box.h) * scale
+    const y = CARD_HEIGHT + RENDER_CUT * box.h * scale - (box.y + box.h) * scale
 
     return `<image href="${toDataUri(image, 'image/png')}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${drawWidth.toFixed(2)}" height="${drawHeight.toFixed(2)}" preserveAspectRatio="none"/>`
   } catch {
     return ''
   }
 }
+
+/** The sizes the name is set in before it is cut: it is the one line worth shrinking. */
+const NAME_SIZES = [46, 40, 34]
+
+/**
+ * The left column: the three summary numbers on a panel, the five ladders beneath it and
+ * the foot band with the address. The ladders are what the card is read for, so they take
+ * the room the portrait leaves over - a bar runs the full width of the column - and the
+ * panel and the band are inset from the column's edges.
+ */
+const COLUMN_X = 44
+const COLUMN_WIDTH = 712
+const COLUMN_RIGHT = COLUMN_X + COLUMN_WIDTH
+const COLUMN_PAD = 12
+
+/**
+ * Where the first ladder sits, the height of each step, and the height of a bar.
+ *
+ * A rung is one unit: its label and its number ride `LADDER_LABEL_DROP` below the top of
+ * the step and its bar sits `LADDER_BAR_DROP` further down. The two offsets are what tie
+ * a label to the bar it belongs to - a label left at the step top reads as a heading of
+ * the bar above it, since that is where the gap between two rungs puts it - and the bar
+ * was given the room the drop freed.
+ */
+const LADDER_TOP = 300
+const LADDER_STEP = 54
+const LADDER_LABEL_DROP = 8
+const LADDER_BAR_DROP = 18
+const LADDER_BAR_HEIGHT = 12
+
+/** The three summary numbers, one x each, spread over the panel. */
+const SUMMARY_X = [76, 312, 548] as const
+
+/**
+ * The panel holds a heading with its glyph and the number under it, and the pair is
+ * centred in the panel as one block: `SUMMARY_LABEL_Y` and `SUMMARY_NUMBER_Y` are the
+ * distances from `PANEL_TOP` to the two baselines of that block.
+ */
+const SUMMARY_GLYPH_Y = 25
+const SUMMARY_LABEL_Y = 38
+const SUMMARY_NUMBER_Y = 88
+
+/**
+ * The header: the name and the title stand on the left of a vertical rule, the level,
+ * race, spec and class line plus the guild across from the wordmark on the right. Both
+ * boxes are measured to end before what follows them.
+ */
+const DIVIDER_X = 372
+const NAME_WIDTH = DIVIDER_X - 76
+const META_X = DIVIDER_X + 26
+const LOGO_X = 964
+const META_WIDTH = LOGO_X - 20 - META_X
+
+/** The panel the summary numbers sit on, and the band the address line sits in. */
+const PANEL_TOP = 154
+const PANEL_HEIGHT = 114
+const FOOTER_TOP = 572
+const FOOTER_HEIGHT = 32
+
+/** The width of a ladder bar, and of the text line above it. */
+const BAR_X = COLUMN_X + COLUMN_PAD
+const BAR_WIDTH = COLUMN_WIDTH - 2 * COLUMN_PAD
 
 export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU'): Promise<Buffer> {
   await loadIcons()
@@ -258,19 +369,25 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
   ]
 
   const rowsSvg = rows.map((row, index) => {
-    const y = 374 + index * 44
-    // The glyph is centred on the cap height of the 17px label beside it.
-    const glyph = iconElement(row.icon, 56, y - 16, 19, '#cbd5e1')
-    const labelX = glyph ? 84 : 56
-    const barW = Math.round((520 * percent(row.count, row.total)) / 100)
-    return `${glyph}<text x="${labelX}" y="${y}" font-size="17" fill="#cbd5e1">${esc(row.label)}</text>
-  <text x="576" y="${y}" font-size="17" font-weight="700" fill="${row.color}" text-anchor="end">${row.count} / ${row.total}</text>
-  <rect x="56" y="${y + 12}" width="520" height="10" rx="5" fill="#121922"/>
-  <rect x="56" y="${y + 12}" width="${barW}" height="10" rx="5" fill="url(#barGrad)"/>`
+    const y = LADDER_TOP + index * LADDER_STEP
+    const labelY = y + LADDER_LABEL_DROP
+    const barY = y + LADDER_BAR_DROP
+    // The glyph is centred on the cap height of the 19px label beside it.
+    const glyph = iconElement(row.icon, BAR_X, labelY - 17, 21, '#cbd5e1')
+    const labelX = glyph ? BAR_X + 30 : BAR_X
+    const barW = Math.round((BAR_WIDTH * percent(row.count, row.total)) / 100)
+    // The dark track, then the filled part twice: blurred underneath for the bloom the bars
+    // have on the page, and crisp on top of it so the fill keeps its edges.
+    return `${glyph}<text x="${labelX}" y="${labelY}" font-size="19" fill="#cbd5e1">${esc(row.label)}</text>
+  <text x="${COLUMN_RIGHT - COLUMN_PAD}" y="${labelY}" font-size="21" font-weight="700" fill="${row.color}" text-anchor="end">${row.count} / ${row.total}</text>
+  <rect x="${BAR_X}" y="${barY}" width="${BAR_WIDTH}" height="${LADDER_BAR_HEIGHT}" rx="7" fill="#121922"/>
+  <rect x="${BAR_X}" y="${barY}" width="${barW}" height="${LADDER_BAR_HEIGHT}" rx="7" fill="url(#barGrad)" filter="url(#barGlow)"/>
+  <rect x="${BAR_X}" y="${barY}" width="${barW}" height="${LADDER_BAR_HEIGHT}" rx="7" fill="url(#barGrad)"/>`
   }).join('\n  ')
 
-  const metaLine = [data.race, data.spec, data.class].filter(Boolean).map(esc).join(' · ')
-  const guildLine = [data.guild ? `&lt;${esc(data.guild)}&gt;` : '', esc(data.realm)].filter(Boolean).join(' · ')
+  // Both lines are measured and cut in `buildCardSvg`, where the boxes they sit in are.
+  const metaLine = [data.race, data.spec, data.class].filter(Boolean).join(' · ')
+  const guildLine = [data.guild ? `<${data.guild}>` : '', data.realm].filter(Boolean).join(' · ')
   return buildCardSvg(data, L, classColor, backgroundEl, renderEl, rowsSvg, metaLine, guildLine)
 }
 
@@ -284,14 +401,25 @@ function buildCardSvg(
   metaLine: string,
   guildLine: string
 ): Buffer {
-  /** The three summary headings carry the glyphs the page shows next to them. */
+  /**
+   * The summary headings carry the glyphs the page shows next to them, on the panel
+   * that lifts the three numbers off the artwork behind.
+   */
   const glyphFor = (name: string, x: number) => {
-    const glyph = iconElement(name, x, 240, 15, '#94a3b8')
-    return { glyph, labelX: glyph ? x + 20 : x }
+    const glyph = iconElement(name, x, PANEL_TOP + SUMMARY_GLYPH_Y, 16, '#94a3b8')
+    return { glyph, labelX: glyph ? x + 22 : x }
   }
-  const achievementsGlyph = glyphFor('achievments', 56)
-  const itemLevelGlyph = glyphFor('item-level', 256)
-  const mPlusGlyph = glyphFor('key', 432)
+  const achievementsGlyph = glyphFor('achievments', SUMMARY_X[0])
+  const itemLevelGlyph = glyphFor('item-level', SUMMARY_X[1])
+  const mPlusGlyph = glyphFor('key', SUMMARY_X[2])
+  const levelLine = `${L.level} ${data.level} · ${metaLine}`
+
+  /**
+   * A name that does not fit at 46px is set smaller before it is cut, and the title line
+   * follows the name down so the two keep their spacing.
+   */
+  const nameSize = NAME_SIZES.find(size => textWidth(data.name, size) <= NAME_WIDTH) || NAME_SIZES[NAME_SIZES.length - 1]
+  const titleSize = nameSize >= 40 ? 21 : 18
 
   /**
    * The wordmark sits in the top-right corner at twice the height it used to have
@@ -299,7 +427,7 @@ function buildCardSvg(
    * the card. The artwork is 3.45:1, giving a 179.6x52 box. The plain text is
    * kept for a server that cannot read the icon.
    */
-  const logotype = iconElement('hoa-logotype', 964, 52, 52, '#94a3b8')
+  const logotype = iconElement('hoa-logotype', LOGO_X, 52, 52, '#94a3b8')
     || '<text font-size="26" fill="#94a3b8" x="1144" y="88" text-anchor="end">HeroOfAzeroth</text>'
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" font-family="Segoe UI, Arial, Helvetica, sans-serif">
@@ -341,6 +469,14 @@ function buildCardSvg(
       <stop offset="0" stop-color="#05070b" stop-opacity="0"/>
       <stop offset="1" stop-color="#05070b" stop-opacity="0.4"/>
     </linearGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#94a3b8" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#94a3b8" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#94a3b8" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="barGlow" x="-10%" y="-120%" width="120%" height="340%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
     <clipPath id="cardClip"><rect width="${CARD_WIDTH}" height="${CARD_HEIGHT}"/></clipPath>
   </defs>
 
@@ -352,24 +488,26 @@ function buildCardSvg(
   <rect y="430" width="${CARD_WIDTH}" height="200" fill="url(#bottomFade)"/>
   <rect x="0" y="0" width="6" height="${CARD_HEIGHT}" fill="${classColor}" fill-opacity="0.9"/>
 
-  <text x="56" y="96" font-size="46" font-weight="700" fill="#f8b700">${esc(truncate(data.name, 22))}</text>
-  ${data.title ? `<text x="56" y="132" font-size="21" font-style="italic" fill="#ffe395">${esc(truncate(data.title, 40))}</text>` : ''}
-  <text x="56" y="170" font-size="20" fill="#cbd5e1">${esc(L.level)} ${data.level} · ${metaLine}</text>
-  <text x="56" y="198" font-size="18" fill="#94a3b8">${guildLine}</text>
+  <rect x="${DIVIDER_X}" y="42" width="2" height="86" fill="url(#rule)"/>
+  <text x="56" y="80" font-size="${nameSize}" font-weight="700" fill="#f8b700">${esc(fitText(data.name, NAME_WIDTH, nameSize))}</text>
+  ${data.title ? `<text x="56" y="108" font-size="${titleSize}" font-style="italic" fill="#ffe395">${esc(fitText(data.title, NAME_WIDTH, titleSize))}</text>` : ''}
+  <text x="${META_X}" y="70" font-size="20" fill="#cbd5e1">${esc(fitText(levelLine, META_WIDTH, 19))}</text>
+  <text x="${META_X}" y="104" font-size="20" fill="#94a3b8">${esc(fitText(guildLine, META_WIDTH, 17))}</text>
   ${logotype}
 
-  ${achievementsGlyph.glyph}<text x="${achievementsGlyph.labelX}" y="252" font-size="13" fill="#94a3b8">${esc(L.achievements)}</text>
-  <text x="56" y="292" font-size="30" font-weight="700" fill="#f8b700">${data.ap.toLocaleString('en-US')}</text>
-  ${itemLevelGlyph.glyph}<text x="${itemLevelGlyph.labelX}" y="252" font-size="13" fill="#94a3b8">${esc(L.itemLevel)}</text>
-  <text x="256" y="292" font-size="30" font-weight="700" fill="#c084fc">${data.ilvl}</text>
-  ${mPlusGlyph.glyph}<text x="${mPlusGlyph.labelX}" y="252" font-size="13" fill="#94a3b8">${esc(L.mPlus)}</text>
-  <text x="432" y="292" font-size="30" font-weight="700" fill="#fbbf24">${data.mPlusScore}</text>
+  <rect x="${COLUMN_X}" y="${PANEL_TOP}" width="${COLUMN_WIDTH}" height="${PANEL_HEIGHT}" rx="14" fill="#05070b" fill-opacity="0.6" stroke="#1e293b" stroke-width="2"/>
+  ${achievementsGlyph.glyph}<text x="${achievementsGlyph.labelX}" y="${PANEL_TOP + SUMMARY_LABEL_Y}" font-size="16" fill="#94a3b8">${esc(L.achievements)}</text>
+  <text x="${SUMMARY_X[0]}" y="${PANEL_TOP + SUMMARY_NUMBER_Y}" font-size="40" font-weight="700" fill="#f8b700">${data.ap.toLocaleString('en-US')}</text>
+  ${itemLevelGlyph.glyph}<text x="${itemLevelGlyph.labelX}" y="${PANEL_TOP + SUMMARY_LABEL_Y}" font-size="16" fill="#94a3b8">${esc(L.itemLevel)}</text>
+  <text x="${SUMMARY_X[1]}" y="${PANEL_TOP + SUMMARY_NUMBER_Y}" font-size="40" font-weight="700" fill="#c084fc">${data.ilvl}</text>
+  ${mPlusGlyph.glyph}<text x="${mPlusGlyph.labelX}" y="${PANEL_TOP + SUMMARY_LABEL_Y}" font-size="16" fill="#94a3b8">${esc(L.mPlus)}</text>
+  <text x="${SUMMARY_X[2]}" y="${PANEL_TOP + SUMMARY_NUMBER_Y}" font-size="40" font-weight="700" fill="#fbbf24">${data.mPlusScore}</text>
 
   ${rowsSvg}
 
-  <rect x="56" y="602" width="520" height="2" fill="#1e293b"/>
-  <text x="56" y="620" font-size="15" fill="#94a3b8">heroofazeroth.com</text>
-  <text x="576" y="620" font-size="14" fill="${classColor}" text-anchor="end">${esc(data.class)}</text>
+  <rect x="${COLUMN_X}" y="${FOOTER_TOP}" width="${COLUMN_WIDTH}" height="${FOOTER_HEIGHT}" rx="10" fill="#05070b" fill-opacity="0.6"/>
+  <text x="${COLUMN_X + 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="#94a3b8">heroofazeroth.com</text>
+  <text x="${COLUMN_RIGHT - 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="${classColor}" text-anchor="end">${esc(fitText(data.class, 260, 15))}</text>
 </svg>`
 
   const resvg = new Resvg(svg, {
