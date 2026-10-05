@@ -1,6 +1,7 @@
 import { resolveArmoryBackground } from './armory'
 import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
 import { isExalted, isReputationMaxed, reputationTotal } from './reputations'
+import { mountTotal } from './mounts'
 
 let cachedToken: { access_token: string; expires_at: number } | null = null
 
@@ -173,6 +174,14 @@ export interface CharacterData {
   }
 }
 
+/**
+ * The total to fall back on when a static index cannot be read.
+ *
+ * Held for all five tiles so a Blizzard outage cannot blank the bars. The mount and
+ * achievement denominators rarely come from here: `mountTotal` and
+ * `ACHIEVEMENT_POINTS_TOTAL` replace them with what a character can actually reach, which
+ * the indexes overstate - see `server/utils/mounts.ts` and `server/utils/achievements.ts`.
+ */
 const CHARACTER_DEFAULT_TOTALS = { mounts: 1676, pets: 2179, toys: 1135, decor: 2131, reputations: 284 }
 
 /** Regions we query, in the order they are tried when none is given. */
@@ -359,7 +368,7 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
     gender: charData.gender?.type || '',
     backgroundUrl,
     stats: {
-      mounts: { count: mountIds.size, total: totalsData.mounts },
+      mounts: { count: mountIds.size, total: mountTotal(totalsData.mounts, mountIds.size) },
       pets: { count: collectedSpecies.size, total: totalsData.pets },
       toys: { count: toysData?.toys?.length || 0, total: totalsData.toys },
       decor: { count: decorData?.decor_collected?.length || 0, total: totalsData.decor },
