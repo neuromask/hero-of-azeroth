@@ -1,6 +1,7 @@
 import { Resvg } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
-import type { CharacterData } from './blizzard'
+import { mPlusQualityHex, wowQualityHex } from '#shared/utils/wow-quality'
+import type { CharacterData, CharacterStat } from './blizzard'
 import { pngAlphaBandBounds, pngAlphaBounds } from './png'
 import type { PngBand, PngBounds } from './png'
 import { existsSync, readFileSync } from 'node:fs'
@@ -494,6 +495,7 @@ interface Tile {
   icon: string
   count: number
   total: number
+  /** The count's fill, which is the tier its collection has reached (see `wowQualityHex`). */
   color: string
 }
 
@@ -503,10 +505,11 @@ interface Tile {
  *
  * `numberSize` is the size every tile's count is set at (`tileNumberSize`); it is handed in
  * rather than picked here because all six have to hold the same one, and it is what the count
- * is centred on between the heading and the bar. The count is set in the stat's own colour, the
- * way the page's tiles set theirs, and the bar's fill is the share of the collection that is
- * complete. The tile carries no small print: at this width there is no room for the total and
- * the percentage beside the label, which is what the bar is for.
+ * is centred on between the heading and the bar. The count is set in the tier colour its
+ * collection has reached - the same ladder the page's tiles set theirs in - and the bar's fill
+ * is the share of the collection that is complete. The tile carries no small print: at this
+ * width there is no room for the total and the percentage beside the label, which is what the
+ * bar is for.
  */
 function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: number): string {
   const inset = width - TILE_PAD * 2
@@ -586,6 +589,9 @@ const COLUMN_RIGHT = COLUMN_X + COLUMN_WIDTH
  * headline figures - the item level and the Mythic+ rating - with a second rule between them.
  * The wordmark sits in the top-right corner, and the figures are spread over the room that is
  * left of it, one centred in each half, which is how the character page sets the same pair.
+ *
+ * The item level is set in plain white and the rating in the tier its band has reached
+ * (`mPlusQualityHex`), which is the pair of colours the page sets the same two figures in.
  *
  * `STATS_LABEL_Y` and `STATS_NUMBER_Y` are the baselines of a figure's label and of its number.
  * A figure is centred on `STATS_CENTER` as one group - the glyph that stands with the number is
@@ -795,17 +801,25 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
   ])
 
   /**
-   * The six collections in the order the card reads them, each in the colour its tile has on
-   * the character page: the amber the page sets most of them in, the purple of the pets and the
-   * gold of the achievements.
+   * The six collections in the order the card reads them, each count coloured by the share of
+   * its collection that is complete. The ladder is the shared one the page colours the same
+   * numbers with (`shared/utils/wow-quality.ts`), so a card and its page agree on every tier.
    */
+  const tile = (label: string, icon: string, stat: CharacterStat): Tile => ({
+    label,
+    icon,
+    count: stat.count,
+    total: stat.total,
+    color: wowQualityHex(stat.count, stat.total)
+  })
+
   const tiles: Tile[] = [
-    { label: L.mounts, icon: 'mounts', count: data.stats.mounts.count, total: data.stats.mounts.total, color: '#f59e0b' },
-    { label: L.pets, icon: 'pets', count: data.stats.pets.count, total: data.stats.pets.total, color: '#c084fc' },
-    { label: L.achievements, icon: 'achievments', count: data.stats.achievements.count, total: data.stats.achievements.total, color: '#f8b700' },
-    { label: L.decor, icon: 'decor', count: data.stats.decor.count, total: data.stats.decor.total, color: '#f59e0b' },
-    { label: L.reputations, icon: 'exalted-rep', count: data.stats.reputations.count, total: data.stats.reputations.total, color: '#f59e0b' },
-    { label: L.toys, icon: 'toys', count: data.stats.toys.count, total: data.stats.toys.total, color: '#f59e0b' }
+    tile(L.mounts, 'mounts', data.stats.mounts),
+    tile(L.pets, 'pets', data.stats.pets),
+    tile(L.achievements, 'achievments', data.stats.achievements),
+    tile(L.decor, 'decor', data.stats.decor),
+    tile(L.reputations, 'exalted-rep', data.stats.reputations),
+    tile(L.toys, 'toys', data.stats.toys)
   ]
 
   // Every width the card is about to ask for, measured in one pass before it is drawn: the number
@@ -960,8 +974,11 @@ async function buildCardSvg(
   <text x="56" y="80" font-size="${nameSize}" font-weight="700" fill="#f8b700">${esc(fitText(data.name, NAME_WIDTH, nameSize))}</text>
   ${data.title ? `<text x="56" y="${titleY}" font-size="${titleSize}" font-style="italic" fill="#ffe395">${esc(fitText(data.title, NAME_WIDTH, titleSize))}</text>` : ''}
   ${ruleSvg(STATS_RULE_X, STATS_RULE_TOP, STATS_RULE_HEIGHT)}
-  ${statSvg('item-level', L.itemLevel, String(data.ilvl), '#c084fc', 0, statSize)}
-  ${statSvg('key', L.mPlus, String(data.mPlusScore), '#fbbf24', 1, statSize)}
+  <!-- The item level is a plain white figure: a single number, with no ladder to be read
+       against. The rating beside it wears the tier its band has reached, off the same bands
+       the page colours it with. -->
+  ${statSvg('item-level', L.itemLevel, String(data.ilvl), '#ffffff', 0, statSize)}
+  ${statSvg('key', L.mPlus, String(data.mPlusScore), mPlusQualityHex(data.mPlusScore), 1, statSize)}
   ${logotype}
 
   <text x="${DESC_X}" y="${DESC_LINE1_Y}" font-size="${DESC_SIZE}" fill="#cbd5e1">${esc(fitText(levelLine, DESC_WIDTH, DESC_SIZE))}</text>

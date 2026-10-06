@@ -1,7 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./app/**/*.{js,vue,ts}"
+    "./app/**/*.{js,vue,ts}",
+    // The quality ladder the collection numbers are coloured by lives in `shared/`, which the
+    // page imports: the `text-*` classes in it only reach the stylesheet if this glob scans it.
+    "./shared/**/*.{js,ts}"
   ],
   theme: {
     extend: {

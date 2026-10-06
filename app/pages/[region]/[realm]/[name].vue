@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// The ladders the collection numbers and the Mythic+ rating are coloured by are shared with the
+// card, which draws the same tiers into its own SVG: one table, so a page and its card can never
+// disagree.
+import { collectionPercent, mPlusQualityTextClass, wowQualityTextClass } from '#shared/utils/wow-quality'
 // The Russian copy of this page is the same component under `/ru`; the middleware reads
 // the language off whichever of the two addresses was asked for.
 definePageMeta({ alias: '/ru/:region/:realm/:name' })
@@ -129,13 +133,15 @@ const getClassColor = (className: string) => {
   return colors[className] || '#f8b700'
 }
 
-const getPercent = (current: number, total: number) => {
-  if (!total) return 0
-  return Math.min(100, Math.round((current / total) * 100))
-}
-
 /** Formats counts the same way on the server and in the browser. */
 const formatCount = (value: number) => value.toLocaleString('en-US')
+
+/**
+ * The rating wears the tier it has reached, off the same Mythic+ bands the card colours the
+ * figure with. The item level beside it stays plain white: it is a single number with no ladder
+ * of its own to be read against, so it is left to read as a fact.
+ */
+const mPlusColor = computed(() => mPlusQualityTextClass(character.value?.mPlusScore ?? 0))
 
 interface StatTile {
   key: string
@@ -144,6 +150,7 @@ interface StatTile {
   label: string
   /** The scope in small print under the label: whose numbers this tile shows. */
   note: string
+  /** The tier colour the count is set in, from the shared quality ladder. */
   color: string
   display: string
   percent: number
@@ -164,6 +171,10 @@ interface StatTile {
  * last level, which have no Exalted tier at all. Its
  * denominator is what a character of this faction can reach, not Blizzard's whole
  * faction index - see `reputationTotal`.
+ *
+ * The count carries the tier its collection has reached rather than a fixed colour, so the
+ * number says how far along the tile is at a glance. The ladder is the shared one, off the
+ * same thresholds the card colours its own numbers by (`shared/utils/wow-quality.ts`).
  */
 const tileColumns = computed<StatTile[][]>(() => {
   const c = character.value
@@ -173,18 +184,20 @@ const tileColumns = computed<StatTile[][]>(() => {
   const perCharacter = t('perCharacter')
 
   const tiles = [
-    { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total, color: 'text-amber-500' },
-    { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total, color: 'text-amber-500' },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
-    { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total, color: 'text-wow-gold' },
-    { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total, color: 'text-purple-400' },
-    { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total, color: 'text-amber-500' }
+    { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total },
+    { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total },
+    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total },
+    { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total },
+    { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total },
+    { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total }
   ]
 
   const withBar = tiles.map((tile) => ({
     ...tile,
+    // The count wears the tier its collection has reached, the way the card's numbers do.
+    color: wowQualityTextClass(tile.count, tile.total),
     display: formatCount(tile.count),
-    percent: getPercent(tile.count, tile.total)
+    percent: collectionPercent(tile.count, tile.total)
   }))
 
   return [withBar.slice(0, 3), withBar.slice(3)]
@@ -636,7 +649,7 @@ onBeforeUnmount(() => {
         <div class="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] transition-colors hover:border-wow-gold/60 hover:bg-white/[0.09] sm:gap-6 sm:px-5 sm:py-3 lg:w-auto">
           <div class="text-center">
             <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('itemLevel') }}</span>
-            <span class="text-2xl sm:text-3xl font-bold text-purple-400 inline-flex items-center justify-center gap-2">
+            <span class="text-2xl sm:text-3xl font-bold text-white inline-flex items-center justify-center gap-2">
               <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
               {{ character.ilvl }}
             </span>
@@ -644,7 +657,7 @@ onBeforeUnmount(() => {
           <div class="h-8 w-[1px] bg-white/15"></div>
           <div class="text-center">
             <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('mPlus') }}</span>
-            <span class="text-2xl sm:text-3xl font-bold text-amber-400 inline-flex items-center justify-center gap-2">
+            <span class="text-2xl sm:text-3xl font-bold inline-flex items-center justify-center gap-2" :class="mPlusColor">
               <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
               {{ character.mPlusScore }}
             </span>

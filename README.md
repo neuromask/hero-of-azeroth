@@ -85,9 +85,7 @@ The region is the bare `eu` / `us` of the Blizzard API spelled as `region-eu`, w
 leaves room for a language in the first segment and keeps `/api/card/eu/...` and the
 page that shows it telling the same story. The pages serve the Russian address as an
 alias of the English one and `app/middleware/lang.global.ts` applies the language an
-address names. Addresses from before the change - `/eu/gordunni/neromask`, `?lang=ru`
-- are answered with a permanent redirect by `server/middleware/legacy-urls.ts`, so a
-link shared earlier still lands on the right page.
+address names.
 
 The built server listens on `PORT`, else on `NITRO_PORT`, else on **3100**: Nitro's
 own fallback is 3000, which the second application on this host already owns, so
