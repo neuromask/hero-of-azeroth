@@ -441,7 +441,7 @@ onBeforeUnmount(() => {
         <div class="absolute inset-0 bg-gradient-to-t from-wow-dark via-transparent to-wow-dark/40 z-10"></div>
       </div>
 
-      <header class="relative z-20 container mx-auto px-4 pt-6">
+      <header class="relative z-30 container mx-auto px-4 pt-6">
         <div class="rounded-xl border border-white/10 bg-white/[0.06] p-4 sm:p-6 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
             <!-- The brand mark is the artwork itself (`app/assets/img/emblem.png`).
@@ -483,23 +483,102 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-<div class="flex items-center gap-3 sm:gap-6 w-full lg:w-auto justify-between px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl border border-amber-500/60 bg-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.25)] backdrop-blur-sm">
-  <div class="text-center">
-    <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('itemLevel') }}</span>
-    <span class="text-2xl sm:text-3xl font-bold text-purple-400 inline-flex items-center justify-center gap-2">
-      <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
-      {{ character.ilvl }}
-    </span>
-  </div>
-  <div class="h-8 w-[1px] bg-amber-500/30"></div>
-  <div class="text-center">
-    <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('mPlus') }}</span>
-    <span class="text-2xl sm:text-3xl font-bold text-amber-400 inline-flex items-center justify-center gap-2">
-      <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
-      {{ character.mPlusScore }}
-    </span>
-  </div>
-</div>
+          <!-- The download button has taken the place the summary figures held, and their amber
+               frame with it - the one warm accent the header has - with a glow that answers the
+               pointer. The share tray is the same control, so it travels with the button and
+               opens downwards, the header standing at the top of the page. -->
+          <div ref="actionsEl" class="relative w-full lg:w-auto">
+            <div class="flex items-stretch overflow-hidden rounded-xl border border-amber-500/60 bg-amber-950/30 backdrop-blur-sm shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/90 hover:bg-amber-900/40 hover:shadow-[0_0_28px_rgba(245,158,11,0.5)]">
+              <button
+                type="button"
+                :disabled="downloading"
+                class="flex flex-1 items-center justify-center gap-2.5 px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-white/10 disabled:cursor-wait disabled:opacity-60 sm:px-7 sm:py-3.5 sm:text-lg"
+                @click="downloadCard"
+              >
+                <AppIcon name="download-button" class="h-[1.2em] w-[1.2em]" />
+                {{ downloading ? $t('loading') : $t('downloadCard') }}
+              </button>
+
+              <span class="w-px bg-amber-500/40"></span>
+
+              <button
+                type="button"
+                class="px-3 transition-colors hover:bg-white/10 sm:px-3.5"
+                :class="menuOpen ? 'bg-white/10' : ''"
+                aria-haspopup="menu"
+                :aria-expanded="menuOpen"
+                :aria-label="$t('share')"
+                @click="toggleMenu"
+              >
+                <svg
+                  class="h-5 w-5 text-gray-200 transition-transform duration-200"
+                  :class="menuOpen ? 'rotate-180' : ''"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <div
+              v-if="menuOpen"
+              class="absolute top-full left-1/2 z-40 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-black/85 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150 lg:left-auto lg:right-0 lg:translate-x-0"
+              role="menu"
+            >
+              <p class="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('shareCard') }}</p>
+
+              <button
+                type="button"
+                role="menuitem"
+                :disabled="sharing"
+                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-60"
+                @click="shareCardImage"
+              >
+                <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-wow-gold/30 bg-wow-gold/10 text-[11px]">📤</span>
+                {{ $t('shareImage') }}
+              </button>
+
+              <div class="grid grid-cols-2 gap-1">
+                <a
+                  v-for="network in socials"
+                  :key="network.key"
+                  :href="network.href"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  role="menuitem"
+                  class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                  @click="closeMenu"
+                >
+                  <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10px] font-extrabold" :class="network.tint">{{ network.badge }}</span>
+                  {{ network.label }}
+                </a>
+              </div>
+
+              <p class="mt-1 border-t border-white/10 px-3 pt-2.5 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('sendLink') }}</p>
+
+              <button
+                type="button"
+                role="menuitem"
+                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                @click="copyLink()"
+              >
+                <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10 text-[11px]">🔗</span>
+                {{ $t('copyLink') }}
+              </button>
+
+              <a
+                :href="emailHref"
+                role="menuitem"
+                class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                @click="closeMenu"
+              >
+                <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10 text-[11px]">✉️</span>
+                {{ $t('email') }}
+              </a>
+            </div>
+          </div>
 
         </div>
       </header>
@@ -545,102 +624,30 @@ onBeforeUnmount(() => {
         </div>
       </main>
 
-      <!-- Card actions: the download and the share tray sit centred under the character.
-           Only from `lg` up does the two-column grid leave the middle of the row free,
-           so that is where the negative top margin may pull them up towards the model;
-           while the tiles are still stacked in one column (phones and tablets) the
-           button keeps an ordinary gap so it never rests on the last box. -->
+      <!-- The summary figures sit centred under the tiles, where the download button used to
+           stand. Only from `lg` up does the two-column grid leave the middle of the row free,
+           so that is where the negative top margin may pull the block up towards the model;
+           while the tiles are still stacked in one column (phones and tablets) it keeps an
+           ordinary gap so it never rests on the last box. -->
       <div class="relative z-30 container mx-auto px-4 mt-6 sm:mt-8 lg:-mt-8 pb-6 flex flex-col items-center gap-2">
-        <div ref="actionsEl" class="relative">
-          <div class="flex items-stretch overflow-hidden rounded-2xl border border-white/15 bg-white/[0.08] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_12px_34px_rgba(0,0,0,0.45)]">
-            <button
-              type="button"
-              :disabled="downloading"
-              class="flex items-center gap-3 px-8 py-4 text-lg font-semibold text-white transition-colors hover:bg-white/10 disabled:cursor-wait disabled:opacity-60 sm:px-12 sm:py-5 sm:text-xl"
-              @click="downloadCard"
-            >
-              <AppIcon name="download-button" class="h-[1.2em] w-[1.2em]" />
-              {{ downloading ? $t('loading') : $t('downloadCard') }}
-            </button>
-
-            <span class="w-px bg-white/15"></span>
-
-            <button
-              type="button"
-              class="px-3.5 transition-colors hover:bg-white/10 sm:px-4"
-              :class="menuOpen ? 'bg-white/10' : ''"
-              aria-haspopup="menu"
-              :aria-expanded="menuOpen"
-              :aria-label="$t('share')"
-              @click="toggleMenu"
-            >
-              <svg
-                class="h-5 w-5 text-gray-200 transition-transform duration-200"
-                :class="menuOpen ? 'rotate-180' : ''"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
-              </svg>
-            </button>
+        <!-- The summary figures have taken the place the download button held, and with it the
+             glass the tiles above are cut from: the same frame, the same blur and the same lift
+             under the pointer, so the row reads as one more block of statistics. -->
+        <div class="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] transition-colors hover:border-wow-gold/60 hover:bg-white/[0.09] sm:gap-6 sm:px-5 sm:py-3 lg:w-auto">
+          <div class="text-center">
+            <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('itemLevel') }}</span>
+            <span class="text-2xl sm:text-3xl font-bold text-purple-400 inline-flex items-center justify-center gap-2">
+              <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
+              {{ character.ilvl }}
+            </span>
           </div>
-
-          <div
-            v-if="menuOpen"
-            class="absolute bottom-full left-1/2 z-40 mb-3 w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-black/85 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150"
-            role="menu"
-          >
-            <p class="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('shareCard') }}</p>
-
-            <button
-              type="button"
-              role="menuitem"
-              :disabled="sharing"
-              class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-60"
-              @click="shareCardImage"
-            >
-              <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-wow-gold/30 bg-wow-gold/10 text-[11px]">📤</span>
-              {{ $t('shareImage') }}
-            </button>
-
-            <div class="grid grid-cols-2 gap-1">
-              <a
-                v-for="network in socials"
-                :key="network.key"
-                :href="network.href"
-                target="_blank"
-                rel="noopener noreferrer"
-                role="menuitem"
-                class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
-                @click="closeMenu"
-              >
-                <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10px] font-extrabold" :class="network.tint">{{ network.badge }}</span>
-                {{ network.label }}
-              </a>
-            </div>
-
-            <p class="mt-1 border-t border-white/10 px-3 pt-2.5 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('sendLink') }}</p>
-
-            <button
-              type="button"
-              role="menuitem"
-              class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
-              @click="copyLink()"
-            >
-              <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10 text-[11px]">🔗</span>
-              {{ $t('copyLink') }}
-            </button>
-
-            <a
-              :href="emailHref"
-              role="menuitem"
-              class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
-              @click="closeMenu"
-            >
-              <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10 text-[11px]">✉️</span>
-              {{ $t('email') }}
-            </a>
+          <div class="h-8 w-[1px] bg-white/15"></div>
+          <div class="text-center">
+            <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('mPlus') }}</span>
+            <span class="text-2xl sm:text-3xl font-bold text-amber-400 inline-flex items-center justify-center gap-2">
+              <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
+              {{ character.mPlusScore }}
+            </span>
           </div>
         </div>
 
