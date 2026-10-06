@@ -483,23 +483,24 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="flex items-center gap-3 sm:gap-6 w-full lg:w-auto justify-between border-t lg:border-t-0 border-white/10 pt-3 lg:pt-0">
-            <div class="text-center">
-              <span class="text-xs text-gray-400 uppercase tracking-wider block">{{ $t('itemLevel') }}</span>
-              <span class="text-2xl sm:text-3xl font-bold text-purple-400 inline-flex items-center justify-center gap-2">
-                <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
-                {{ character.ilvl }}
-              </span>
-            </div>
-            <div class="h-8 w-[1px] bg-white/10"></div>
-            <div class="text-center">
-              <span class="text-xs text-gray-400 uppercase tracking-wider block">{{ $t('mPlus') }}</span>
-              <span class="text-2xl sm:text-3xl font-bold text-amber-400 inline-flex items-center justify-center gap-2">
-                <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
-                {{ character.mPlusScore }}
-              </span>
-            </div>
-          </div>
+<div class="flex items-center gap-3 sm:gap-6 w-full lg:w-auto justify-between px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl border border-amber-500/60 bg-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.25)] backdrop-blur-sm">
+  <div class="text-center">
+    <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('itemLevel') }}</span>
+    <span class="text-2xl sm:text-3xl font-bold text-purple-400 inline-flex items-center justify-center gap-2">
+      <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
+      {{ character.ilvl }}
+    </span>
+  </div>
+  <div class="h-8 w-[1px] bg-amber-500/30"></div>
+  <div class="text-center">
+    <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('mPlus') }}</span>
+    <span class="text-2xl sm:text-3xl font-bold text-amber-400 inline-flex items-center justify-center gap-2">
+      <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
+      {{ character.mPlusScore }}
+    </span>
+  </div>
+</div>
+
         </div>
       </header>
 
