@@ -173,9 +173,9 @@ const tileColumns = computed<StatTile[][]>(() => {
   const perCharacter = t('perCharacter')
 
   const tiles = [
-    { key: 'mounts', icon: 'mounts', label: t('mounts'), note: accountWide, count: c.stats.mounts.count, total: c.stats.mounts.total, color: 'text-amber-500' },
+    { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total, color: 'text-amber-500' },
     { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total, color: 'text-amber-500' },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: accountWide, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
+    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total, color: 'text-amber-500' },
     { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total, color: 'text-wow-gold' },
     { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total, color: 'text-purple-400' },
     { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total, color: 'text-amber-500' }
