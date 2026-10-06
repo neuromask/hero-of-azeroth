@@ -205,12 +205,39 @@ const metaParts = computed<MetaPart[]>(() => {
   const c = character.value
   if (!c) return []
 
+  // Общий стиль для янтарных баблов
+  const amberBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-amber-950/20 text-xs font-medium text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)] backdrop-blur-sm'
+  
+  // Стиль для плашки класса (без удержания цвета текста, цвет придет через color)
+  const classBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-slate-950/40 text-xs font-semibold backdrop-blur-sm'
+
   return [
-    { text: String(c.level) },
-    { text: c.race },
-    { text: `${c.spec} ${c.class}`.trim(), color: getClassColor(c.class) },
-    { text: c.guild ? `<${c.guild}>` : '' },
-    { text: c.realm, className: 'text-gray-300 font-medium' }
+    // 1. Уровень
+    { 
+      text: String(c.level), 
+      className: `${amberBadge} font-semibold` 
+    },
+    // 2. Раса
+    { 
+      text: c.race, 
+      className: amberBadge 
+    },
+    // 3. Спек + Класс (родной желтый Rogue через color)
+    { 
+      text: `${c.spec} ${c.class}`.trim(), 
+      color: getClassColor(c.class), 
+      className: classBadge 
+    },
+    // 4. Гильдия (отдельный бабл)
+    { 
+      text: c.guild ? `<${c.guild}>` : '', 
+      className: amberBadge 
+    },
+    // 5. Реалм (отдельный бабл)
+    { 
+      text: c.realm, 
+      className: amberBadge 
+    }
   ].filter((part) => part.text)
 })
 
@@ -445,9 +472,8 @@ onBeforeUnmount(() => {
                 </span>
               </div>
               
-              <p class="text-base sm:text-lg text-gray-400 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <p class="text-base sm:text-lg text-gray-400 mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <template v-for="(part, index) in metaParts" :key="index">
-                  <span v-if="index" class="text-gray-600">·</span>
                   <span
                     :class="[part.className, part.color ? 'font-semibold' : '']"
                     :style="part.color ? { color: part.color } : undefined"
