@@ -1,4 +1,11 @@
-const cardCache = new Map<string, { png: Buffer; expires: number }>()
+/**
+ * The cards already rendered, keyed by the character and the language they were drawn in.
+ *
+ * A card is the expensive half of a request - a Blizzard lookup, two images over the network
+ * and a rasteriser pass - so one that has just been drawn is handed to the next caller rather
+ * than drawn again.
+ */
+const cardCache = new Map<string, { jpeg: Buffer; expires: number }>()
 
 export default defineEventHandler(async (event) => {
   const region = parseRegion(getRouterParam(event, 'region'))
@@ -14,17 +21,20 @@ export default defineEventHandler(async (event) => {
   const now = Date.now()
   const cached = cardCache.get(key)
 
-  setHeader(event, 'Content-Type', 'image/png')
+  // The card is a picture with photographs in it, so it is written and served as a JPEG: a
+  // chat network's crawler fetches an `og:image` on a deadline of a couple of seconds, and
+  // the bytes it has to pull inside that deadline are half of whether the preview appears.
+  setHeader(event, 'Content-Type', 'image/jpeg')
   setHeader(event, 'Cache-Control', 'public, max-age=3600, s-maxage=86400')
 
   if (cached && cached.expires > now) {
-    return cached.png
+    return cached.jpeg
   }
 
   const character = await getCharacter(realm, name, region, locale)
-  const png = await renderCharacterCard(character, locale)
+  const jpeg = await renderCharacterCard(character, locale)
 
-  cardCache.set(key, { png, expires: now + 10 * 60 * 1000 })
+  cardCache.set(key, { jpeg, expires: now + 10 * 60 * 1000 })
 
-  return png
+  return jpeg
 })

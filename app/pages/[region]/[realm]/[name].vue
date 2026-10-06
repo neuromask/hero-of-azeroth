@@ -81,6 +81,9 @@ usePageSeo({
   title: () => headline.value,
   description: () => descriptor.value,
   image: () => ogImage.value,
+  // The card is served as a JPEG (it carries the artwork's photographs), so the head has to
+  // say so: the tag describes the file the crawler is about to fetch.
+  imageType: 'image/jpeg',
   ogType: 'profile',
   noindex: () => missing.value,
   jsonLd: (canonical) => {
@@ -254,7 +257,7 @@ function closeMenu() {
 const downloading = ref(false)
 const sharing = ref(false)
 
-/** The rendered PNG, cached so the share sheet can open without waiting for it. */
+/** The rendered card, cached so the share sheet can open without waiting for it. */
 async function loadCardBlob(): Promise<Blob | null> {
   if (cardBlob.value) return cardBlob.value
   if (cardBlobPending.value) return null
@@ -273,7 +276,7 @@ function saveBlob(blob: Blob) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${realm}-${name}-card.png`
+  link.download = `${realm}-${name}-card.jpg`
   document.body.appendChild(link)
   link.click()
   link.remove()
@@ -315,7 +318,7 @@ async function copyLink(announce = true) {
 }
 
 /**
- * Phones hand the PNG itself to the system share sheet, which is what puts the
+ * Phones hand the picture itself to the system share sheet, which is what puts the
  * picture into a chat. Desktops cannot do that, so there the image is downloaded
  * and the link copied, ready to be pasted next to it.
  */
@@ -326,7 +329,7 @@ async function shareCardImage() {
 
   try {
     const blob = cardBlob.value || (await loadCardBlob())
-    const file = blob ? new File([blob], `${realm}-${name}-card.png`, { type: 'image/png' }) : null
+    const file = blob ? new File([blob], `${realm}-${name}-card.jpg`, { type: 'image/jpeg' }) : null
 
     if (file && navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: shareTitle.value, text: shareText.value })
@@ -346,7 +349,7 @@ async function shareCardImage() {
   }
 }
 
-/** The PNG is fetched while the tray opens so the share sheet reacts instantly. */
+/** The card is fetched while the tray opens so the share sheet reacts instantly. */
 function toggleMenu() {
   menuOpen.value = !menuOpen.value
   if (menuOpen.value) void loadCardBlob()

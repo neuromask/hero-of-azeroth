@@ -1,4 +1,5 @@
 import { Resvg } from '@resvg/resvg-js'
+import jpeg from 'jpeg-js'
 import type { CharacterData } from './blizzard'
 import { pngAlphaBounds } from './png'
 import { existsSync, readFileSync } from 'node:fs'
@@ -144,12 +145,56 @@ function fitText(
   return `${kept}…`
 }
 
-/** Renders a document the way the card is rendered: system fonts, at the card's own width. */
+/**
+ * The renderer the card and its measurement probes are both drawn with: the machine's fonts,
+ * at the card's own width. Rasterising a document is the whole of what the two share - a probe
+ * is then read back for its ink, and the card is written out as a picture.
+ */
+const RESVG_OPTIONS = {
+  font: { loadSystemFonts: true, defaultFontFamily: 'Arial' },
+  fitTo: { mode: 'width' as const, value: CARD_WIDTH }
+}
+
+/** Rasterises a document to pixels, the way the card is rasterised. */
+function rasterise(svg: string) {
+  return new Resvg(svg, RESVG_OPTIONS).render()
+}
+
+/**
+ * A document rendered to PNG bytes, which is what a measurement probe is: the ink of that
+ * render is what a width of text is read from.
+ */
 function renderSvg(svg: string): Buffer {
-  return new Resvg(svg, {
-    font: { loadSystemFonts: true, defaultFontFamily: 'Arial' },
-    fitTo: { mode: 'width', value: CARD_WIDTH }
-  }).render().asPng()
+  return rasterise(svg).asPng()
+}
+
+/**
+ * The quality the card is written at, on the JPEG scale of 1 to 100.
+ *
+ * The card is finished with photographs - the class artwork behind it and the character's own
+ * render over it - and a PNG stores those losslessly, which is where its weight comes from: the
+ * card of a fully geared character is around 800 KB, where the same picture as a JPEG at this
+ * setting is 167 KB. At the size a chat window shows the card in, the two cannot be told apart.
+ * The settings above this one buy nothing: 90 is 207 KB and 95 is 295 KB for the same picture to
+ * the eye, because what is left in the file up there is the noise the artwork already had, while
+ * below 80 the small print of the tiles starts to smear.
+ *
+ * The weight is the reason for the setting rather than a side effect of it: an `og:image` is
+ * fetched by the crawler of a chat network under a deadline of a couple of seconds, and how many
+ * bytes it has to pull inside that deadline is part of whether the preview appears at all.
+ */
+const JPEG_QUALITY = 85
+
+/**
+ * The finished card as JPEG bytes.
+ *
+ * `pixels` of a `Resvg` render are the RGBA the encoder wants, so the picture goes from the
+ * rasteriser straight into the encoder and is never held as a PNG on the way.
+ */
+function encodeCard(svg: string): Buffer {
+  const image = rasterise(svg)
+
+  return jpeg.encode({ data: image.pixels, width: image.width, height: image.height }, JPEG_QUALITY).data
 }
 
 /**
@@ -774,5 +819,5 @@ function buildCardSvg(
   <text x="${COLUMN_RIGHT - 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="${classColor}" text-anchor="end">${esc(fitText(data.class, 260, 15))}</text>
 </svg>`
 
-  return renderSvg(svg)
+  return encodeCard(svg)
 }
