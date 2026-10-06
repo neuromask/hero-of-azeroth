@@ -76,7 +76,7 @@ const LABELS: Record<string, Record<string, string>> = {
     level: 'Ур.'
   },
   en_US: {
-    achievements: 'Achievements',
+    achievements: 'Achievs',
     itemLevel: 'Item Level',
     mPlus: 'M+ Score',
     mounts: 'Mounts',
@@ -485,7 +485,7 @@ function headingSvg(icon: string, label: string, x: number, y: number, width: nu
   )
   return `<rect x="${round2(x)}" y="${top}" width="${HEADING_ICON_BOX}" height="${HEADING_ICON_BOX}" rx="9" fill="#0b1220" stroke="#1e293b" stroke-width="1.5"/>
   ${glyph}
-  <text x="${round2(x + HEADING_ICON_BOX + HEADING_ICON_GAP)}" y="${round2(y)}" font-size="${HEADING_LABEL_SIZE}" font-weight="700" letter-spacing="${HEADING_LETTER_SPACING}" fill="#e2e8f0">${esc(headingLabel(label, width))}</text>`
+  <text x="${round2(x + HEADING_ICON_BOX + HEADING_ICON_GAP)-6}" y="${round2(y)}" font-size="${HEADING_LABEL_SIZE}" font-weight="700" letter-spacing="${HEADING_LETTER_SPACING}" fill="#e2e8f0">${esc(headingLabel(label, width))}</text>`
 }
 
 /** One collection of the tile grid. */
@@ -518,7 +518,7 @@ function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: nu
   // bloom the bars have on the page, and crisp on top of it so the fill keeps its edges.
   return `<rect x="${round2(x)}" y="${y}" width="${round2(width)}" height="${TILE_HEIGHT}" rx="14" fill="#05070b" fill-opacity="0.6" stroke="#1e293b" stroke-width="2"/>
   ${headingSvg(tile.icon, tile.label, x + TILE_PAD, y + TILE_LABEL_Y, inset)}
-  <text x="${round2(x + width / 2)}" y="${round2(y + tileNumberY(numberSize))}" font-size="${numberSize}" font-weight="700" fill="${tile.color}" text-anchor="middle">${tile.count.toLocaleString('en-US')}</text>
+  <text x="${round2(x + width / 2)}" y="${round2(y + tileNumberY(numberSize))-6}" font-size="${numberSize}" font-weight="700" fill="${tile.color}" text-anchor="middle">${tile.count.toLocaleString('en-US')}</text>
   <rect x="${barX}" y="${barY}" width="${barWidth}" height="${TILE_BAR_HEIGHT}" rx="4" fill="#0b1220" stroke="#334155" stroke-width="1"/>
   <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)" filter="url(#barGlow)"/>
   <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)"/>`
@@ -689,10 +689,10 @@ function tileNumberSize(values: string[], maxWidth: number): number {
  * whole beside the glyph rather than end in an ellipsis.
  */
 const HEADING_ICON_BOX = 32
-const HEADING_ICON_GLYPH = 22
+const HEADING_ICON_GLYPH = 24
 const HEADING_ICON_GAP = 11
-const HEADING_LABEL_SIZE = 18
-const HEADING_LETTER_SPACING = 1
+const HEADING_LABEL_SIZE = 20
+const HEADING_LETTER_SPACING = 0.8
 const HEADING_CAP_HEIGHT = 0.72
 
 /** The top edge of the icon box centred on the cap of a label whose baseline is `baselineY`. */
