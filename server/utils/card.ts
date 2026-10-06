@@ -1,7 +1,8 @@
 import { Resvg } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
 import type { CharacterData } from './blizzard'
-import { pngAlphaBounds } from './png'
+import { pngAlphaBandBounds, pngAlphaBounds } from './png'
+import type { PngBand, PngBounds } from './png'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -169,31 +170,57 @@ function renderSvg(svg: string): Buffer {
 }
 
 /**
+ * `sharp`, read on first use.
+ *
+ * Its encoder is a native library, and a native library has to match the machine that loads it:
+ * `sharp` ships one build per platform, and the `.output` that `npm run deploy` uploads holds only
+ * the ones the building machine had - which is what the `@img/sharp-linux-x64` pair in
+ * `devDependencies` is for, exactly as `@resvg/resvg-js-linux-x64-gnu` is there for the
+ * rasteriser. A build that reaches the host without the matching pair throws as its module is
+ * read, so it is read late and the failure is caught here; read at the top of the file it would
+ * bring the whole route down before a card could be asked for.
+ */
+let sharpModule: Promise<typeof import('sharp').default | null> | null = null
+
+function loadSharp() {
+  sharpModule ??= import('sharp').then((module) => module.default).catch(() => null)
+  return sharpModule
+}
+
+/**
  * The quality the card is written at, on the JPEG scale of 1 to 100.
  *
- * The card is finished with photographs - the class artwork behind it and the character's own
- * render over it - and a PNG stores those losslessly, which is where its weight comes from: the
- * card of a fully geared character is around 800 KB, where the same picture as a JPEG at this
- * setting is 167 KB. At the size a chat window shows the card in, the two cannot be told apart.
- * The settings above this one buy nothing: 90 is 207 KB and 95 is 295 KB for the same picture to
- * the eye, because what is left in the file up there is the noise the artwork already had, while
- * below 80 the small print of the tiles starts to smear.
+ * A card is finished with photographs - the class artwork behind it and the character's own
+ * render over it - which a PNG stores losslessly, and that is where the megabyte of the old
+ * picture came from. A JPEG of the same card at this setting is a fifth of that, and at the size
+ * a chat window shows it in the two cannot be told apart.
  *
  * The weight is the reason for the setting rather than a side effect of it: an `og:image` is
  * fetched by the crawler of a chat network under a deadline of a couple of seconds, and how many
  * bytes it has to pull inside that deadline is part of whether the preview appears at all.
  */
-const JPEG_QUALITY = 85
+const JPEG_QUALITY = 60
 
 /**
  * The finished card as JPEG bytes.
  *
- * `pixels` of a `Resvg` render are the RGBA the encoder wants, so the picture goes from the
- * rasteriser straight into the encoder and is never held as a PNG on the way.
+ * The rasteriser hands over its raw RGBA (`pixels`), which is what `sharp` takes as its `raw`
+ * input, so the picture goes from the rasteriser into the encoder and never exists as a PNG on
+ * the way out - the intermediate copy of the old pipeline, and the second pass over every pixel
+ * that came with it.
  */
-function encodeCard(svg: string): Buffer {
+async function encodeCard(svg: string): Promise<Buffer> {
   const image = rasterise(svg)
+  const lib = await loadSharp()
 
+  if (lib) {
+    return lib(image.pixels, { raw: { width: image.width, height: image.height, channels: 4 } })
+      .jpeg({ quality: JPEG_QUALITY })
+      .toBuffer()
+  }
+
+  // The pure-JS encoder, for a host whose native one cannot load: a card a little heavier than it
+  // should be beats no card at all.
   return jpeg.encode({ data: image.pixels, width: image.width, height: image.height }, JPEG_QUALITY).data
 }
 
@@ -202,17 +229,105 @@ function encodeCard(svg: string): Buffer {
  *
  * `textWidth` above is a guess, and a good enough one to decide how much of a line survives:
  * a heading centred on it, though, lands visibly off, because a run of capitals is up to a
- * fifth wider than its two buckets say. SVG has no text metrics to query, so the run is drawn
- * on its own - in the card's own font, size, weight and letter spacing - and the ink of that
- * render is measured. It is what puts a summary number under the caps of its heading.
+ * fifth wider than its two buckets say. SVG has no text metrics to query, so the run is drawn -
+ * in the card's own font, size, weight and letter spacing - and the ink of that render is
+ * measured. It is what puts a summary number under the caps of its heading.
  *
- * The probe is a 1200px-wide render of a label, and rendering a card is a hot path, so a
- * width is measured once and kept.
+ * A width is measured once and kept, because rendering a card is a hot path.
  */
 const measuredWidths = new Map<string, number>()
 
+/** A run of text whose drawn width the card needs, and the type it is set in. */
+interface MeasureRequest {
+  value: string
+  size: number
+  letterSpacing?: number
+}
+
+function widthKey(value: string, size: number, letterSpacing: number): string {
+  return `${size}/${letterSpacing}/${value}`
+}
+
+/**
+ * How tall the band a run is measured in is, and how far down that band the run's baseline sits,
+ * as multiples of the run's own size.
+ *
+ * A line drawn on a canvas of its own is given three times its size in height and takes up about a
+ * third of it, and the canvas is what the rasteriser is paid for. These two hold everything a line
+ * reaches with: a capital above the baseline, the accents that sit over one, and the descenders
+ * that hang below. Measured against probes of their own, the widths do not move.
+ */
+const MEASURE_BAND_HEIGHT = 1.8
+const MEASURE_BAND_BASELINE = 1.3
+
+/**
+ * Measures every run in `requests` that has no width yet, in one rasteriser pass.
+ *
+ * A card needs about twenty widths. Measured one at a time, each costs what drawing the whole
+ * card costs, and almost all of it is not the line: a rasteriser pass loads the machine's fonts
+ * for the sake of whatever is drawn in it, and that is about 97 of the 98 milliseconds a
+ * single-line probe took when this was timed - the pixels of the line itself are a millisecond or
+ * two. Twenty of those, one per string, was 1.9 seconds of a cold card, and the largest cost the
+ * card had.
+ *
+ * Drawn as one document instead, one band per run, the same widths come out of one pass in about
+ * a tenth of the time. What a width depends on is horizontal: the card's own width, the run
+ * centred on it, and the run drawn in the same font, size, weight and letter spacing. A band
+ * keeps all of that and gives up only the empty canvas a probe of its own carried, which was two
+ * thirds of it: how tall a band is, and where down it the baseline sits, are below.
+ *
+ * The widths are the widths a probe of its own would return, run for run - checked against 57 of
+ * them, descenders, wide capitals, accents and both alphabets among the cases - because nothing
+ * about the ink changed, only the amount of blank canvas the ink is drawn on.
+ */
+async function measureBatch(requests: MeasureRequest[]): Promise<void> {
+  const missing: Required<MeasureRequest>[] = []
+  const planned = new Set<string>()
+
+  for (const request of requests) {
+    const letterSpacing = request.letterSpacing || 0
+    const key = widthKey(request.value, request.size, letterSpacing)
+    if (measuredWidths.has(key) || planned.has(key)) continue
+
+    planned.add(key)
+    missing.push({ value: request.value, size: request.size, letterSpacing })
+  }
+
+  if (!missing.length) return
+
+  const bands: PngBand[] = []
+  const texts: string[] = []
+  let height = 0
+
+  for (const request of missing) {
+    const band = Math.ceil(request.size * MEASURE_BAND_HEIGHT)
+    bands.push({ top: height, height: band })
+    texts.push(`<text x="${CARD_WIDTH / 2}" y="${height + request.size * MEASURE_BAND_BASELINE}" font-size="${request.size}" font-weight="700" letter-spacing="${request.letterSpacing}" text-anchor="middle" fill="#ffffff">${esc(request.value)}</text>`)
+    height += band
+  }
+
+  const document = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${height}" font-family="${FONT_FAMILY}">${texts.join('')}</svg>`
+
+  let bounds: (PngBounds | null)[] = missing.map(() => null)
+
+  try {
+    bounds = pngAlphaBandBounds(rasterise(document).asPng(), bands)
+  } catch {
+    // A document the rasteriser will not draw is not worth failing a card over: the widths below
+    // fall back to the estimate, which is what `measuredTextWidth` does for a run it cannot draw.
+  }
+
+  missing.forEach((request, index) => {
+    const ink = bounds[index]
+    measuredWidths.set(
+      widthKey(request.value, request.size, request.letterSpacing),
+      ink ? ink.w : textWidth(request.value, request.size)
+    )
+  })
+}
+
 function measuredTextWidth(value: string, fontSize: number, letterSpacing = 0): number {
-  const key = `${fontSize}/${letterSpacing}/${value}`
+  const key = widthKey(value, fontSize, letterSpacing)
   const cached = measuredWidths.get(key)
   if (cached !== undefined) return cached
 
@@ -633,10 +748,45 @@ function tileNumberY(numberSize: number): number {
   return TILE_NUMBER_CENTER + (numberSize * HEADING_CAP_HEIGHT) / 2
 }
 
+/**
+ * The runs of text whose width the card is certain to ask for, listed before it is drawn.
+ *
+ * `measureBatch` can only draw what it is told about in advance, and what the card asks for is
+ * decided as the card is drawn - which size a number ends up at is the very thing being measured
+ * - so this is every run of every choice the card may make: both headline numbers and all six
+ * counts at each size their box may set them in, and the labels and captions that go beside them.
+ *
+ * A run the card asks for that is not listed is measured on its own, exactly as all of them were
+ * before, so a call site added later costs a rasteriser pass rather than drawing anything wrong.
+ */
+function measurementPlan(tiles: Tile[], data: CharacterData, L: Record<string, string>): MeasureRequest[] {
+  const plan: MeasureRequest[] = []
+  const counts = tiles.map(tile => tile.count.toLocaleString('en-US'))
+
+  for (const size of TILE_NUMBER_SIZES) {
+    for (const count of counts) plan.push({ value: count, size })
+  }
+
+  for (const size of STATS_NUMBER_SIZES) {
+    plan.push({ value: String(data.ilvl), size })
+    plan.push({ value: String(data.mPlusScore), size })
+  }
+
+  for (const tile of tiles) {
+    plan.push({ value: tile.label.toUpperCase(), size: HEADING_LABEL_SIZE, letterSpacing: HEADING_LETTER_SPACING })
+  }
+
+  for (const label of [L.itemLevel, L.mPlus]) {
+    plan.push({ value: String(label ?? '').toUpperCase(), size: STATS_LABEL_SIZE, letterSpacing: STATS_LETTER_SPACING })
+  }
+
+  return plan
+}
+
 export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU'): Promise<Buffer> {
   await loadIcons()
 
-  const L = LABELS[locale] || LABELS.ru_RU
+  const L = LABELS[locale] || LABELS.ru_RU!
   const classColor = CLASS_COLORS[data.class] || '#f8b700'
 
   const [backgroundEl, renderEl] = await Promise.all([
@@ -657,6 +807,11 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
     { label: L.reputations, icon: 'exalted-rep', count: data.stats.reputations.count, total: data.stats.reputations.total, color: '#f59e0b' },
     { label: L.toys, icon: 'toys', count: data.stats.toys.count, total: data.stats.toys.total, color: '#f59e0b' }
   ]
+
+  // Every width the card is about to ask for, measured in one pass before it is drawn: the number
+  // of rasteriser passes is the whole cost of measuring, so they are spent here rather than one
+  // per string as the card is laid out.
+  await measureBatch(measurementPlan(tiles, data, L))
 
   // All six counts are set at one size - the largest that fits a tile's room - and every column
   // of the grid is the same width, so the room is the column less the padding on either side.
@@ -682,7 +837,7 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
   return buildCardSvg(data, L, classColor, backgroundEl, renderEl, tilesSvg, metaLine, guildLine)
 }
 
-function buildCardSvg(
+async function buildCardSvg(
   data: CharacterData,
   L: Record<string, string>,
   classColor: string,
@@ -691,7 +846,7 @@ function buildCardSvg(
   tilesSvg: string,
   metaLine: string,
   guildLine: string
-): Buffer {
+): Promise<Buffer> {
   /**
    * A headline figure of the header: its label in small caps over the number, which is set
    * beside the glyph the page puts with it. The glyph, the gap and the number are centred on

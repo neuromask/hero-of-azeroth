@@ -389,23 +389,97 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
 }
 
 /**
+ * How long a character that has been read is served from memory, in seconds.
+ *
+ * A page and its `og:image` are two requests for one character, and they arrive together or one
+ * after the other - a crawler reads the page, then the picture the page points at. Without this
+ * the second of them pays for the whole Blizzard read again: ten profile calls, the character's
+ * 2 MB achievement document among them, in sequence, on the way to a preview that a chat network
+ * is already losing patience with. Ten minutes covers the pair comfortably, keeps an outdated
+ * item level off the card for no longer than that, and is deliberately the same span the rendered
+ * card is kept for, so the two expire together.
+ */
+const CHARACTER_CACHE_SECONDS = 10 * 60
+
+/** Characters already read, and when each of them stops being served. */
+const cachedCharacters = new Map<string, { data: CharacterData; expires_at: number }>()
+
+/**
+ * The reads still in flight, under the same key.
+ *
+ * A crawler is not obliged to read a page and its image in order - the two can be asked for at
+ * once - so two requests for a character the cache does not hold yet would otherwise race two
+ * full Blizzard reads of the same account. The second caller waits on the first read instead.
+ */
+const pendingCharacters = new Map<string, Promise<CharacterData>>()
+
+/** The entries kept before the expired ones are swept, so the map cannot grow without end. */
+const CHARACTER_CACHE_LIMIT = 500
+
+/**
  * Loads a character, optionally from a specific region. When no region is given
  * every known region is tried in turn, so deep links such as
  * /en/tichondrius/mychar work without an explicit ?region= parameter.
+ *
+ * The answer is kept for `CHARACTER_CACHE_SECONDS`, which is what keeps the page and the card
+ * that follows it from reading Blizzard twice, and a read already under way is shared rather than
+ * repeated by whoever asks next.
  */
 export async function getCharacter(realm: string, name: string, region?: string, locale = 'ru_RU'): Promise<CharacterData> {
-  const regions = region ? [region] : FALLBACK_REGIONS
-  let lastError: any = null
+  // The language is part of the key: Blizzard localises the names and the earned title the card
+  // and the page draw, so the two addresses of one character are genuinely two documents.
+  const key = `${region || 'auto'}:${realm}:${name}:${locale}`
+  const now = Math.floor(Date.now() / 1000)
 
-  for (const candidate of regions) {
-    try {
-      return await fetchCharacterProfile(realm, name, candidate, locale)
-    } catch (err: any) {
-      const status = err?.statusCode || err?.status || err?.response?.status
-      if (status !== 404) throw err
-      lastError = err
-    }
+  const cached = cachedCharacters.get(key)
+  if (cached && cached.expires_at > now) {
+    return cached.data
   }
 
-  throw lastError || createError({ statusCode: 404, statusMessage: 'Character not found' })
+  const inFlight = pendingCharacters.get(key)
+  if (inFlight) {
+    return inFlight
+  }
+
+  const load = (async () => {
+    const regions = region ? [region] : FALLBACK_REGIONS
+    let lastError: any = null
+
+    for (const candidate of regions) {
+      try {
+        const data = await fetchCharacterProfile(realm, name, candidate, locale)
+
+        if (cachedCharacters.size >= CHARACTER_CACHE_LIMIT) {
+          const cutoff = Math.floor(Date.now() / 1000)
+          for (const [expiredKey, entry] of cachedCharacters) {
+            if (entry.expires_at <= cutoff) cachedCharacters.delete(expiredKey)
+          }
+        }
+
+        cachedCharacters.set(key, {
+          data,
+          expires_at: Math.floor(Date.now() / 1000) + CHARACTER_CACHE_SECONDS
+        })
+
+        return data
+      } catch (err: any) {
+        const status = err?.statusCode || err?.status || err?.response?.status
+        // A 404 says this region does not hold the character, which is what sends the loop on to
+        // the next one; anything else is the API refusing to answer, and no other region fixes it.
+        if (status !== 404) throw err
+        lastError = err
+      }
+    }
+
+    throw lastError || createError({ statusCode: 404, statusMessage: 'Character not found' })
+  })()
+
+  pendingCharacters.set(key, load)
+
+  try {
+    return await load
+  } finally {
+    // Whoever asks from here on finds the answer cached, or starts a fresh read.
+    pendingCharacters.delete(key)
+  }
 }

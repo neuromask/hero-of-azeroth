@@ -9,17 +9,26 @@ export interface PngBounds {
   h: number
 }
 
+/** A horizontal strip of an image, measured on its own. */
+export interface PngBand {
+  top: number
+  height: number
+}
+
+interface DecodedPng {
+  width: number
+  height: number
+  channels: number
+  stride: number
+  pixels: Buffer
+}
+
 /**
- * Computes the bounding box of the non-transparent pixels of an 8-bit,
- * non-interlaced PNG (RGB or RGBA).
- *
- * Blizzard's character renders are 1600x1200 canvases with a lot of empty
- * space around the model, so cropping to this box is what makes the character
- * fill the frame instead of looking tiny.
- *
- * Returns null when the image is not a PNG we can decode.
+ * Decodes an 8-bit, non-interlaced PNG (RGB or RGBA) to its un-filtered pixels, or null when the
+ * image is not one we can decode. What the callers below differ on is only which rows they read,
+ * so the decode they share is here.
  */
-export function pngAlphaBounds(input: Buffer | ArrayBuffer, alphaThreshold = 24): PngBounds | null {
+function decodePng(input: Buffer | ArrayBuffer): DecodedPng | null {
   const buf = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
   if (buf.length < 33 || buf.readUInt32BE(0) !== 0x89504e47) return null
@@ -113,12 +122,24 @@ export function pngAlphaBounds(input: Buffer | ArrayBuffer, alphaThreshold = 24)
     readPos += stride
   }
 
+  return { width, height, channels, stride, pixels }
+}
+
+/**
+ * The ink of the rows `[fromY, toY)`: the box covered by the pixels above `alphaThreshold` in that
+ * strip, in the image's own coordinates, or null when the strip holds nothing.
+ */
+function scanAlpha(png: DecodedPng, fromY: number, toY: number, alphaThreshold: number): PngBounds | null {
+  const { width, height, channels, stride, pixels } = png
+  const firstY = Math.max(0, Math.floor(fromY))
+  const lastY = Math.min(height, Math.ceil(toY))
+
   let minX = width
   let minY = height
   let maxX = -1
   let maxY = -1
 
-  for (let y = 0; y < height; y++) {
+  for (let y = firstY; y < lastY; y++) {
     for (let x = 0; x < width; x++) {
       const alpha = channels === 4 ? pixels[y * stride + x * channels + 3]! : 255
       if (alpha <= alphaThreshold) continue
@@ -132,4 +153,34 @@ export function pngAlphaBounds(input: Buffer | ArrayBuffer, alphaThreshold = 24)
   if (maxX < 0 || maxY < 0) return null
 
   return { width, height, x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }
+}
+
+/**
+ * Computes the bounding box of the non-transparent pixels of an 8-bit, non-interlaced PNG
+ * (RGB or RGBA).
+ *
+ * Blizzard's character renders are 1600x1200 canvases with a lot of empty space around the model,
+ * so cropping to this box is what makes the character fill the frame instead of looking tiny.
+ *
+ * Returns null when the image is not a PNG we can decode, or when it is entirely transparent.
+ */
+export function pngAlphaBounds(input: Buffer | ArrayBuffer, alphaThreshold = 24): PngBounds | null {
+  const png = decodePng(input)
+
+  return png ? scanAlpha(png, 0, png.height, alphaThreshold) : null
+}
+
+/**
+ * The ink of each of `bands`, read from a single decode of a single image.
+ *
+ * Text is measured by drawing it and measuring the ink, and what keeps that affordable is drawing
+ * every run a card needs in one document - one band each - and decoding that document once. Each
+ * band is measured where it lies, so a run reads the same width here as it would have rendered on
+ * its own, and the bands never overlap, so neither reads the other's ink.
+ */
+export function pngAlphaBandBounds(input: Buffer | ArrayBuffer, bands: PngBand[], alphaThreshold = 24): (PngBounds | null)[] {
+  const png = decodePng(input)
+  if (!png) return bands.map(() => null)
+
+  return bands.map(band => scanAlpha(png, band.top, band.top + band.height, alphaThreshold))
 }
