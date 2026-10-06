@@ -199,7 +199,7 @@ function loadSharp() {
  * fetched by the crawler of a chat network under a deadline of a couple of seconds, and how many
  * bytes it has to pull inside that deadline is part of whether the preview appears at all.
  */
-const JPEG_QUALITY = 60
+const JPEG_QUALITY = 80
 
 /**
  * The finished card as JPEG bytes.
