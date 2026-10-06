@@ -346,7 +346,7 @@ onBeforeUnmount(() => {
       :src="picture"
       alt=""
       aria-hidden="true"
-      class="fixed inset-0 h-full w-full object-cover transition-opacity duration-[1600ms] ease-in-out"
+      class="fixed inset-0 h-full w-full object-cover transition-opacity duration-[3200ms] ease-in-out"
       :class="index === backgroundIndex ? 'opacity-100' : 'opacity-0'"
     />
     <div class="fixed inset-0 bg-wow-dark/45"></div>

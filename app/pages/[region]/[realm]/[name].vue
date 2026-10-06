@@ -502,7 +502,7 @@ onBeforeUnmount(() => {
               <div class="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-2">
                 <span class="flex min-w-0 items-center gap-2.5 text-base font-bold uppercase tracking-wider text-gray-200 sm:text-lg">
                   <AppIcon :name="tile.icon" class="h-[1.725em] w-[1.725em] shrink-0" />
-                  <span class="truncate">{{ tile.label }}</span>
+                  <span class="truncate text-[22px]">{{ tile.label }}</span>
                 </span>
                 <span class="text-2xl sm:text-3xl font-extrabold whitespace-nowrap text-right" :class="tile.color">{{ tile.display }}</span>
                 <!-- Under the first row: whose numbers the tile shows, and how much of
