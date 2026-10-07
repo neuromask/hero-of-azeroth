@@ -87,24 +87,47 @@ function accentOf(item: ActivityItem) {
         >
           <div class="flex items-start gap-3.5">
             <!-- The icon in a WoW-style frame: a filled square with the ring the game draws
-                 around an achievement, warmed for the accent the card carries. -->
-            <span
-              class="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border-2 bg-black/50"
-              :class="accentOf(item).frame"
-            >
-              <img
-                v-if="item.icon"
-                :src="item.icon"
-                :alt="item.name"
-                loading="lazy"
-                class="h-full w-full object-cover"
-              />
-              <AppIcon v-else name="achievments" class="h-6 w-6 opacity-70" />
-            </span>
+                 around an achievement, warmed for the accent the card carries. The frame is itself
+                 the link, so hovering it raises the same tooltip as the name beside it. -->
+            <!-- A name of its own, so the icon link is announced either way: the icon carries the
+                 achievement's name as its `alt`, but the fallback glyph is decorative. -->
+            <WowheadLink type="achievement" :id="item.id" icon-only :aria-label="item.name" class="shrink-0">
+              <span
+                class="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border-2 bg-black/50"
+                :class="accentOf(item).frame"
+              >
+                <img
+                  v-if="item.icon"
+                  :src="item.icon"
+                  :alt="item.name"
+                  loading="lazy"
+                  class="h-full w-full object-cover"
+                />
+                <AppIcon v-else name="achievments" class="h-6 w-6 opacity-70" />
+              </span>
+            </WowheadLink>
 
             <div class="min-w-0 flex-1">
               <div class="flex items-start justify-between gap-2">
-                <h3 class="text-base font-bold leading-snug text-white sm:text-lg">{{ item.name }}</h3>
+                <h3 class="text-base font-bold leading-snug text-white sm:text-lg">
+                  <!-- The name is the link: hovering it warms the text (the widget colours it too
+                       when what it names has a rarity) and, past the tooltip, reveals the glyph
+                       that says the page it opens is somewhere else. -->
+                  <WowheadLink type="achievement" :id="item.id" class="hover:underline">
+                    <span>{{ item.name }}</span>
+                    <svg
+                      class="h-3.5 w-3.5 shrink-0 opacity-0 transition-opacity duration-200 group-hover/wh:opacity-100"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      aria-hidden="true"
+                    >
+                      <path d="M8 5H5.5A1.5 1.5 0 0 0 4 6.5v8A1.5 1.5 0 0 0 5.5 16h8a1.5 1.5 0 0 0 1.5-1.5V12" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M12 4h4v4M15.5 4.5 9 11" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </WowheadLink>
+                </h3>
                 <span
                   v-if="item.points"
                   class="shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold tabular-nums"
