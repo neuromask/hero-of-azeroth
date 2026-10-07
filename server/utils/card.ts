@@ -574,66 +574,71 @@ const COLUMN_WIDTH = 712
 const COLUMN_RIGHT = COLUMN_X + COLUMN_WIDTH
 
 /**
- * The header: the name and the title against the left edge, then a rule, and past it the two
- * headline figures - the item level and the Mythic+ rating - with a second rule between them.
- * The wordmark sits in the top-right corner, and the figures are spread over the room that is
- * left of it, one centred in each half, which is how the character page sets the same pair.
+ * The header: the name against the left edge, and the character's own details - the level, the
+ * race, the spec and class, the guild and the realm - as the rounded plates the character page
+ * prints them on, running to the right of the name. The wordmark keeps the top-right corner.
  *
- * The item level is set in plain white and the rating in the tier its band has reached
- * (`mPlusQualityHex`), which is the pair of colours the page sets the same two figures in.
+ * The name is set in plain white, so the eye reads it first and the plates after it; the class
+ * gold it used to wear is now worn by the spec-and-class plate alone.
  *
- * `STATS_LABEL_Y` and `STATS_NUMBER_Y` are the baselines of a figure's label and of its number.
- * A figure is centred on `STATS_CENTER` as one group - the glyph that stands with the number is
- * part of the group - so the number sits under the label over it whatever size it is set at.
+ * The plates flow left to right and wrap when the next one would pass `BADGE_RIGHT`, which stops
+ * short of the wordmark and the portrait, so a long guild name drops to a second line instead of
+ * running into the artwork. `BADGE_X` is where they begin, clear of the name and its title.
  */
-const DIVIDER_X = 372
-const NAME_WIDTH = DIVIDER_X - 76
 const LOGO_X = 964
-const STATS_X = DIVIDER_X + 26
-const STATS_RIGHT = LOGO_X - 20
-const STATS_WIDTH = STATS_RIGHT - STATS_X
-const STATS_COLUMNS = 2
-const STATS_COLUMN_WIDTH = STATS_WIDTH / STATS_COLUMNS
-const STATS_CENTER = Array.from(
-  { length: STATS_COLUMNS },
-  (_, column) => STATS_X + STATS_COLUMN_WIDTH * (column + 0.5)
-)
-const STATS_LABEL_Y = 62
+/** The one left guide every block is set on: the name, the plates, the tiles and the foot band. */
+const LEFT_PAD = 44
+const BADGE_X = 405
+const BADGE_TOP = 52
+const BADGE_RIGHT = 870
+const BADGE_HEIGHT = 38
+const BADGE_PAD_X = 14
+const BADGE_GAP = 10
+const BADGE_ROW_GAP = 12
+const BADGE_TEXT_SIZE = 18
+const BADGE_RADIUS = 10
+/** The room the name and its title have before the plates begin. */
+const NAME_WIDTH = BADGE_X - LEFT_PAD - 26
+
+/**
+ * The two headline figures - the item level and the Mythic+ rating - and the plates they sit on.
+ *
+ * They used to stand in the header, past a rule; they now sit strictly under the collection grid,
+ * on plates cut from the same frame the grid's tiles are, because the pair is read after the
+ * collections the card is opened for. The item level is set in plain white and the rating in the
+ * tier its band has reached (`mPlusQualityHex`), the pair of colours the page sets the same two in.
+ *
+ * `STATS_LABEL_SIZE` is the size of a figure's uppercase label, and a figure is centred on its
+ * plate as one group - the glyph stands with the number and is part of the group - so the number
+ * sits under the label over it whatever size it is set at.
+ */
 const STATS_LABEL_SIZE = 15
 const STATS_LETTER_SPACING = 1
-const STATS_NUMBER_Y = 108
 const STATS_NUMBER_SIZES = [40, 36, 32]
 /** The glyph beside a figure is drawn in the number's own colour, at this share of its size. */
 const STATS_ICON_RATIO = 0.85
 const STATS_ICON_GAP_RATIO = 0.3
 
-/** Every rule of the card is a two-pixel hairline that fades out at both ends, as `#rule` is. */
-const RULE_WIDTH = 2
-
-/**
- * The rule after the name stands the height of the name and the title; the one between the two
- * figures stands the height of a label and a number.
- */
-const HEADER_RULE_TOP = 40
-const HEADER_RULE_HEIGHT = 92
-const STATS_RULE_X = STATS_X + STATS_COLUMN_WIDTH
-const STATS_RULE_TOP = STATS_LABEL_Y - STATS_LABEL_SIZE - 3
-const STATS_RULE_HEIGHT = STATS_NUMBER_Y + 6 - STATS_RULE_TOP
-
-/**
- * The description under the name: the level, race, spec and class line and, beneath it, the
- * guild and realm line. Both are set off the name's own left edge and measured to end before
- * the portrait.
- */
-const DESC_X = 56
-const DESC_WIDTH = 660
-const DESC_SIZE = 24
-const DESC_LINE1_Y = 162
-const DESC_LINE2_Y = 198
-
 /** The band the address line sits in. */
 const FOOTER_TOP = 572
 const FOOTER_HEIGHT = 32
+
+/**
+ * The two plates the headline figures sit on, under the grid: the item level in the left half of
+ * the column and the Mythic+ rating in the right, each the full half less the gap between them.
+ * `PLATES_TOP` is anchored to the foot band the way the grid is, so the plates, the grid and the
+ * band keep their distances to each other. `PLATE_LABEL_Y` and `PLATE_NUMBER_Y` are the baselines
+ * of a figure's label and of its number, off the top edge of its plate.
+ */
+const PLATES_COLUMNS = 2
+const PLATES_GAP = 16
+const PLATE_WIDTH = (COLUMN_WIDTH - (PLATES_COLUMNS - 1) * PLATES_GAP) / PLATES_COLUMNS
+const PLATES_HEIGHT = 78
+const PLATES_GAP_BELOW = 34
+const PLATES_TOP = FOOTER_TOP - PLATES_GAP_BELOW - PLATES_HEIGHT
+const PLATE_RADIUS = 12
+const PLATE_LABEL_Y = 28
+const PLATE_NUMBER_Y = 64
 
 /**
  * The grid the collection tiles are drawn in: six collections, three across and two down, and
@@ -641,15 +646,17 @@ const FOOTER_HEIGHT = 32
  * edge whatever the number of stats rather than leaving a hole where the next tile would have
  * been.
  *
- * `TILE_TOP` leaves the gap under the description and `TILE_HEIGHT` is the room between it and
- * the foot band split over the rows, so the description, the grid and the band keep their
- * distances to each other.
+ * `TILE_TOP` is the room the header leaves under it - the header carries the name and the plates
+ * of detail now, not the two headline figures - and `TILE_HEIGHT` is the room between the header
+ * and the plates split over the rows, so the header, the grid and the plates keep their distances
+ * to each other.
  */
 const TILE_GAP = 16
 const TILE_COLUMNS = 3
 const TILE_ROWS = 2
-const TILE_TOP = 236
-const TILE_HEIGHT = (FOOTER_TOP - TILE_GAP - TILE_TOP - (TILE_ROWS - 1) * TILE_GAP) / TILE_ROWS
+const TILE_TOP = 170
+const PLATES_GAP_ABOVE = 18
+const TILE_HEIGHT = (PLATES_TOP - PLATES_GAP_ABOVE - TILE_TOP - (TILE_ROWS - 1) * TILE_GAP) / TILE_ROWS
 
 /**
  * The sizes a tile's count is set in. All six counts take the largest one of these that still
@@ -706,12 +713,57 @@ function headingLabel(label: string, width: number): string {
   )
 }
 
+/** One plate of a character's own details, drawn to the right of the name. */
+interface Badge {
+  text: string
+  /** The text's fill: gold for the level, the class colour for the spec and class, the rest grey. */
+  color: string
+}
+
 /**
- * A rule of the card, drawn down the middle of a column boundary: it fades out at both ends,
- * which is what the `#rule` gradient is for, and `RULE_WIDTH` is what keeps it a hairline.
+ * The character's own details, in the order the header plates them: the level, then the race,
+ * then the spec and class as one plate, then the guild and the realm. A detail the character does
+ * not have - a guildless character, a spec the API did not send - is left out rather than plated
+ * empty, and the spec-and-class plate wears the class's own colour, the way the game prints it.
  */
-function ruleSvg(x: number, top: number, height: number): string {
-  return `<rect x="${round2(x - RULE_WIDTH / 2)}" y="${round2(top)}" width="${RULE_WIDTH}" height="${round2(height)}" fill="url(#rule)"/>`
+function characterBadges(data: CharacterData, classColor: string): Badge[] {
+  const specClass = [data.spec, data.class].filter(Boolean).join(' ')
+  return [
+    { text: String(data.level), color: '#f8b700' },
+    { text: data.race, color: '#e2e8f0' },
+    { text: specClass, color: classColor },
+    { text: data.guild ? `<${data.guild}>` : '', color: '#e2e8f0' },
+    { text: data.realm, color: '#e2e8f0' }
+  ].filter((badge) => badge.text)
+}
+
+/**
+ * The plates of detail as the header draws them, left to right: each a rounded box with an amber
+ * hairline - the frame the character page plates the same details on - sized to the text inside
+ * it, with its own colour on that text. A plate that would pass `BADGE_RIGHT` wraps to a new line
+ * under the one before it, so a long guild name drops to a second line instead of running into
+ * the wordmark or the portrait. The text of a plate is the only thing that measures it, so its
+ * box never crowds what is written on it.
+ */
+function badgeFlow(badges: Badge[]): string {
+  const baseline = (top: number) => round2(top + BADGE_HEIGHT / 2 + (BADGE_TEXT_SIZE * HEADING_CAP_HEIGHT) / 2)
+  const plates: string[] = []
+  let x = BADGE_X
+  let top = BADGE_TOP
+
+  for (const badge of badges) {
+    const width = round2(measuredTextWidth(badge.text, BADGE_TEXT_SIZE) + BADGE_PAD_X * 2)
+    if (x !== BADGE_X && x + width > BADGE_RIGHT) {
+      top += BADGE_HEIGHT + BADGE_ROW_GAP
+      x = BADGE_X
+    }
+
+    plates.push(`<rect x="${round2(x)}" y="${round2(top)}" width="${width}" height="${BADGE_HEIGHT}" rx="${BADGE_RADIUS}" fill="#0b1220" fill-opacity="0.55" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+  <text x="${round2(x + BADGE_PAD_X)}" y="${baseline(top)}" font-size="${BADGE_TEXT_SIZE}" font-weight="600" fill="${badge.color}">${esc(badge.text)}</text>`)
+    x += width + BADGE_GAP
+  }
+
+  return plates.join('\n  ')
 }
 
 /**
@@ -754,7 +806,7 @@ function tileNumberY(numberSize: number): number {
  * A run the card asks for that is not listed is measured on its own, exactly as all of them were
  * before, so a call site added later costs a rasteriser pass rather than drawing anything wrong.
  */
-function measurementPlan(tiles: Tile[], data: CharacterData, L: Record<string, string>): MeasureRequest[] {
+function measurementPlan(tiles: Tile[], data: CharacterData, L: Record<string, string>, classColor: string): MeasureRequest[] {
   const plan: MeasureRequest[] = []
   const counts = tiles.map(tile => tile.count.toLocaleString('en-US'))
 
@@ -773,6 +825,12 @@ function measurementPlan(tiles: Tile[], data: CharacterData, L: Record<string, s
 
   for (const label of [L.itemLevel, L.mPlus]) {
     plan.push({ value: String(label ?? '').toUpperCase(), size: STATS_LABEL_SIZE, letterSpacing: STATS_LETTER_SPACING })
+  }
+
+  // The plates of detail beside the name are measured too: `badgeFlow` sizes each box to its
+  // text, so every one of them is a width the card asks for as it is drawn.
+  for (const badge of characterBadges(data, classColor)) {
+    plan.push({ value: badge.text, size: BADGE_TEXT_SIZE })
   }
 
   return plan
@@ -814,7 +872,7 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
   // Every width the card is about to ask for, measured in one pass before it is drawn: the number
   // of rasteriser passes is the whole cost of measuring, so they are spent here rather than one
   // per string as the card is laid out.
-  await measureBatch(measurementPlan(tiles, data, L))
+  await measureBatch(measurementPlan(tiles, data, L, classColor))
 
   // All six counts are set at one size - the largest that fits a tile's room - and every column
   // of the grid is the same width, so the room is the column less the padding on either side.
@@ -834,10 +892,9 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
     return inRow.map((tile, column) => tileSvg(tile, COLUMN_X + column * (width + TILE_GAP), y, width, numberSize)).join('\n  ')
   }).join('\n  ')
 
-  // Both lines are measured and cut in `buildCardSvg`, where the boxes they sit in are.
-  const metaLine = [data.race, data.spec, data.class].filter(Boolean).join(' · ')
-  const guildLine = [data.guild ? `<${data.guild}>` : '', data.realm].filter(Boolean).join(' · ')
-  return buildCardSvg(data, L, classColor, backgroundEl, renderEl, tilesSvg, metaLine, guildLine)
+  // The character's own details, as the plates the header prints them on, left to right.
+  const badges = characterBadges(data, classColor)
+  return buildCardSvg(data, L, classColor, backgroundEl, renderEl, tilesSvg, badges)
 }
 
 async function buildCardSvg(
@@ -847,42 +904,41 @@ async function buildCardSvg(
   backgroundEl: string,
   renderEl: string,
   tilesSvg: string,
-  metaLine: string,
-  guildLine: string
+  badges: Badge[]
 ): Promise<Buffer> {
   /**
-   * A headline figure of the header: its label in small caps over the number, which is set
-   * beside the glyph the page puts with it. The glyph, the gap and the number are centred on
-   * the figure's own half of the header as one group, which is what puts the number under the
-   * label over it whatever size it is set at.
+   * A headline figure on its plate: the item level or the Mythic+ rating, set as the page sets
+   * them - the uppercase label over the glyph and the number, the whole group centred on the
+   * plate. `column` picks the plate's half of the column, and `color` is the number's fill:
+   * plain white for the item level, the tier colour for the rating.
    */
-  const statSvg = (icon: string, label: string, value: string, color: string, column: number, numberSize: number) => {
+  const plateSvg = (icon: string, label: string, value: string, color: string, column: number, numberSize: number) => {
+    const left = round2(LEFT_PAD + column * (PLATE_WIDTH + PLATES_GAP))
+    const center = round2(left + PLATE_WIDTH / 2)
     const glyphHeight = round2(numberSize * STATS_ICON_RATIO)
     const glyphWidth = round2(iconWidth(icon, glyphHeight))
     const gap = round2(numberSize * STATS_ICON_GAP_RATIO)
-    const center = STATS_CENTER[column]
-    const left = round2(center - statWidth(icon, value, numberSize) / 2)
-    // The label is measured rather than guessed at, so a long one is cut to its own half of
-    // the header instead of running into the rule beside it.
-    const caption = fitText(label.toUpperCase(), STATS_COLUMN_WIDTH - 16, STATS_LABEL_SIZE, (text, size) =>
+    const groupLeft = round2(center - statWidth(icon, value, numberSize) / 2)
+    // The label is measured rather than guessed at, so a long one is cut to its own plate
+    // instead of running past the plate's edge.
+    const caption = fitText(label.toUpperCase(), PLATE_WIDTH - 24, STATS_LABEL_SIZE, (text, size) =>
       measuredTextWidth(text, size, STATS_LETTER_SPACING)
     )
 
-    return `<text x="${round2(center)}" y="${STATS_LABEL_Y}" font-size="${STATS_LABEL_SIZE}" font-weight="700" letter-spacing="${STATS_LETTER_SPACING}" text-anchor="middle" fill="#94a3b8">${esc(caption)}</text>
-  ${iconElement(icon, left, round2(STATS_NUMBER_Y - (numberSize * HEADING_CAP_HEIGHT) / 2 - glyphHeight / 2), glyphHeight, color)}
-  <text x="${round2(left + glyphWidth + gap)}" y="${STATS_NUMBER_Y}" font-size="${numberSize}" font-weight="700" fill="${color}">${esc(value)}</text>`
+    return `<rect x="${left}" y="${PLATES_TOP}" width="${round2(PLATE_WIDTH)}" height="${PLATES_HEIGHT}" rx="${PLATE_RADIUS}" fill="#05070b" fill-opacity="0.6" stroke="#1e293b" stroke-width="2"/>
+  <text x="${center}" y="${round2(PLATES_TOP + PLATE_LABEL_Y)}" font-size="${STATS_LABEL_SIZE}" font-weight="700" letter-spacing="${STATS_LETTER_SPACING}" text-anchor="middle" fill="#94a3b8">${esc(caption)}</text>
+  ${iconElement(icon, groupLeft, round2(PLATES_TOP + PLATE_NUMBER_Y - (numberSize * HEADING_CAP_HEIGHT) / 2 - glyphHeight / 2), glyphHeight, color)}
+  <text x="${round2(groupLeft + glyphWidth + gap)}" y="${round2(PLATES_TOP + PLATE_NUMBER_Y)}" font-size="${numberSize}" font-weight="700" fill="${color}">${esc(value)}</text>`
   }
 
   /**
-   * Both figures are set at the same size - the largest one that fits either half - because a
+   * Both figures are set at the same size - the largest one that fits either plate - because a
    * pair of numbers set at two sizes reads as an accident.
    */
   const statSize = STATS_NUMBER_SIZES.find(size =>
-    statWidth('item-level', String(data.ilvl), size) <= STATS_COLUMN_WIDTH - 16
-    && statWidth('key', String(data.mPlusScore), size) <= STATS_COLUMN_WIDTH - 16
+    statWidth('item-level', String(data.ilvl), size) <= PLATE_WIDTH - 24
+    && statWidth('key', String(data.mPlusScore), size) <= PLATE_WIDTH - 24
   ) || STATS_NUMBER_SIZES[STATS_NUMBER_SIZES.length - 1]
-
-  const levelLine = `${L.level} ${data.level} · ${metaLine}`
 
   /**
    * A name that does not fit at 46px is set smaller before it is cut, and the title line
@@ -890,7 +946,10 @@ async function buildCardSvg(
    */
   const nameSize = NAME_SIZES.find(size => textWidth(data.name, size) <= NAME_WIDTH) || NAME_SIZES[NAME_SIZES.length - 1]
   const titleSize = nameSize >= 40 ? 21 : 18
-  const titleY = 80 + (nameSize >= 40 ? 28 : 24)
+  const titleY = 90 + (nameSize >= 40 ? 28 : 24)
+
+  // The plates of detail beside the name, left to right, wrapping under the name's title.
+  const badgesSvg = badgeFlow(badges)
 
   /**
    * The wordmark sits in the top-right corner at twice the height it used to have
@@ -940,11 +999,6 @@ async function buildCardSvg(
       <stop offset="0" stop-color="#05070b" stop-opacity="0"/>
       <stop offset="1" stop-color="#05070b" stop-opacity="0.4"/>
     </linearGradient>
-    <linearGradient id="rule" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#94a3b8" stop-opacity="0"/>
-      <stop offset="0.5" stop-color="#94a3b8" stop-opacity="0.8"/>
-      <stop offset="1" stop-color="#94a3b8" stop-opacity="0"/>
-    </linearGradient>
     <filter id="barGlow" x="-10%" y="-120%" width="120%" height="340%" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="4"/>
     </filter>
@@ -959,21 +1013,20 @@ async function buildCardSvg(
   <rect y="430" width="${CARD_WIDTH}" height="200" fill="url(#bottomFade)"/>
   <rect x="0" y="0" width="6" height="${CARD_HEIGHT}" fill="${classColor}" fill-opacity="0.9"/>
 
-  ${ruleSvg(DIVIDER_X, HEADER_RULE_TOP, HEADER_RULE_HEIGHT)}
-  <text x="56" y="80" font-size="${nameSize}" font-weight="700" fill="#f8b700">${esc(fitText(data.name, NAME_WIDTH, nameSize))}</text>
-  ${data.title ? `<text x="56" y="${titleY}" font-size="${titleSize}" font-style="italic" fill="#ffe395">${esc(fitText(data.title, NAME_WIDTH, titleSize))}</text>` : ''}
-  ${ruleSvg(STATS_RULE_X, STATS_RULE_TOP, STATS_RULE_HEIGHT)}
-  <!-- The item level is a plain white figure: a single number, with no ladder to be read
-       against. The rating beside it wears the tier its band has reached, off the same bands
-       the page colours it with. -->
-  ${statSvg('item-level', L.itemLevel, String(data.ilvl), '#ffffff', 0, statSize)}
-  ${statSvg('key', L.mPlus, String(data.mPlusScore), mPlusQualityHex(data.mPlusScore), 1, statSize)}
+  <!-- The name is set in plain white, and the character's own details run to its right as the
+       plates the header prints them on. -->
+  <text x="${LEFT_PAD}" y="90" font-size="${nameSize}" font-weight="700" fill="#ffffff">${esc(fitText(data.name, NAME_WIDTH, nameSize))}</text>
+  ${data.title ? `<text x="${LEFT_PAD}" y="${titleY}" font-size="${titleSize}" font-style="italic" fill="#ffe395">${esc(fitText(data.title, NAME_WIDTH, titleSize))}</text>` : ''}
+  ${badgesSvg}
   ${logotype}
 
-  <text x="${DESC_X}" y="${DESC_LINE1_Y}" font-size="${DESC_SIZE}" fill="#cbd5e1">${esc(fitText(levelLine, DESC_WIDTH, DESC_SIZE))}</text>
-  <text x="${DESC_X}" y="${DESC_LINE2_Y}" font-size="${DESC_SIZE}" fill="#94a3b8">${esc(fitText(guildLine, DESC_WIDTH, DESC_SIZE))}</text>
-
   ${tilesSvg}
+
+  <!-- The two headline figures, strictly under the grid: the item level is a plain white number,
+       with no ladder to be read against, and the rating wears the tier its band has reached, off
+       the same bands the page colours it with. -->
+  ${plateSvg('item-level', L.itemLevel, String(data.ilvl), '#ffffff', 0, statSize)}
+  ${plateSvg('key', L.mPlus, String(data.mPlusScore), mPlusQualityHex(data.mPlusScore), 1, statSize)}
 
   <rect x="${COLUMN_X}" y="${FOOTER_TOP}" width="${COLUMN_WIDTH}" height="${FOOTER_HEIGHT}" rx="10" fill="#05070b" fill-opacity="0.6"/>
   <text x="${COLUMN_X + 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="#94a3b8">heroofazeroth.com</text>
