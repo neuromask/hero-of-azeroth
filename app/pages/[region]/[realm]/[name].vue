@@ -624,7 +624,7 @@ onBeforeUnmount(() => {
              row: the tray lives inside the panel's own stacking context - the frosted background it
              sits on is what makes one - so a layer here is what keeps the tray over the fade the
              navigation lays down, rather than under it. -->
-        <div class="hoa-panel relative z-30 rounded-t-none border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.35)] px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div class="hoa-panel relative z-30 rounded-t-none border-t-0 shadow-none px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
             <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a gold
                  plate with the emblem cut from it, so it keeps its own frame and stays sharp at any

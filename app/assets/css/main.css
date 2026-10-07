@@ -9,7 +9,7 @@
      by naming it instead of copying forty characters of utilities, and a change to the frame reaches
      every block at once. */
   .hoa-panel {
-    @apply rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)];
+    @apply rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)];
   }
 
   /* The same frame under the pointer, which is how the tiles and the summary answer it. */
