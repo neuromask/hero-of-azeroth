@@ -81,6 +81,8 @@ const nameInput = ref<HTMLInputElement | null>(null)
 /** Whether the history list under the name field is open, and the field it hangs from. */
 const nameOpen = ref(false)
 const nameRootEl = ref<HTMLElement | null>(null)
+/** The history row under the pointer, highlighted the way the realm list highlights a realm. */
+const nameActiveIndex = ref(-1)
 
 /**
  * The names and realms looked up before, read from `localStorage` on mount and offered under
@@ -197,8 +199,7 @@ const regionBadge = computed(() => {
   return ''
 })
 
-const highlight = (text: string) => {
-  const query = realmQuery.value.trim().toLowerCase()
+const highlightIn = (text: string, query: string) => {
   const at = query ? text.toLowerCase().indexOf(query) : -1
   if (at < 0) return [{ text, hit: false }]
   return [
@@ -207,6 +208,10 @@ const highlight = (text: string) => {
     { text: text.slice(at + query.length), hit: false }
   ].filter((part) => part.text)
 }
+
+/** The realm list marks the typed part of a realm; the history rows mark their match the same way. */
+const highlight = (text: string) => highlightIn(text, realmQuery.value.trim().toLowerCase())
+const highlightName = (text: string) => highlightIn(text, name.value.trim().toLowerCase())
 
 /**
  * The second name in a realm row: the Russian one, wherever it says something the first
@@ -290,6 +295,8 @@ const historyMatches = computed<SearchHistoryEntry[]>(() => {
 
 /** Opens the list on focus or on typing, but only when there is something to show. */
 const openName = () => {
+  // A fresh list has nothing highlighted, the way the realm list starts on every keystroke.
+  nameActiveIndex.value = -1
   if (history.value.length) nameOpen.value = true
 }
 
@@ -310,11 +317,13 @@ const selectHistory = (entry: SearchHistoryEntry) => {
   writeSession(SESSION_REALM, realm.slug)
   open.value = false
   nameOpen.value = false
+  nameActiveIndex.value = -1
 }
 
 /** Drops one row from the list, and closes it once the last one has gone. */
 const removeHistory = (entry: SearchHistoryEntry) => {
   forget(entry)
+  nameActiveIndex.value = -1
   if (!history.value.length) nameOpen.value = false
 }
 
@@ -411,16 +420,16 @@ onBeforeUnmount(() => {
             type="button"
             title="English"
             @click="changeLocale('en')"
-            class="px-2 py-1.5 rounded-lg border text-base leading-none transition-all"
+            class="px-2 py-1.5 rounded-lg border text-xs font-bold leading-none inline-flex items-center justify-center transition-all"
             :class="locale === 'en' ? 'border-wow-gold bg-wow-gold/10' : 'border-white/10 bg-black/40 opacity-60 hover:opacity-100'"
-          >🇬🇧</button>
+          >EN</button>
           <button
             type="button"
             title="Русский"
             @click="changeLocale('ru')"
-            class="px-2 py-1.5 rounded-lg border text-base leading-none transition-all"
+            class="px-2 py-1.5 rounded-lg border text-xs font-bold leading-none inline-flex items-center justify-center transition-all"
             :class="locale === 'ru' ? 'border-wow-gold bg-wow-gold/10' : 'border-white/10 bg-black/40 opacity-60 hover:opacity-100'"
-          >🇷🇺</button>
+          >RU</button>
         </div>
       </div>
 
@@ -496,10 +505,11 @@ onBeforeUnmount(() => {
             @input="openName"
             @keydown.esc="nameOpen = false"
           />
-          <!-- The characters searched before, a row each. The list is cut from the same glass the
-               realm dropdown is, and it opens on focus or on typing when there is something to
-               show; a row fills the name and the realm both. The cross on the right drops one
-               character without picking it, and appears under the pointer. -->
+          <!-- The characters searched before, a row each. The list is the same glass as the realm
+               dropdown, and a row is shaped the same way - the name, then ` · ` and the realm in
+               the smaller grey type - so the two lists read as one control. It opens on focus or
+               on typing when there is something to show, a row fills the name and the realm both,
+               and the cross on the right drops one character without picking it. -->
           <div
             v-if="nameOpen && historyMatches.length"
             class="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
@@ -507,15 +517,21 @@ onBeforeUnmount(() => {
             <p class="sticky top-0 bg-black/70 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-white/5 backdrop-blur-xl">
               {{ $t('searchHistory') }}
             </p>
-            <div v-for="entry in historyMatches" :key="searchHistoryKey(entry)" class="group relative">
+            <div
+              v-for="(entry, i) in historyMatches"
+              :key="searchHistoryKey(entry)"
+              class="group relative"
+              @mouseenter="nameActiveIndex = i"
+            >
               <button
                 type="button"
-                class="w-full text-left px-4 py-2 pr-10 text-sm transition-colors text-gray-200 hover:bg-white/5"
+                :data-active="nameActiveIndex === i"
+                class="w-full text-left px-4 py-2 pr-10 text-sm transition-colors"
+                :class="nameActiveIndex === i ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
                 @click="selectHistory(entry)"
               >
-                <span>{{ entry.name }}</span>
-                <span class="text-gray-500"> - </span>
-                <span class="text-gray-300">{{ historyRealmName(entry) }}</span>
+                <span v-for="(part, k) in highlightName(entry.name)" :key="k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
+                <span class="text-gray-500 text-xs"> · <span v-for="(part, k) in highlightName(historyRealmName(entry))" :key="'realm-' + k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
               </button>
               <button
                 type="button"
