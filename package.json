@@ -13,6 +13,7 @@
     "postinstall": "nuxt prepare",
     "refresh:achievements": "node scripts/refresh-achievement-points.mjs",
     "refresh:armoury-totals": "node scripts/refresh-armoury-totals.mjs",
+    "refresh:collections": "node scripts/refresh-collections.mjs",
     "refresh:reputations": "node scripts/refresh-reputation-totals.mjs"
   },
   "dependencies": {

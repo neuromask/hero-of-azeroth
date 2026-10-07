@@ -1,0 +1,103 @@
+<script setup lang="ts">
+// The shelves the menu offers, in the order it lists them.
+import { COLLECTION_KINDS } from '#shared/data/collectionsSchema'
+
+/**
+ * The Collections entry of a character's navigation: the button that opens the three shelves, and the
+ * menu under it.
+ *
+ * The menu is what chooses between mounts, pets and toys - the shelf pages carry no navigation of
+ * their own - and it opens on a click, and closes on the next one, on a click anywhere outside it, on
+ * Escape, and as soon as a shelf is picked. It is a button rather than a link because the tab opens a
+ * menu instead of going anywhere; the entries are links of their own, so each shelf keeps an address
+ * that can be shared and crawled, and the panel is hidden with `invisible` rather than left out of
+ * the document, so those addresses are in the markup the server sends even while it is shut.
+ */
+const props = defineProps<{
+  /** The collections subtree of this character, which the entries hang from. */
+  path: string
+  /** Whether the collections are what the address names, which is what lights the tab. */
+  active: boolean
+}>()
+
+const localeUrl = useLocaleUrl()
+const route = useRoute()
+
+/** Whether the menu is open, which a click on the tab toggles and the next click takes back. */
+const open = ref(false)
+/** The tab and its menu, which is what a click has to land outside of to shut it. */
+const root = ref<HTMLElement | null>(null)
+
+/** Whether `kind` is the shelf being read, which is the entry the menu lights. */
+function onShelf(kind: string): boolean {
+  return new RegExp(`/collections/${kind}/?$`).test(route.path)
+}
+
+function onDocumentClick(event: MouseEvent): void {
+  if (!root.value?.contains(event.target as Node)) open.value = false
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') open.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
+})
+
+// A shelf that has just been picked is the page being read, so the menu is done with.
+watch(
+  () => route.path,
+  () => {
+    open.value = false
+  }
+)
+</script>
+
+<template>
+  <div ref="root" class="relative">
+    <button
+      type="button"
+      class="hoa-tab"
+      :class="{ 'hoa-tab-active': props.active || open }"
+      aria-haspopup="true"
+      :aria-expanded="open"
+      @click="open = !open"
+    >
+      {{ $t('tabCollections') }}
+      <span
+        class="text-[10px] leading-none text-gray-400 transition-transform duration-150"
+        :class="open ? 'rotate-180 text-wow-goldLight' : ''"
+        aria-hidden="true"
+      >▾</span>
+    </button>
+
+    <!-- Shut, the panel is invisible but still in the document: the three shelves are addresses a
+         crawler should find, and they are read from the markup rather than from a script. It paints
+         above the fade the navigation lays over the row below, which is what `z-50` is for. -->
+    <div
+      class="absolute left-0 top-full z-50 mt-2 w-52 rounded-2xl border border-white/15 bg-wow-dark/95 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150 transition-opacity duration-150"
+      :class="open ? 'opacity-100' : 'invisible opacity-0'"
+      role="menu"
+    >
+      <NuxtLink
+        v-for="shelf in COLLECTION_KINDS"
+        :key="shelf"
+        :to="localeUrl(`${props.path}/${shelf}`)"
+        class="flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+        :class="onShelf(shelf) ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
+        :aria-current="onShelf(shelf) ? 'page' : undefined"
+        role="menuitem"
+        @click="open = false"
+      >
+        {{ $t(shelf) }}
+      </NuxtLink>
+    </div>
+  </div>
+</template>

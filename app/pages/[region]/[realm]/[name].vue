@@ -35,14 +35,20 @@ if (!region) {
 const apiLocale = computed(() => (locale.value === 'ru' ? 'ru_RU' : 'en_US'))
 
 /**
- * The two views of the character, as addresses: the profile the page opens on, and the feed of
- * what the character has done lately. A tab is a link rather than a button, so the browser keeps
- * every view in its history, a shared link can point at one, and a crawler reaches each on its own.
+ * The three views of the character, as addresses: the profile the page opens on, the feed of what
+ * the character has done lately, and the collections it has gathered. A tab is a link rather than a
+ * button, so the browser keeps every view in its history, a shared link can point at one, and a
+ * crawler reaches each on its own.
  */
 const overviewPath = computed(() => `/${regionPath(region)}/${realm}/${name}`)
 const activityPath = computed(() => `${overviewPath.value}/activity`)
+/** The collections subtree, which opens on the mounts shelf (see the `collections/` folder). */
+const collectionsPath = computed(() => `${overviewPath.value}/collections`)
 /** The view the address names, which is what the tabs are lit by. */
 const onActivityTab = computed(() => /\/activity\/?$/.test(route.path))
+const onCollectionsTab = computed(() => /\/collections(?:\/|$)/.test(route.path))
+/** Whether `kind` is the shelf being read, which is the entry the collections menu lights. */
+const onShelf = (kind: string) => new RegExp(`/collections/${kind}/?$`).test(route.path)
 
 const { data: character, pending, error } = await useFetch<CharacterData>(
   () => `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}`
@@ -122,7 +128,9 @@ const seoTitle = computed(() => {
   const base = !c
     ? name
     : (seoName.value ? `${c.name} - ${seoName.value} (${regionCode.value})` : `${c.name} (${regionCode.value})`)
-  return onActivityTab.value ? `${base} — ${t('tabActivity')}` : base
+  if (onActivityTab.value) return `${base} — ${t('tabActivity')}`
+  if (onCollectionsTab.value) return `${base} — ${t('tabCollections')}`
+  return base
 })
 
 const seoDescription = computed(() => {
@@ -611,7 +619,12 @@ onBeforeUnmount(() => {
            the views (`z-40`) so they pass behind it, and the panel keeps only its bottom corners
            rounded because the bar stands flush against the top edge. -->
       <header class="sticky top-0 z-40 container mx-auto px-4">
-        <div class="hoa-panel rounded-t-none border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.35)] px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <!-- The panel is a layer of its own above the navigation row below it (`z-30` against the
+             row's `auto`), because the share tray opens downwards out of this panel and into that
+             row: the tray lives inside the panel's own stacking context - the frosted background it
+             sits on is what makes one - so a layer here is what keeps the tray over the fade the
+             navigation lays down, rather than under it. -->
+        <div class="hoa-panel relative z-30 rounded-t-none border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.35)] px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
             <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a gold
                  plate with the emblem cut from it, so it keeps its own frame and stays sharp at any
@@ -704,7 +717,7 @@ onBeforeUnmount(() => {
 
             <div
               v-if="menuOpen"
-              class="absolute top-full left-1/2 z-40 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-black/85 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150 lg:left-auto lg:right-0 lg:translate-x-0"
+              class="absolute top-full left-1/2 z-50 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-wow-dark/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150 lg:left-auto lg:right-0 lg:translate-x-0"
               role="menu"
             >
               <p class="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('shareCard') }}</p>
@@ -760,26 +773,35 @@ onBeforeUnmount(() => {
           </div>
           </div>
         </div>
-      <!-- The page's own navigation: the profile it opens on, and the feed of what the character
-             has done lately. A tab is a link, so the browser keeps every view in its history, a
-             shared link can point at one, and a crawler reaches each on its own address. It travels
-             with the header above it - the two are pinned to the top of the window together - and
-             the fade behind the row lets the cards below dissolve into the bar rather than poke at
-             its edge. -->
+      <!-- The page's own navigation: the profile it opens on, the feed of what the character has
+             done lately, and the collections it has gathered. A tab is a link, so the browser keeps
+             every view in its history, a shared link can point at one, and a crawler reaches each on
+             its own address. It travels with the header above it - the two are pinned to the top of
+             the window together - and the fade behind the row lets the cards below dissolve into the
+             bar rather than poke at its edge. -->
         <nav class="relative pt-3" :aria-label="character.name">
+          <!-- The fade the row of tabs sits on. It is kept under everything the navigation opens -
+               the collections menu, the share tray - which is what `z-0` says: `pointer-events-none`
+               already keeps it out of the way of a click, and the layer is what keeps it from
+               darkening a menu that opens over it. -->
           <div
-            class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-wow-dark via-wow-dark/85 to-transparent"
+            class="pointer-events-none absolute inset-x-0 top-0 z-0 h-24 bg-gradient-to-b from-wow-dark via-wow-dark/85 to-transparent"
             aria-hidden="true"
           />
           <div class="relative flex flex-wrap gap-2">
             <NuxtLink
               :to="localeUrl(overviewPath)"
               class="hoa-tab"
-              :class="{ 'hoa-tab-active': !onActivityTab }"
-              :aria-current="onActivityTab ? undefined : 'page'"
+              :class="{ 'hoa-tab-active': !onActivityTab && !onCollectionsTab }"
+              :aria-current="!onActivityTab && !onCollectionsTab ? 'page' : undefined"
             >
               {{ $t('tabOverview') }}
             </NuxtLink>
+            <!-- The collections are three shelves - mounts, pets, toys - and the menu that chooses
+                 between them is part of this navigation rather than a row of tabs on the page
+                 (`app/components/CollectionMenu.vue`). It stands where a reader looks for it: right
+                 after the profile. -->
+            <CollectionMenu :path="collectionsPath" :active="onCollectionsTab" />
             <NuxtLink
               :to="localeUrl(activityPath)"
               class="hoa-tab"

@@ -13,7 +13,7 @@
  */
 
 /** The kinds of game data a link can name, which is also the widget's own spelling of them. */
-export type WowheadType = 'achievement' | 'item' | 'spell' | 'mount' | 'faction'
+export type WowheadType = 'achievement' | 'item' | 'spell' | 'mount' | 'pet' | 'npc' | 'faction'
 
 /** Wowhead's Power widget, from the CDN their own pages load it from. */
 const POWER_SCRIPT = 'https://wow.zamimg.com/widgets/power.js'
