@@ -312,11 +312,29 @@ async function loadCardBlob(): Promise<Blob | null> {
   }
 }
 
+/**
+ * What the downloaded card is called: `нейромаск-gordunni-card-2026-09-30.jpg`.
+ *
+ * The character leads and the realm follows, because a folder of these is read by the name
+ * first; the day it was saved trails, so a card pulled on two days of farming keeps both
+ * instead of the second overwriting the first.
+ */
+function cardFileName(): string {
+  const today = new Date()
+  const date = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0')
+  ].join('-')
+
+  return `${name}-${realm}-card-${date}.jpg`
+}
+
 function saveBlob(blob: Blob) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${realm}-${name}-card.jpg`
+  link.download = cardFileName()
   document.body.appendChild(link)
   link.click()
   link.remove()
@@ -369,7 +387,7 @@ async function shareCardImage() {
 
   try {
     const blob = cardBlob.value || (await loadCardBlob())
-    const file = blob ? new File([blob], `${realm}-${name}-card.jpg`, { type: 'image/jpeg' }) : null
+    const file = blob ? new File([blob], cardFileName(), { type: 'image/jpeg' }) : null
 
     if (file && navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: shareTitle.value, text: shareText.value })
