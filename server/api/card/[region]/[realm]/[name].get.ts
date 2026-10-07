@@ -3,23 +3,22 @@
  *
  * A card is the expensive half of a request - a Blizzard lookup, two images over the network
  * and a rasteriser pass - so one that has just been drawn is handed to the next caller rather
- * than drawn again.
+ * than drawn again, for two hours (see `server/utils/swrCache.ts`). A `?force=true` request,
+ * which the header's Refresh button sends, waits for a freshly drawn card instead.
  */
-const cardCache = new Map<string, { jpeg: Buffer; expires: number }>()
+const cards = createSwrCache<Buffer>(2 * 60 * 60 * 1000, 256)
 
 export default defineEventHandler(async (event) => {
   const region = parseRegion(getRouterParam(event, 'region'))
   const realm = decodeRouteParam(getRouterParam(event, 'realm')).toLowerCase()
   const name = decodeRouteParam(getRouterParam(event, 'name')).toLowerCase()
-  const locale = (getQuery(event).locale as string) === 'ru_RU' ? 'ru_RU' : 'en_US'
+  const query = getQuery(event)
+  const locale = query.locale === 'ru_RU' ? 'ru_RU' : 'en_US'
+  const force = query.force === 'true' || query.force === '1'
 
   if (!realm || !name) {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
-
-  const key = `${region}:${locale}:${realm}:${name}`
-  const now = Date.now()
-  const cached = cardCache.get(key)
 
   // The card is a picture with photographs in it, so it is written and served as a JPEG: a
   // chat network's crawler fetches an `og:image` on a deadline of a couple of seconds, and
@@ -27,14 +26,12 @@ export default defineEventHandler(async (event) => {
   setHeader(event, 'Content-Type', 'image/jpeg')
   setHeader(event, 'Cache-Control', 'public, max-age=3600, s-maxage=86400')
 
-  if (cached && cached.expires > now) {
-    return cached.jpeg
-  }
-
-  const character = await getCharacter(realm, name, region, locale)
-  const jpeg = await renderCharacterCard(character, locale)
-
-  cardCache.set(key, { jpeg, expires: now + 10 * 60 * 1000 })
-
-  return jpeg
+  return cards(
+    `${region}:${locale}:${realm}:${name}`,
+    async () => {
+      const character = await getCharacter(realm, name, region, locale)
+      return renderCharacterCard(character, locale)
+    },
+    force
+  )
 })

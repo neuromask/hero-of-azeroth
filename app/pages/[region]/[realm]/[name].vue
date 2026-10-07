@@ -372,13 +372,68 @@ function closeMenu() {
 const downloading = ref(false)
 const sharing = ref(false)
 
+/**
+ * The Refresh button. Its one job is to make the page read Blizzard again, so the profile and
+ * the card drawn from it are fetched with `?force=true` - the request the endpoints answer from
+ * a fresh lookup instead of from their two hours of cache (see `server/api`). Blizzard answers
+ * a person slowly and a burst of presses is a burst of calls, so once the fresh copy has
+ * landed the button rests for a minute and counts the seconds down where its label stood.
+ */
+const refreshing = ref(false)
+const cooldown = ref(0)
+let cooldownTimer: ReturnType<typeof setInterval> | undefined
+
+const canRefresh = computed(() => !refreshing.value && cooldown.value === 0)
+
+const refreshLabel = computed(() => {
+  if (refreshing.value) return t('refreshingProfile')
+  if (cooldown.value > 0) return `${cooldown.value}s`
+  return t('refreshProfile')
+})
+
+function startCooldown(seconds: number) {
+  cooldown.value = seconds
+  if (cooldownTimer) clearInterval(cooldownTimer)
+  cooldownTimer = setInterval(() => {
+    cooldown.value -= 1
+    if (cooldown.value <= 0) {
+      if (cooldownTimer) clearInterval(cooldownTimer)
+      cooldownTimer = undefined
+      cooldown.value = 0
+    }
+  }, 1000)
+}
+
+async function refreshProfile() {
+  if (!canRefresh.value) return
+  refreshing.value = true
+  try {
+    const fresh = await $fetch(
+      `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}&force=true`
+    )
+    character.value = fresh as typeof character.value
+    // The card is a picture of this profile, so the copy on hand is of an older one now.
+    cardBlob.value = null
+    await loadCardBlob(true)
+    showToast(t('profileRefreshed'))
+  } catch {
+    showToast(t('refreshFailed'))
+  } finally {
+    refreshing.value = false
+    startCooldown(60)
+  }
+}
+
 /** The rendered card, cached so the share sheet can open without waiting for it. */
-async function loadCardBlob(): Promise<Blob | null> {
-  if (cardBlob.value) return cardBlob.value
+async function loadCardBlob(force = false): Promise<Blob | null> {
+  if (!force && cardBlob.value) return cardBlob.value
   if (cardBlobPending.value) return null
   cardBlobPending.value = true
   try {
-    cardBlob.value = await $fetch<Blob>(cardUrl.value, { responseType: 'blob' })
+    // A refresh redraws the card: `?force=true` is the request the endpoint answers by drawing
+    // again rather than from the picture it already has (see `server/api/card`).
+    const url = force ? `${cardUrl.value}&force=true` : cardUrl.value
+    cardBlob.value = await $fetch<Blob>(url, { responseType: 'blob' })
     return cardBlob.value
   } catch {
     return null
@@ -506,6 +561,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocumentClick)
   document.removeEventListener('keydown', onDocumentKeydown)
+  if (cooldownTimer) clearInterval(cooldownTimer)
 })
 </script>
 
@@ -585,12 +641,26 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- The download button has taken the place the summary figures held, and their amber
-               frame with it - the one warm accent the header has - with a glow that answers the
-               pointer. The share tray is the same control, so it travels with the button and
-               opens downwards, the header standing at the top of the page. -->
-          <div ref="actionsEl" class="relative w-full lg:w-auto">
-            <div class="flex items-stretch overflow-hidden rounded-xl border border-amber-500/60 bg-amber-950/30 backdrop-blur-sm shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/90 hover:bg-amber-900/40 hover:shadow-[0_0_28px_rgba(245,158,11,0.5)]">
+          <!-- The Refresh button reads Blizzard again, and the card it redraws is the one the
+               download hands out. The download button has taken the place the summary figures
+               held, and their amber frame with it - the one warm accent the header has - with a
+               glow that answers the pointer. The share tray is the same control, so it travels
+               with the button and opens downwards, the header standing at the top of the page. -->
+          <div class="flex w-full items-stretch gap-3 lg:w-auto">
+            <button
+              type="button"
+              :disabled="!canRefresh"
+              class="flex shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-sm transition-all duration-300 hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:py-3.5 sm:text-lg"
+              :title="$t('refreshProfile')"
+              :aria-label="$t('refreshProfile')"
+              @click="refreshProfile"
+            >
+              <AppIcon name="refresh" class="h-[1.2em] w-[1.2em]" :class="refreshing ? 'animate-spin' : ''" />
+              <span class="tabular-nums">{{ refreshLabel }}</span>
+            </button>
+
+            <div ref="actionsEl" class="relative flex-1 lg:flex-none">
+              <div class="flex w-full items-stretch overflow-hidden rounded-xl border border-amber-500/60 bg-amber-950/30 backdrop-blur-sm shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/90 hover:bg-amber-900/40 hover:shadow-[0_0_28px_rgba(245,158,11,0.5)]">
               <button
                 type="button"
                 :disabled="downloading"
@@ -680,6 +750,7 @@ onBeforeUnmount(() => {
                 {{ $t('email') }}
               </a>
             </div>
+          </div>
           </div>
 
         </div>
