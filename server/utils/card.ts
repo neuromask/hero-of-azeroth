@@ -989,9 +989,9 @@ async function buildCardSvg(
       <stop offset="1" stop-color="${classColor}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="scrim" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#05070b" stop-opacity="0.92"/>
-      <stop offset="0.42" stop-color="#05070b" stop-opacity="0.78"/>
-      <stop offset="0.55" stop-color="#05070b" stop-opacity="0.36"/>
+      <stop offset="0" stop-color="#05070b" stop-opacity="0.68"/>
+      <stop offset="0.42" stop-color="#05070b" stop-opacity="0.5"/>
+      <stop offset="0.55" stop-color="#05070b" stop-opacity="0.28"/>
       <stop offset="0.66" stop-color="#05070b" stop-opacity="0.04"/>
       <stop offset="0.78" stop-color="#05070b" stop-opacity="0"/>
     </linearGradient>
@@ -1011,7 +1011,7 @@ async function buildCardSvg(
   <rect width="${CARD_WIDTH}" height="${CARD_HEIGHT}" fill="url(#glow)"/>
   ${renderEl ? `<g clip-path="url(#cardClip)">${renderEl}</g>` : ''}
   <rect y="430" width="${CARD_WIDTH}" height="200" fill="url(#bottomFade)"/>
-  <rect x="0" y="0" width="6" height="${CARD_HEIGHT}" fill="${classColor}" fill-opacity="0.9"/>
+  <rect x="0" y="0" width="12" height="${CARD_HEIGHT}" fill="${classColor}" fill-opacity="0.9"/>
 
   <!-- The name is set in plain white, and the character's own details run to its right as the
        plates the header prints them on. -->
