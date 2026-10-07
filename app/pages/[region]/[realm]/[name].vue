@@ -550,22 +550,15 @@ onBeforeUnmount(() => {
       <header class="relative z-30 container mx-auto px-4 pt-6">
         <div class="rounded-xl border border-white/10 bg-white/[0.06] p-4 sm:p-6 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
-            <!-- The brand mark is the artwork itself (`app/assets/img/emblem.png`).
-                 It carries its own rounded-square frame, so the circular glass plate
-                 that used to hold the flat white SVG has nothing left to frame. -->
+            <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a
+                 gold plate with the emblem cut from it, so it keeps its own frame and stays
+                 sharp at any size. -->
             <NuxtLink
               :to="localeUrl('/')"
               aria-label="HeroOfAzeroth"
               class="block h-20 w-20 shrink-0 transition-transform hover:scale-105"
             >
-              <img
-                src="~/assets/img/emblem.png"
-                alt=""
-                aria-hidden="true"
-                width="512"
-                height="512"
-                class="h-full w-full"
-              />
+              <AppIcon name="hoa-emblem" class="h-full w-full" />
             </NuxtLink>
 
             <div>

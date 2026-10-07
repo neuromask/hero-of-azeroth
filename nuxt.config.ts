@@ -69,7 +69,15 @@ export default defineNuxtConfig({
         { name: 'format-detection', content: 'telephone=no' }
       ],
       link: [
-        { rel: 'icon', href: '/favicon.ico', sizes: 'any' },
+        // The SVG is the icon a modern browser takes: it scales to any size and can answer a
+        // dark-mode media query. The `.ico` beside it is the fallback for the ones that cannot.
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico', sizes: 'any' },
+        // iOS ignores the SVG when the site is added to the home screen, so it is handed a
+        // raster icon of its own, 180x180, the size it scales from.
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
+        // Android reads the manifest for the name, the icons and the colours of an installed copy.
+        { rel: 'manifest', href: '/site.webmanifest' },
         { rel: 'sitemap', type: 'application/xml', href: '/sitemap.xml' },
         // The container is fetched on every page view, so the connection is opened
         // while the page itself is still parsing.
