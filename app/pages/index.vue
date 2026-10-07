@@ -240,6 +240,26 @@ const onRealmInput = () => {
   activeIndex.value = -1
 }
 
+/**
+ * Empties the realm field in one tap, the way the best search fields do. The pointer is put
+ * back in the field, and the `focus` handler above opens the list again - now on the empty
+ * field, which is the whole realm list.
+ */
+const clearRealm = () => {
+  realmQuery.value = ''
+  selectedRealm.value = null
+  realmError.value = false
+  activeIndex.value = -1
+  realmInput.value?.focus()
+}
+
+/** The same one-tap clear on the name field: the empty field brings the whole history back. */
+const clearName = () => {
+  name.value = ''
+  nameActiveIndex.value = -1
+  nameInput.value?.focus()
+}
+
 const move = (delta: number) => {
   open.value = true
   const total = matches.value.length
@@ -434,63 +454,6 @@ onBeforeUnmount(() => {
       </div>
 
       <form @submit.prevent="handleSearch" class="space-y-4">
-        <div>
-          <div ref="rootEl" class="relative">
-            <input
-              ref="realmInput"
-              v-model="realmQuery"
-              type="text"
-              autocomplete="off"
-              spellcheck="false"
-              :placeholder="$t('realmPlaceholder')"
-              class="w-full bg-black/60 border rounded-lg px-4 py-2.5 pr-14 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
-              :class="realmError ? 'border-red-500/70' : 'border-white/10'"
-              @focus="open = true"
-              @input="onRealmInput"
-              @keydown.down.prevent="move(1)"
-              @keydown.up.prevent="move(-1)"
-              @keydown.enter.prevent="onEnter"
-              @keydown.esc="open = false"
-            />
-            <span
-              v-if="regionBadge"
-              class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded border"
-              :class="resolvedRealm?.region === 'eu'
-                ? 'border-sky-400/40 bg-sky-400/10 text-sky-300'
-                : 'border-rose-400/40 bg-rose-400/10 text-rose-300'"
-            >{{ regionBadge }}</span>
-
-            <div
-              v-if="open"
-              class="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
-            >
-              <p v-if="realmsPending && !realms.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('loading') }}</p>
-              <p v-else-if="!matches.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('noRealms') }}</p>
-              <template v-else>
-                <div v-for="section in sections" :key="section.key">
-                  <p class="sticky top-0 bg-black/70 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-white/5 backdrop-blur-xl">
-                    {{ section.label }}
-                  </p>
-                  <button
-                    v-for="r in section.items"
-                    :key="r.slug"
-                    type="button"
-                    :data-active="activeIndex === r.index"
-                    class="w-full text-left px-4 py-2 text-sm transition-colors"
-                    :class="activeIndex === r.index ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
-                    @mouseenter="activeIndex = r.index"
-                    @click="selectRealm(r)"
-                  >
-                    <span v-for="(part, i) in highlight(r.name)" :key="i" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
-                    <span class="text-gray-500 text-xs"> · <span v-for="(part, j) in highlight(realmSecondary(r))" :key="j" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
-                  </button>
-                </div>
-              </template>
-            </div>
-          </div>
-          <p v-if="realmError" class="mt-1 text-xs text-red-400">{{ $t('pickRealm') }}</p>
-        </div>
-
         <div ref="nameRootEl" class="relative">
           <input
             ref="nameInput"
@@ -500,11 +463,23 @@ onBeforeUnmount(() => {
             spellcheck="false"
             :placeholder="$t('characterNamePlaceholder')"
             required
-            class="w-full bg-black/60 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
+            class="w-full bg-black/60 border border-white/10 rounded-lg px-4 py-2.5 pr-10 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
             @focus="openName"
             @input="openName"
             @keydown.esc="nameOpen = false"
           />
+          <!-- One tap empties the whole field, the way the best search fields do: it is there only
+               while there is something to clear, it keeps the focus on the field (so the list does
+               not flicker), and the empty field is the way back to the whole history. -->
+          <button
+            v-if="name"
+            type="button"
+            :aria-label="$t('clearField')"
+            :title="$t('clearField')"
+            class="absolute right-3 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+            @mousedown.prevent
+            @click="clearName"
+          >&#10005;</button>
           <!-- The characters searched before, a row each. The list is the same glass as the realm
                dropdown, and a row is shaped the same way - the name, then ` · ` and the realm in
                the smaller grey type - so the two lists read as one control. It opens on focus or
@@ -542,6 +517,74 @@ onBeforeUnmount(() => {
               >&#10005;</button>
             </div>
           </div>
+        </div>
+
+        <div>
+          <div ref="rootEl" class="relative">
+            <input
+              ref="realmInput"
+              v-model="realmQuery"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              :placeholder="$t('realmPlaceholder')"
+              class="w-full bg-black/60 border rounded-lg px-4 py-2.5 pr-24 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
+              :class="realmError ? 'border-red-500/70' : 'border-white/10'"
+              @focus="open = true"
+              @input="onRealmInput"
+              @keydown.down.prevent="move(1)"
+              @keydown.up.prevent="move(-1)"
+              @keydown.enter.prevent="onEnter"
+              @keydown.esc="open = false"
+            />
+            <!-- The realm field carries the same one-tap clear; it keeps the focus so the list
+                 reopens on the now-empty field. It sits to the left of the region badge. -->
+            <button
+              v-if="realmQuery"
+              type="button"
+              :aria-label="$t('clearField')"
+              :title="$t('clearField')"
+              class="absolute right-3 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+              @mousedown.prevent
+              @click="clearRealm"
+            >&#10005;</button>
+            <span
+              v-if="regionBadge"
+              class="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded border"
+              :class="resolvedRealm?.region === 'eu'
+                ? 'border-sky-400/40 bg-sky-400/10 text-sky-300'
+                : 'border-rose-400/40 bg-rose-400/10 text-rose-300'"
+            >{{ regionBadge }}</span>
+
+            <div
+              v-if="open"
+              class="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
+            >
+              <p v-if="realmsPending && !realms.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('loading') }}</p>
+              <p v-else-if="!matches.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('noRealms') }}</p>
+              <template v-else>
+                <div v-for="section in sections" :key="section.key">
+                  <p class="sticky top-0 bg-black/70 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-white/5 backdrop-blur-xl">
+                    {{ section.label }}
+                  </p>
+                  <button
+                    v-for="r in section.items"
+                    :key="r.slug"
+                    type="button"
+                    :data-active="activeIndex === r.index"
+                    class="w-full text-left px-4 py-2 text-sm transition-colors"
+                    :class="activeIndex === r.index ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
+                    @mouseenter="activeIndex = r.index"
+                    @click="selectRealm(r)"
+                  >
+                    <span v-for="(part, i) in highlight(r.name)" :key="i" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
+                    <span class="text-gray-500 text-xs"> · <span v-for="(part, j) in highlight(realmSecondary(r))" :key="j" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
+                  </button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <p v-if="realmError" class="mt-1 text-xs text-red-400">{{ $t('pickRealm') }}</p>
         </div>
 
         <button 
