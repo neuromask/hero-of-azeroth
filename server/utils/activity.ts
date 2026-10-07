@@ -15,7 +15,7 @@
  * what changes person to person, and it is the endpoint that keeps it (see the route).
  */
 import { getBlizzardToken } from './blizzard'
-import { activityAccent } from '#shared/utils/activity'
+import { activityAccent, activityType } from '#shared/utils/activity'
 import type { ActivityFeed, ActivityItem } from '#shared/utils/activity'
 
 /** How many of the newest achievements the feed shows. */
@@ -143,6 +143,7 @@ export async function getAchievementFeed(
         completedAt: entry.completed_timestamp,
         category: meta?.category || '',
         categoryId: meta?.categoryId || 0,
+        type: activityType(meta?.category || '', meta?.name || ''),
         accent: activityAccent(meta?.categoryId || 0, meta?.category || '')
       }
     })

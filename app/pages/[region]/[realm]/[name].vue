@@ -605,11 +605,11 @@ onBeforeUnmount(() => {
         <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(8,10,15,0.65)_100%)]"></div>
       </div>
 
-      <!-- The header is pinned to the top of the window (`sticky`), so it stays over the views as
-           they scroll under it - which is why the panel keeps only its bottom corners rounded and
-           the page it sits on no longer hides its overflow (a clipping ancestor would have stopped
-           the bar from sticking at all). It sits above the tabs and the views (`z-40`) so they pass
-           behind the glass rather than over it. -->
+      <!-- The bar at the top of the page: the character's header and the page's own navigation
+           (below), pinned together to the top of the window, so a visitor who has scrolled into the
+           feed still has the character, the tabs and the Refresh button in view. The bar sits above
+           the views (`z-40`) so they pass behind it, and the panel keeps only its bottom corners
+           rounded because the bar stands flush against the top edge. -->
       <header class="sticky top-0 z-40 container mx-auto px-4">
         <div class="hoa-panel rounded-t-none border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.35)] px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
@@ -760,31 +760,37 @@ onBeforeUnmount(() => {
           </div>
           </div>
         </div>
-      </header>
-
       <!-- The page's own navigation: the profile it opens on, and the feed of what the character
-           has done lately. A tab is a link, so the browser keeps every view in its history, a
-           shared link can point at one, and a crawler reaches each on its own address. -->
-      <nav class="relative z-30 container mx-auto px-4 pt-4" :aria-label="character.name">
-        <div class="flex flex-wrap gap-2">
-          <NuxtLink
-            :to="localeUrl(overviewPath)"
-            class="hoa-tab"
-            :class="{ 'hoa-tab-active': !onActivityTab }"
-            :aria-current="onActivityTab ? undefined : 'page'"
-          >
-            {{ $t('tabOverview') }}
-          </NuxtLink>
-          <NuxtLink
-            :to="localeUrl(activityPath)"
-            class="hoa-tab"
-            :class="{ 'hoa-tab-active': onActivityTab }"
-            :aria-current="onActivityTab ? 'page' : undefined"
-          >
-            {{ $t('tabActivity') }}
-          </NuxtLink>
-        </div>
-      </nav>
+             has done lately. A tab is a link, so the browser keeps every view in its history, a
+             shared link can point at one, and a crawler reaches each on its own address. It travels
+             with the header above it - the two are pinned to the top of the window together - and
+             the fade behind the row lets the cards below dissolve into the bar rather than poke at
+             its edge. -->
+        <nav class="relative pt-3" :aria-label="character.name">
+          <div
+            class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-wow-dark via-wow-dark/85 to-transparent"
+            aria-hidden="true"
+          />
+          <div class="relative flex flex-wrap gap-2">
+            <NuxtLink
+              :to="localeUrl(overviewPath)"
+              class="hoa-tab"
+              :class="{ 'hoa-tab-active': !onActivityTab }"
+              :aria-current="onActivityTab ? undefined : 'page'"
+            >
+              {{ $t('tabOverview') }}
+            </NuxtLink>
+            <NuxtLink
+              :to="localeUrl(activityPath)"
+              class="hoa-tab"
+              :class="{ 'hoa-tab-active': onActivityTab }"
+              :aria-current="onActivityTab ? 'page' : undefined"
+            >
+              {{ $t('tabActivity') }}
+            </NuxtLink>
+          </div>
+        </nav>
+      </header>
 
       <!-- One toast for the shell, because the Refresh button that raises it lives here and both
            views offer a moment to read it. -->
