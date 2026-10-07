@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  /* The frosted glass every block of a page is cut from: the character header, the stat tiles
+     and the summary row, and now the activity cards. One class, so a page built later starts
+     from the same frame by naming it instead of copying forty characters of utilities, and a
+     change to the frame reaches every block at once. */
+  .hoa-panel {
+    @apply rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)];
+  }
+
+  /* The same frame under the pointer, which is how the tiles and the summary answer it. */
+  .hoa-panel-interactive {
+    @apply transition-colors hover:border-wow-gold/60 hover:bg-white/[0.09];
+  }
+
+  /* A tab of a page's own navigation: quiet until it is the one being read. */
+  .hoa-tab {
+    @apply inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-white sm:text-base;
+  }
+
+  /* The chosen tab, warmed with the brand gold the rest of the site accents with. */
+  .hoa-tab-active {
+    @apply border-wow-gold/60 bg-wow-gold/10 text-wow-goldLight shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_0_18px_rgba(248,183,0,0.25)];
+  }
+}
+
 body {
   background-color: #080a0f;
   color: #ffffff;

@@ -1,24 +1,29 @@
 <script setup lang="ts">
-// The ladders the collection numbers and the Mythic+ rating are coloured by are shared with the
-// card, which draws the same tiers into its own SVG: one table, so a page and its card can never
-// disagree.
-import { collectionPercent, mPlusQualityTextClass, wowQualityTextClass } from '#shared/utils/wow-quality'
-// The class colour a name is printed in comes from the same table the card draws from, so the
-// page and its card agree (see `#shared/utils/wow-class`).
+// The class colour a name is printed in comes from the shared table the card draws from, so the
+// page and its card agree (see `#shared/utils/wow-class`). A class shows up in the header, and the
+// header is the shell's - the views below it never print one.
 import { resolveClass } from '#shared/utils/wow-class'
+// The profile the whole subtree is a view of. The shell fetches it once and hands it to whichever
+// view the address names, so a switch between the views is a swap rather than a second read of
+// Blizzard - and the endpoint keeps it for two hours in any case (see `server/api/character`).
+import type { CharacterData } from '~~/server/utils/blizzard'
+// The feed's shape, shared with the endpoint that builds it (see `#shared/utils/activity`).
+import type { ActivityFeed } from '#shared/utils/activity'
 // The search history the front page offers: a character that rendered here is a search that
 // worked, and that is what is worth keeping (see the composable for the shape and the limit).
 import { useSearchHistory } from '~/composables/searchHistory'
-// The Russian copy of this page is the same component under `/ru`; the middleware reads
-// the language off whichever of the two addresses was asked for.
+// What the shell hands to the views it renders (see the composable for the shape).
+import { provideCharacterView } from '~/composables/characterView'
+// The Russian copy of this subtree is the same component under `/ru`; the middleware reads the
+// language off whichever of the two addresses was asked for. The alias names the whole subtree, so
+// `/ru/.../activity` is served as readily as its English address.
 definePageMeta({ alias: '/ru/:region/:realm/:name' })
 
 const route = useRoute()
 const { locale, t } = useI18n()
 const localeUrl = useLocaleUrl()
 // The region is the second path segment (`/region-eu/gordunni/neromask`, or
-// `/ru/region-eu/gordunni/neromask` in Russian), so it is part of the shared URL and
-// no longer needs to be guessed from the character.
+// `/ru/region-eu/gordunni/neromask` in Russian).
 const region = regionFromPath(String(route.params.region || ''))
 const realm = String(route.params.realm || '')
 const name = String(route.params.name || '')
@@ -29,7 +34,17 @@ if (!region) {
 
 const apiLocale = computed(() => (locale.value === 'ru' ? 'ru_RU' : 'en_US'))
 
-const { data: character, pending, error } = await useFetch(
+/**
+ * The two views of the character, as addresses: the profile the page opens on, and the feed of
+ * what the character has done lately. A tab is a link rather than a button, so the browser keeps
+ * every view in its history, a shared link can point at one, and a crawler reaches each on its own.
+ */
+const overviewPath = computed(() => `/${regionPath(region)}/${realm}/${name}`)
+const activityPath = computed(() => `${overviewPath.value}/activity`)
+/** The view the address names, which is what the tabs are lit by. */
+const onActivityTab = computed(() => /\/activity\/?$/.test(route.path))
+
+const { data: character, pending, error } = await useFetch<CharacterData>(
   () => `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}`
 )
 
@@ -50,8 +65,8 @@ watch(character, (loaded) => {
     realm,
     region,
     realmName: loaded.realm,
-    // The class rides along so the front page can tint the remembered name with it; the id is
-    // the same in either language, which is what the row is coloured by.
+    // The class rides along so the front page can tint the remembered name with it; the id is the
+    // same in either language, which is what the row is coloured by.
     classId: loaded.classId,
     class: resolveClass(loaded)?.slug
   })
@@ -96,19 +111,24 @@ const seoOgWho = computed(() => {
  *
  * A search result wants the plain facts spelled out - the name, the class, the realm, then the
  * collections a player reads first - while a link preview is read in a chat window, where the
- * same figures stand out as a row behind a glyph. Both are built from one set of numbers and
- * the same labels, so they can never disagree about a character.
+ * same figures stand out as a row behind a glyph. Both are built from one set of numbers and the
+ * same labels, so they can never disagree about a character.
+ *
+ * The title names the view as well, so the profile and the feed are two documents a crawler can
+ * tell apart rather than one title on two addresses.
  */
 const seoTitle = computed(() => {
   const c = character.value
-  if (!c) return name
-  return seoName.value ? `${c.name} - ${seoName.value} (${regionCode.value})` : `${c.name} (${regionCode.value})`
+  const base = !c
+    ? name
+    : (seoName.value ? `${c.name} - ${seoName.value} (${regionCode.value})` : `${c.name} (${regionCode.value})`)
+  return onActivityTab.value ? `${base} — ${t('tabActivity')}` : base
 })
 
 const seoDescription = computed(() => {
   const c = character.value
   if (!c) return ''
-  return [
+  const facts = [
     seoName.value ? `${c.name} (${seoName.value})` : c.name,
     `${t('achievements')}: ${c.ap}`,
     `${t('mounts')}: ${c.stats.mounts.count}`,
@@ -116,7 +136,8 @@ const seoDescription = computed(() => {
     `${t('toys')}: ${c.stats.toys.count}`,
     `${t('seoItemLevel')}: ${c.ilvl}`,
     t('seoCharacterSuffix')
-  ].join(' · ')
+  ]
+  return [onActivityTab.value ? t('recentAchievements') : '', ...facts].filter(Boolean).join(' · ')
 })
 
 const seoOgDescription = computed(() => {
@@ -208,78 +229,6 @@ usePageSeo({
   }
 })
 
-/** Class colours are shared with the card and the history (see `#shared/utils/wow-class`). */
-
-/** Formats counts the same way on the server and in the browser. */
-const formatCount = (value: number) => value.toLocaleString('en-US')
-
-/**
- * The rating wears the tier it has reached, off the same Mythic+ bands the card colours the
- * figure with. The item level beside it stays plain white: it is a single number with no ladder
- * of its own to be read against, so it is left to read as a fact.
- */
-const mPlusColor = computed(() => mPlusQualityTextClass(character.value?.mPlusScore ?? 0))
-
-interface StatTile {
-  key: string
-  /** File name in `~/assets/icons`, which `<AppIcon>` draws. */
-  icon: string
-  label: string
-  /** The scope in small print under the label: whose numbers this tile shows. */
-  note: string
-  /** The tier colour the count is set in, from the shared quality ladder. */
-  color: string
-  display: string
-  percent: number
-}
-
-/**
- * The stat tiles with their progress bars, split into the two columns they are
- * laid out in around the character. Achievements lead the right column.
- *
- * Every tile names the scope of its number in small print, because the six do not come
- * from the same place: pets, toys and decor arrive account-wide from Blizzard - they are
- * identical for every character of an account - while mounts and the achievement points
- * are the character's own, and reputations are too - deliberately so, because a character
- * is only ever on one side of the faction war while the account's characters are not, so a
- * count across the account would mix the two sides and have no reachable total to sit
- * under. The tile counts the ladders this character has finished itself - the Exalted
- * factions, plus a renown faction at its last renown level and a delve companion at its
- * last level, which have no Exalted tier at all. Its
- * denominator is what a character of this faction can reach, not Blizzard's whole
- * faction index - see `reputationTotal`.
- *
- * The count carries the tier its collection has reached rather than a fixed colour, so the
- * number says how far along the tile is at a glance. The ladder is the shared one, off the
- * same thresholds the card colours its own numbers by (`shared/utils/wow-quality.ts`).
- */
-const tileColumns = computed<StatTile[][]>(() => {
-  const c = character.value
-  if (!c) return []
-
-  const accountWide = t('accountWide')
-  const perCharacter = t('perCharacter')
-
-  const tiles = [
-    { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total },
-    { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total },
-    { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total },
-    { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total },
-    { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total }
-  ]
-
-  const withBar = tiles.map((tile) => ({
-    ...tile,
-    // The count wears the tier its collection has reached, the way the card's numbers do.
-    color: wowQualityTextClass(tile.count, tile.total),
-    display: formatCount(tile.count),
-    percent: collectionPercent(tile.count, tile.total)
-  }))
-
-  return [withBar.slice(0, 3), withBar.slice(3)]
-})
-
 /**
  * The level/race/spec/class/guild/realm line under the name, split into parts so
  * the template can put the `·` between them the way the card prints them.
@@ -301,30 +250,30 @@ const metaParts = computed<MetaPart[]>(() => {
 
   return [
     // 1. Уровень
-    { 
-      text: String(c.level), 
-      className: `${amberBadge} font-semibold` 
+    {
+      text: String(c.level),
+      className: `${amberBadge} font-semibold`
     },
     // 2. Раса
-    { 
-      text: c.race, 
-      className: amberBadge 
+    {
+      text: c.race,
+      className: amberBadge
     },
     // 3. Spec and class, printed in its signature colour (see <CharacterName>).
-    { 
-      text: `${c.spec} ${c.class}`.trim(), 
-      // Colour and plate come from <CharacterName>, shared with the rest of the app. 
-      isClass: true 
+    {
+      text: `${c.spec} ${c.class}`.trim(),
+      // Colour and plate come from <CharacterName>, shared with the rest of the app.
+      isClass: true
     },
     // 4. Гильдия (отдельный бабл)
-    { 
-      text: c.guild ? `<${c.guild}>` : '', 
-      className: amberBadge 
+    {
+      text: c.guild ? `<${c.guild}>` : '',
+      className: amberBadge
     },
     // 5. Реалм (отдельный бабл)
-    { 
-      text: c.realm, 
-      className: amberBadge 
+    {
+      text: c.realm,
+      className: amberBadge
     }
   ].filter((part) => part.text)
 })
@@ -371,13 +320,12 @@ function closeMenu() {
 
 const downloading = ref(false)
 const sharing = ref(false)
-
 /**
  * The Refresh button. Its one job is to make the page read Blizzard again, so the profile and
  * the card drawn from it are fetched with `?force=true` - the request the endpoints answer from
- * a fresh lookup instead of from their two hours of cache (see `server/api`). Blizzard answers
- * a person slowly and a burst of presses is a burst of calls, so once the fresh copy has
- * landed the button rests for a minute and counts the seconds down where its label stood.
+ * a fresh lookup instead of from their two hours of cache (see `server/api`). Blizzard answers a
+ * person slowly and a burst of presses is a burst of calls, so once the fresh copy has landed the
+ * button rests for a minute and counts the seconds down where its label stood.
  */
 const refreshing = ref(false)
 const cooldown = ref(0)
@@ -404,17 +352,63 @@ function startCooldown(seconds: number) {
   }, 1000)
 }
 
+/**
+ * The feed the Activity view shows: the achievements the character earned most recently.
+ *
+ * It is read through `useAsyncData` so the answer the server fetched travels to the browser with
+ * the page - a deep link to `/activity` then paints its timeline on the first frame rather than
+ * after a second round trip - and so the shell can ask for it again when the Refresh button is
+ * pressed. It is fetched on demand (`immediate: false`): a visitor who never opens the feed pays
+ * for none of the lookups behind it, and `force` is the request that makes the endpoint read
+ * Blizzard again instead of answering from its two hours of cache (see `server/api/activity`).
+ */
+const activityForce = ref(false)
+
+const {
+  data: activity,
+  pending: activityPending,
+  error: activityError,
+  refresh: reloadActivity
+} = await useAsyncData<ActivityFeed | null>(
+  () => `activity:${region}:${realm}:${name}:${apiLocale.value}`,
+  () => $fetch<ActivityFeed>(
+    `/api/activity/${region}/${realm}/${name}?locale=${apiLocale.value}${activityForce.value ? '&force=true' : ''}`
+  ),
+  { immediate: false, default: () => null }
+)
+
+/** Reads the feed, leaving it alone when it is already on hand. `force` makes it re-read Blizzard. */
+async function loadActivity(force = false) {
+  if (!force && activity.value) return
+  activityForce.value = force
+  try {
+    await reloadActivity()
+  } finally {
+    activityForce.value = false
+  }
+}
+
+// Opened directly, the feed address carries its timeline in the first response, which is the half
+// of SEO that a feed of its own address exists for. A tab switch does not come through here - the
+// shell is reused - so the feed view asks for it itself when it mounts (see `.../activity.vue`).
+if (onActivityTab.value && character.value) {
+  await loadActivity()
+}
+
 async function refreshProfile() {
   if (!canRefresh.value) return
   refreshing.value = true
   try {
-    const fresh = await $fetch(
+    const fresh = await $fetch<CharacterData>(
       `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}&force=true`
     )
-    character.value = fresh as typeof character.value
+    character.value = fresh
     // The card is a picture of this profile, so the copy on hand is of an older one now.
     cardBlob.value = null
     await loadCardBlob(true)
+    // A feed the shell is holding is a reading of the same character, so the refresh reaches it
+    // too: `?force=true` is what makes the endpoint read Blizzard again (see `server/api/activity`).
+    if (activity.value) void loadActivity(true)
     showToast(t('profileRefreshed'))
   } catch {
     showToast(t('refreshFailed'))
@@ -424,6 +418,23 @@ async function refreshProfile() {
   }
 }
 
+/**
+ * What the shell hands to the views (see `app/composables/characterView.ts`). Provided here, where
+ * the character, the feed and the toast are owned, and injected by whichever view the address
+ * names - so neither view reads Blizzard for what the shell already holds.
+ */
+provideCharacterView({
+  region,
+  realm,
+  name,
+  apiLocale,
+  character,
+  activity,
+  activityPending,
+  activityError,
+  loadActivity,
+  toast
+})
 /** The rendered card, cached so the share sheet can open without waiting for it. */
 async function loadCardBlob(force = false): Promise<Blob | null> {
   if (!force && cardBlob.value) return cardBlob.value
@@ -566,7 +577,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative min-h-screen bg-wow-dark text-white overflow-hidden flex flex-col justify-between selection:bg-wow-gold selection:text-black">
+  <div class="relative min-h-screen bg-wow-dark text-white flex flex-col justify-between selection:bg-wow-gold selection:text-black">
     <div v-if="pending" class="flex-1 flex items-center justify-center">
       <div class="animate-spin rounded-full h-12 w-12 border-4 border-wow-gold border-t-transparent"></div>
     </div>
@@ -579,36 +590,32 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
-      <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
-        <div class="absolute w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-[120px]"></div>
-        <!-- Armoury class artwork -->
+      <!-- The background: the class artwork, fixed so it holds still while the page moves over it,
+           darkened the way the front page darkens its own - a flat scrim and a vignette - so the
+           two read as one site. `pointer-events-none` keeps it clear of every click on the page. -->
+      <div class="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        <div class="absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-500/5 blur-[120px]"></div>
         <img
           v-if="character.backgroundUrl"
           :src="character.backgroundUrl"
           alt=""
-          aria-hidden="true"
           class="absolute inset-0 h-full w-full object-cover saturate-[1.5] brightness-[1.45]"
         />
-        <!-- Blizzard's render is a 1600x1200 canvas with the model floating in
-             the middle, so the image is blown up and shifted until the feet sit
-             on the bottom edge of the window. -->
-        <div class="relative z-10 h-[78vh] max-h-[820px] w-[62vh] overflow-hidden">
-          <img
-            v-if="character.renderUrl"
-            :src="character.renderUrl"
-            :alt="character.name"
-            class="absolute left-1/2 top-0 h-[145%] max-w-none -translate-x-1/2 -translate-y-[13%] object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
-          />
-        </div>
-        <div class="absolute inset-0 bg-gradient-to-t from-wow-dark via-transparent to-wow-dark/40 z-10"></div>
+        <div class="absolute inset-0 bg-wow-dark/45"></div>
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(8,10,15,0.65)_100%)]"></div>
       </div>
 
-      <header class="relative z-30 container mx-auto px-4 pt-6">
-        <div class="rounded-xl border border-white/10 bg-white/[0.06] p-4 sm:p-6 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+      <!-- The header is pinned to the top of the window (`sticky`), so it stays over the views as
+           they scroll under it - which is why the panel keeps only its bottom corners rounded and
+           the page it sits on no longer hides its overflow (a clipping ancestor would have stopped
+           the bar from sticking at all). It sits above the tabs and the views (`z-40`) so they pass
+           behind the glass rather than over it. -->
+      <header class="sticky top-0 z-40 container mx-auto px-4">
+        <div class="hoa-panel rounded-t-none border-t-0 shadow-[0_10px_30px_rgba(0,0,0,0.35)] px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
-            <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a
-                 gold plate with the emblem cut from it, so it keeps its own frame and stays
-                 sharp at any size. -->
+            <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a gold
+                 plate with the emblem cut from it, so it keeps its own frame and stays sharp at any
+                 size. -->
             <NuxtLink
               :to="localeUrl('/')"
               aria-label="HeroOfAzeroth"
@@ -626,7 +633,7 @@ onBeforeUnmount(() => {
                   {{ character.title }}
                 </span>
               </div>
-              
+
               <p class="text-base sm:text-lg text-gray-400 mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <template v-for="(part, index) in metaParts" :key="index">
                   <CharacterName
@@ -642,10 +649,11 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- The Refresh button reads Blizzard again, and the card it redraws is the one the
-               download hands out. The download button has taken the place the summary figures
-               held, and their amber frame with it - the one warm accent the header has - with a
-               glow that answers the pointer. The share tray is the same control, so it travels
-               with the button and opens downwards, the header standing at the top of the page. -->
+               download hands out - the profile, the card and the feed all at once. The download
+               button has taken the place the summary figures held, and their amber frame with it -
+               the one warm accent the header has - with a glow that answers the pointer. The share
+               tray is the same control, so it travels with the button and opens downwards, the
+               header standing at the top of the page. -->
           <div class="flex w-full items-stretch gap-3 lg:w-auto">
             <button
               type="button"
@@ -711,7 +719,6 @@ onBeforeUnmount(() => {
                 <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-wow-gold/30 bg-wow-gold/10 text-[11px]">📤</span>
                 {{ $t('shareImage') }}
               </button>
-
               <div class="grid grid-cols-2 gap-1">
                 <a
                   v-for="network in socials"
@@ -752,80 +759,40 @@ onBeforeUnmount(() => {
             </div>
           </div>
           </div>
-
         </div>
       </header>
 
-      <main class="relative z-20 container mx-auto px-4 py-6 flex-1 flex flex-col justify-center">
-        <!-- The tile columns carry a 20% wider box than the original (100% - 45vw) / 2
-             rows, which is about 32% of the row here: a column of (100% - gap) / 2
-             with a 36% gap works out at 32%, and that lands within a percent of the
-             20%-wider width at every container size. The gap is a share of the
-             padded row rather than of the viewport on purpose: `container` stops
-             growing at a breakpoint while `vw` does not, so a viewport-based gap
-             keeps widening and squeezes the boxes on large screens. -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-[36%] items-center">
-          <div v-for="(column, columnIndex) in tileColumns" :key="columnIndex" class="space-y-4">
-            <div
-              v-for="tile in column"
-              :key="tile.key"
-              class="rounded-xl border border-white/10 bg-white/[0.06] p-3 sm:p-4 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] transition-colors hover:border-wow-gold/60 hover:bg-white/[0.09]"
-            >
-              <!-- Two columns of two rows. The first row carries the glyph, the label
-                   and the big number, which share one line so their centres line up.
-                   The second row carries the scope of the number and the `total / %`,
-                   written in the same style so the two read as one line. The glyph is
-                   1.5x the 1.15em it used to be (1.725em, so it scales with the label
-                   at both breakpoints) and sits in a square box, which is the 1:1
-                   `viewBox` every icon file is drawn on, so nothing is stretched. -->
-              <div class="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-2">
-                <span class="flex min-w-0 items-center gap-2.5 text-base font-bold uppercase tracking-wider text-gray-200 sm:text-lg">
-                  <AppIcon :name="tile.icon" class="h-[1.725em] w-[1.725em] shrink-0" />
-                  <span class="truncate text-[22px]">{{ tile.label }}</span>
-                </span>
-                <span class="text-2xl sm:text-3xl font-extrabold whitespace-nowrap text-right" :class="tile.color">{{ tile.display }}</span>
-                <!-- Under the first row: whose numbers the tile shows, and how much of
-                     everything there is to collect they cover. -->
-                <span class="truncate text-[12px] uppercase px-10 font-semibold text-gray-400">{{ tile.note }}</span>
-                <span class="whitespace-nowrap text-right text-[12px] font-semibold text-gray-400 tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
-              </div>
-              <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/5">
-                <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" :style="{ width: tile.percent + '%' }"></div>
-              </div>
-            </div>
-          </div>
+      <!-- The page's own navigation: the profile it opens on, and the feed of what the character
+           has done lately. A tab is a link, so the browser keeps every view in its history, a
+           shared link can point at one, and a crawler reaches each on its own address. -->
+      <nav class="relative z-30 container mx-auto px-4 pt-4" :aria-label="character.name">
+        <div class="flex flex-wrap gap-2">
+          <NuxtLink
+            :to="localeUrl(overviewPath)"
+            class="hoa-tab"
+            :class="{ 'hoa-tab-active': !onActivityTab }"
+            :aria-current="onActivityTab ? undefined : 'page'"
+          >
+            {{ $t('tabOverview') }}
+          </NuxtLink>
+          <NuxtLink
+            :to="localeUrl(activityPath)"
+            class="hoa-tab"
+            :class="{ 'hoa-tab-active': onActivityTab }"
+            :aria-current="onActivityTab ? 'page' : undefined"
+          >
+            {{ $t('tabActivity') }}
+          </NuxtLink>
         </div>
-      </main>
+      </nav>
 
-      <!-- The summary figures sit centred under the tiles, where the download button used to
-           stand. Only from `lg` up does the two-column grid leave the middle of the row free,
-           so that is where the negative top margin may pull the block up towards the model;
-           while the tiles are still stacked in one column (phones and tablets) it keeps an
-           ordinary gap so it never rests on the last box. -->
-      <div class="relative z-30 container mx-auto px-4 mt-6 sm:mt-8 lg:-mt-8 pb-6 flex flex-col items-center gap-2">
-        <!-- The summary figures have taken the place the download button held, and with it the
-             glass the tiles above are cut from: the same frame, the same blur and the same lift
-             under the pointer, so the row reads as one more block of statistics. -->
-        <div class="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)] transition-colors hover:border-wow-gold/60 hover:bg-white/[0.09] sm:gap-6 sm:px-5 sm:py-3 lg:w-auto">
-          <div class="text-center">
-            <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('itemLevel') }}</span>
-            <span class="text-2xl sm:text-3xl font-bold text-white inline-flex items-center justify-center gap-2">
-              <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
-              {{ character.ilvl }}
-            </span>
-          </div>
-          <div class="h-8 w-[1px] bg-white/15"></div>
-          <div class="text-center">
-            <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('mPlus') }}</span>
-            <span class="text-2xl sm:text-3xl font-bold inline-flex items-center justify-center gap-2" :class="mPlusColor">
-              <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
-              {{ character.mPlusScore }}
-            </span>
-          </div>
-        </div>
+      <!-- One toast for the shell, because the Refresh button that raises it lives here and both
+           views offer a moment to read it. -->
+      <p v-if="toast" class="relative z-30 container mx-auto px-4 pt-3 text-xs font-medium text-wow-goldLight">{{ toast }}</p>
 
-        <p v-if="toast" class="text-xs font-medium text-wow-goldLight">{{ toast }}</p>
-      </div>
+      <!-- The view the address names. It is rendered inside the shell, so the header, the tabs and
+           the Refresh button above it are never rebuilt by a switch between the two. -->
+      <NuxtPage />
 
       <footer class="relative z-20 container mx-auto px-4 pb-6 flex flex-col items-center gap-1.5 text-xs text-gray-500">
         <AppIcon name="hoa-logotype" alt="HeroOfAzeroth" class="h-7 w-auto" />
