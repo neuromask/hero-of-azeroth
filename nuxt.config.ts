@@ -104,6 +104,16 @@ export default defineNuxtConfig({
    * the `server/` directory.
    */
   nitro: {
-    serverAssets: [{ baseName: 'icons', dir: '../app/assets/icons' }]
+    serverAssets: [{ baseName: 'icons', dir: '../app/assets/icons' }],
+    /**
+     * Where the characters the site has rendered are kept, which is what the sitemap is
+     * built from (see `server/utils/characterIndex.ts`). An `fsLite` mount writes each key
+     * as a file under `base`, and the list is written under the key `characters.json`, so
+     * it lands in `server/data/characters.json` beside the source: one document, read by
+     * the sitemap and rewritten whenever a character is seen for the first time.
+     */
+    storage: {
+      characters: { driver: 'fsLite', base: './server/data' }
+    }
   }
 })

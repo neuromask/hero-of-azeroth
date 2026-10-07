@@ -16,8 +16,20 @@ const CARD_HEIGHT = 630
 interface PageSeoOptions {
   /** What the page is called on its own; the brand is appended to it. */
   title: MaybeRefOrGetter<string>
+  /**
+   * How a page's own title becomes the document's. The brand is appended by default; a page
+   * whose title already reads whole - the character page, which ends in the brand itself -
+   * passes its own, so the two are never composed into a title that names the brand twice.
+   */
+  titleTemplate?: (title: string) => string
   /** One sentence for a search result and for a link preview. */
   description: MaybeRefOrGetter<string>
+  /**
+   * The sentence a link preview wears, where it differs from a search result's: the character
+   * page prints its statistics as a row of figures behind glyphs, which is what a chat window
+   * shows, while a search result wants the same facts spelled out. Falls back to `description`.
+   */
+  ogDescription?: MaybeRefOrGetter<string>
   /** Preview image, either absolute or relative to the site root. */
   image?: MaybeRefOrGetter<string | undefined>
   /** Overrides the default "title · brand" caption of the preview image. */
@@ -60,6 +72,17 @@ export function usePageSeo(options: PageSeoOptions) {
 
   const canonical = computed(() => urlFor(lang.value))
 
+  /**
+   * The title as the document and the previews carry it: the page names itself and the template
+   * appends the brand. `og:title` is that same string, because a preview missing its brand reads
+   * as a link from nowhere.
+   */
+  const titleTemplate = options.titleTemplate || ((title: string) => `${title} · ${SITE_NAME}`)
+  const fullTitle = computed(() => titleTemplate(toValue(options.title)))
+
+  /** The sentence a preview carries, which is the search one unless a page says otherwise. */
+  const shareDescription = computed(() => toValue(options.ogDescription ?? options.description))
+
   const image = computed(() => {
     const value = options.image ? toValue(options.image) : ''
     return value ? new URL(value, siteUrl).href : undefined
@@ -71,7 +94,7 @@ export function usePageSeo(options: PageSeoOptions) {
   useSeoMeta({
     title: () => toValue(options.title),
     // The brand is part of every title, so a page only names itself.
-    titleTemplate: (title) => `${title} · ${SITE_NAME}`,
+    titleTemplate,
     description: () => toValue(options.description),
     // `max-image-preview:large` is what lets a search result show the card instead
     // of a thumbnail of it.
@@ -80,8 +103,8 @@ export function usePageSeo(options: PageSeoOptions) {
         ? 'noindex, nofollow'
         : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
 
-    ogTitle: () => toValue(options.title),
-    ogDescription: () => toValue(options.description),
+    ogTitle: () => fullTitle.value,
+    ogDescription: () => shareDescription.value,
     ogType: options.ogType || 'website',
     ogUrl: () => canonical.value,
     ogSiteName: SITE_NAME,
@@ -101,8 +124,8 @@ export function usePageSeo(options: PageSeoOptions) {
         : undefined,
 
     twitterCard: () => (hasImage.value ? 'summary_large_image' : 'summary'),
-    twitterTitle: () => toValue(options.title),
-    twitterDescription: () => toValue(options.description),
+    twitterTitle: () => fullTitle.value,
+    twitterDescription: () => shareDescription.value,
     twitterImage: () => image.value
   })
 

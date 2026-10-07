@@ -40,5 +40,8 @@
   "renderingCard": "Rendering the card...",
   "backToSearch": "Back to search",
   "homeTitle": "WoW character cards: mounts, pets and M+ score",
-  "homeDescription": "Look up any World of Warcraft character on EU and US realms: item level, M+ score, achievements, mounts, pets, toys, decor and reputations, and share it as an image card."
+  "homeDescription": "Look up any World of Warcraft character on EU and US realms: item level, M+ score, achievements, mounts, pets, toys, decor and reputations, and share it as an image card.",
+  "seoPets": "Pets",
+  "seoItemLevel": "iLvl",
+  "seoCharacterSuffix": "WoW character card and stats."
 }

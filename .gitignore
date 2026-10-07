@@ -6,6 +6,9 @@
 .cache
 dist
 
+# Runtime data written by the server (the characters the sitemap is built from)
+server/data
+
 # Node dependencies
 node_modules
 

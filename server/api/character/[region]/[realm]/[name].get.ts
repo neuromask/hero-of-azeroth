@@ -9,7 +9,12 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await getCharacter(realm, name, region, locale)
+    const character = await getCharacter(realm, name, region, locale)
+    // A lookup that came back with a character is the one moment the site learns a page
+    // exists, so it is written down for the sitemap before the answer is returned (see
+    // `server/utils/characterIndex.ts`).
+    await rememberCharacter({ region, realm, name })
+    return character
   } catch (err: any) {
     if (err.statusCode) throw err
     throw createError({

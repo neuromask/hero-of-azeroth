@@ -74,6 +74,66 @@ const headline = computed(() => {
   return c.class ? `${c.name} - ${c.class}` : c.name
 })
 
+/** The region as the title spells it: the bare code, uppercased. */
+const regionCode = computed(() => region.toUpperCase())
+
+/** How the character is named inside a sentence: its class and its realm, in the page's language. */
+const seoName = computed(() => {
+  const c = character.value
+  if (!c) return ''
+  return [c.class, c.realm].filter(Boolean).join(', ')
+})
+
+/** The class and the realm as a link preview names them: `Рыцарь смерти (Tarren Mill)`. */
+const seoOgWho = computed(() => {
+  const c = character.value
+  if (!c) return ''
+  return c.class && c.realm ? `${c.class} (${c.realm})` : c.class || c.realm
+})
+
+/**
+ * The character's own sentence, in the two forms the page is described with.
+ *
+ * A search result wants the plain facts spelled out - the name, the class, the realm, then the
+ * collections a player reads first - while a link preview is read in a chat window, where the
+ * same figures stand out as a row behind a glyph. Both are built from one set of numbers and
+ * the same labels, so they can never disagree about a character.
+ */
+const seoTitle = computed(() => {
+  const c = character.value
+  if (!c) return name
+  return seoName.value ? `${c.name} - ${seoName.value} (${regionCode.value})` : `${c.name} (${regionCode.value})`
+})
+
+const seoDescription = computed(() => {
+  const c = character.value
+  if (!c) return ''
+  return [
+    seoName.value ? `${c.name} (${seoName.value})` : c.name,
+    `${t('achievements')}: ${c.ap}`,
+    `${t('mounts')}: ${c.stats.mounts.count}`,
+    `${t('seoPets')}: ${c.stats.pets.count}`,
+    `${t('toys')}: ${c.stats.toys.count}`,
+    `${t('seoItemLevel')}: ${c.ilvl}`,
+    t('seoCharacterSuffix')
+  ].join(' · ')
+})
+
+const seoOgDescription = computed(() => {
+  const c = character.value
+  if (!c) return ''
+  return [
+    `⚔️ ${seoOgWho.value || c.name}`,
+    `🏆 ${c.ap}`,
+    `🛡️ ilvl ${c.ilvl}`,
+    `🔑 M+ ${c.mPlusScore}`,
+    `🐎 ${t('mounts')} ${c.stats.mounts.count}`,
+    `🐾 ${t('seoPets')} ${c.stats.pets.count}`,
+    `🧸 ${t('toys')} ${c.stats.toys.count}`,
+    t('seoCharacterSuffix')
+  ].join(' · ')
+})
+
 const requestURL = useRequestURL()
 const shareUrl = computed(() => new URL(route.fullPath, requestURL.origin).href)
 
@@ -112,8 +172,12 @@ if (error.value) {
  * canonical URL, the hreflang links, the brand – lives in `usePageSeo`.
  */
 usePageSeo({
-  title: () => headline.value,
-  description: () => descriptor.value,
+  title: () => seoTitle.value,
+  // The title already ends in the brand, so it is written whole rather than templated again.
+  titleTemplate: (title) => `${title} - Hero of Azeroth`,
+  description: () => seoDescription.value,
+  // A chat window shows the figures; a search result shows the plain facts.
+  ogDescription: () => seoOgDescription.value,
   image: () => ogImage.value,
   // The card is served as a JPEG (it carries the artwork's photographs), so the head has to
   // say so: the tag describes the file the crawler is about to fetch.
