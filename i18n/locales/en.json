@@ -7,6 +7,8 @@
   "pickRealm": "Pick a realm from the list",
   "characterName": "Character Name",
   "characterNamePlaceholder": "Enter character name",
+  "searchHistory": "Search history",
+  "removeFromHistory": "Remove from history",
   "find": "Inspect",
   "achievements": "Achievements",
   "itemLevel": "Item Level",

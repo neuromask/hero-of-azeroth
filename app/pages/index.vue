@@ -22,6 +22,9 @@ import bg03 from '~/assets/img/bg-03.webp'
 import bg04 from '~/assets/img/bg-04.webp'
 import bg05 from '~/assets/img/bg-05.webp'
 import bg06 from '~/assets/img/bg-06.webp'
+// The characters searched before live in `localStorage`; the composable owns the shape and the
+// bounds, and the page only reads the list and drops a row.
+import { useSearchHistory, searchHistoryKey, type SearchHistoryEntry } from '~/composables/searchHistory'
 
 const backgrounds = [bg01, bg02, bg03, bg04, bg05, bg06]
 
@@ -75,23 +78,23 @@ const activeIndex = ref(-1)
 const rootEl = ref<HTMLElement | null>(null)
 const realmInput = ref<HTMLInputElement | null>(null)
 const nameInput = ref<HTMLInputElement | null>(null)
+/** Whether the history list under the name field is open, and the field it hangs from. */
+const nameOpen = ref(false)
+const nameRootEl = ref<HTMLElement | null>(null)
 
 /**
- * The names looked up earlier in this session, offered under the name field. A flat
- * list rather than one per realm: it is a hint of what was typed, and the browser's
- * own filter over it is what narrows it down.
+ * The names and realms looked up before, read from `localStorage` on mount and offered under
+ * the name field (see `app/composables/searchHistory.ts`). The list is written by the character
+ * page once a search has actually found somebody, so it records successes rather than tries.
  */
-const nameSuggestions = ref<string[]>([])
+const { history, load: loadHistory, forget } = useSearchHistory()
 
 /**
- * What the page remembers for the length of a visit: the realm that was picked and
- * the names that were looked up in it. `sessionStorage` rather than a cookie or
- * `localStorage` - nothing here has to reach the server, and a session is exactly as
- * long as the visit.
+ * What the page remembers for the length of a visit: the realm that was last picked. A session
+ * rather than a cookie or `localStorage` - the character list is the thing worth keeping across
+ * visits (see `useSearchHistory`), and this only keeps the realm field filled in meanwhile.
  */
 const SESSION_REALM = 'hoa:realm'
-const SESSION_NAMES = 'hoa:names'
-const MAX_SUGGESTIONS = 8
 
 /**
  * A browser can refuse storage outright (a private window, site data blocked), and
@@ -252,18 +255,67 @@ const onEnter = () => {
 }
 
 /**
- * Remembers a search that is about to be followed: the name joins the suggestions and
- * the realm is written on its own, so the next visit to this page comes back with the
- * form already filled in.
+ * The realm a search is about to run on is remembered for the visit, so a return to this page
+ * comes back with it filled in. The character itself is kept by the page that finds it (see
+ * `useSearchHistory`), which is what makes the list a record of successes rather than of tries.
  */
-const rememberSearch = (realm: RealmOption, character: string) => {
-  nameSuggestions.value = [
-    character,
-    ...nameSuggestions.value.filter((entry) => entry !== character)
-  ].slice(0, MAX_SUGGESTIONS)
+const rememberRealm = (realm: RealmOption) => {
+  writeSession(SESSION_REALM, realm.slug)
+}
+
+/**
+ * The realm name a history row shows: the realm list's own name for the slug, which follows the
+ * language, falling back to the name the entry was written with before the list arrives.
+ */
+const historyRealmName = (entry: SearchHistoryEntry) => {
+  const known = (realms.value || []).find((realm) => realm.slug === entry.realm && realm.region === entry.region)
+  return known?.name || entry.realmName
+}
+
+/**
+ * The history narrowed by what is being typed - matched on the character, the realm name and the
+ * slug alike, the same way the realm list narrows. An empty field shows the whole list, which is
+ * what makes focusing the field the way back to it.
+ */
+const historyMatches = computed<SearchHistoryEntry[]>(() => {
+  const query = name.value.trim().toLowerCase()
+  if (!query) return history.value
+
+  return history.value.filter((entry) =>
+    entry.name.toLowerCase().includes(query) ||
+    historyRealmName(entry).toLowerCase().includes(query) ||
+    entry.realm.includes(query)
+  )
+})
+
+/** Opens the list on focus or on typing, but only when there is something to show. */
+const openName = () => {
+  if (history.value.length) nameOpen.value = true
+}
+
+/**
+ * Picks a row: the name fills the field and the realm goes into the realm field, so the button
+ * that follows can be pressed right away. A realm the list no longer holds - renamed since - is
+ * still filled in from what the entry kept, so the search can go ahead.
+ */
+const selectHistory = (entry: SearchHistoryEntry) => {
+  name.value = entry.name
+
+  const known = (realms.value || []).find((realm) => realm.slug === entry.realm && realm.region === entry.region)
+  const realm: RealmOption = known || { slug: entry.realm, name: entry.realmName, region: entry.region }
+  selectedRealm.value = realm
+  realmQuery.value = realm.name
+  realmError.value = false
 
   writeSession(SESSION_REALM, realm.slug)
-  writeSession(SESSION_NAMES, JSON.stringify(nameSuggestions.value))
+  open.value = false
+  nameOpen.value = false
+}
+
+/** Drops one row from the list, and closes it once the last one has gone. */
+const removeHistory = (entry: SearchHistoryEntry) => {
+  forget(entry)
+  if (!history.value.length) nameOpen.value = false
 }
 
 /**
@@ -278,19 +330,6 @@ const restoreSession = () => {
   if (realm) {
     selectedRealm.value = realm
     realmQuery.value = realm.name
-  }
-
-  const stored = readSession(SESSION_NAMES)
-  if (!stored) return
-
-  try {
-    const names: unknown = JSON.parse(stored)
-    if (Array.isArray(names)) {
-      nameSuggestions.value = names.filter((entry): entry is string => typeof entry === 'string')
-    }
-  } catch {
-    // A value that is not the array this wrote - an older shape, a hand edit - is
-    // ignored rather than breaking the form.
   }
 }
 
@@ -308,19 +347,22 @@ const handleSearch = () => {
   if (!character) return
 
   // Recorded before the navigation, which leaves this page behind.
-  rememberSearch(realm, character)
+  rememberRealm(realm)
 
   router.push(localePath(locale.value, `/${regionPath(realm.region)}/${realm.slug}/${character}`))
 }
 
 const onDocumentClick = (event: MouseEvent) => {
-  if (!rootEl.value?.contains(event.target as Node)) open.value = false
+  const target = event.target as Node
+  if (!rootEl.value?.contains(target)) open.value = false
+  if (!nameRootEl.value?.contains(target)) nameOpen.value = false
 }
 
 onMounted(() => {
   // Only in the browser: the server has no session to read, and filling the fields
   // after hydration keeps the rendered page the same for everyone.
   restoreSession()
+  loadHistory()
   document.addEventListener('mousedown', onDocumentClick)
   // Likewise, the rotation only exists here: a server render has no timer, and the first
   // picture is already the one the markup was drawn with.
@@ -440,23 +482,50 @@ onBeforeUnmount(() => {
           <p v-if="realmError" class="mt-1 text-xs text-red-400">{{ $t('pickRealm') }}</p>
         </div>
 
-        <div>
+        <div ref="nameRootEl" class="relative">
           <input
             ref="nameInput"
             v-model="name"
             type="text"
-            list="character-names"
+            autocomplete="off"
+            spellcheck="false"
             :placeholder="$t('characterNamePlaceholder')"
             required
             class="w-full bg-black/60 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
+            @focus="openName"
+            @input="openName"
+            @keydown.esc="nameOpen = false"
           />
-          <!-- The names looked up earlier in the session, offered by the browser's own
-               suggestion list. `datalist` keeps this to one attribute and one element:
-               the browser draws and filters the list, and a name that is not in it can
-               still be typed. -->
-          <datalist id="character-names">
-            <option v-for="character in nameSuggestions" :key="character" :value="character" />
-          </datalist>
+          <!-- The characters searched before, a row each. The list is cut from the same glass the
+               realm dropdown is, and it opens on focus or on typing when there is something to
+               show; a row fills the name and the realm both. The cross on the right drops one
+               character without picking it, and appears under the pointer. -->
+          <div
+            v-if="nameOpen && historyMatches.length"
+            class="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
+          >
+            <p class="sticky top-0 bg-black/70 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-white/5 backdrop-blur-xl">
+              {{ $t('searchHistory') }}
+            </p>
+            <div v-for="entry in historyMatches" :key="searchHistoryKey(entry)" class="group relative">
+              <button
+                type="button"
+                class="w-full text-left px-4 py-2 pr-10 text-sm transition-colors text-gray-200 hover:bg-white/5"
+                @click="selectHistory(entry)"
+              >
+                <span>{{ entry.name }}</span>
+                <span class="text-gray-500"> - </span>
+                <span class="text-gray-300">{{ historyRealmName(entry) }}</span>
+              </button>
+              <button
+                type="button"
+                class="absolute right-2 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-xs leading-none text-gray-500 opacity-0 transition-colors hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 focus-visible:opacity-100"
+                :aria-label="$t('removeFromHistory')"
+                :title="$t('removeFromHistory')"
+                @click.stop="removeHistory(entry)"
+              >&#10005;</button>
+            </div>
+          </div>
         </div>
 
         <button 

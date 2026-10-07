@@ -7,6 +7,8 @@
   "pickRealm": "Выберите мир из списка",
   "characterName": "Имя персонажа",
   "characterNamePlaceholder": "Введите имя персонажа",
+  "searchHistory": "История поиска",
+  "removeFromHistory": "Удалить из истории",
   "find": "Осмотреть",
   "achievements": "Достижения",
   "itemLevel": "Уровень предметов",

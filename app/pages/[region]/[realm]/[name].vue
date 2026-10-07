@@ -3,6 +3,9 @@
 // card, which draws the same tiers into its own SVG: one table, so a page and its card can never
 // disagree.
 import { collectionPercent, mPlusQualityTextClass, wowQualityTextClass } from '#shared/utils/wow-quality'
+// The search history the front page offers: a character that rendered here is a search that
+// worked, and that is what is worth keeping (see the composable for the shape and the limit).
+import { useSearchHistory } from '~/composables/searchHistory'
 // The Russian copy of this page is the same component under `/ru`; the middleware reads
 // the language off whichever of the two addresses was asked for.
 definePageMeta({ alias: '/ru/:region/:realm/:name' })
@@ -26,6 +29,21 @@ const apiLocale = computed(() => (locale.value === 'ru' ? 'ru_RU' : 'en_US'))
 const { data: character, pending, error } = await useFetch(
   () => `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}`
 )
+
+/**
+ * A page that rendered a character is the proof a search was successful, and that is the moment
+ * worth keeping: the name, the realm and the region go into the search history the front page
+ * offers under its name field. A miss leaves `character` empty and remembers nothing, so a
+ * mistyped name never reaches the list, and a shared link that lands on a real character counts
+ * as the success it is.
+ */
+const { remember: rememberCharacter } = useSearchHistory()
+
+watch(character, (loaded) => {
+  // `localStorage` exists in the browser alone, and the server has no history to write to.
+  if (!import.meta.client || !loaded) return
+  rememberCharacter({ name: loaded.name, realm, region, realmName: loaded.realm })
+}, { immediate: true })
 
 const descriptor = computed(() => {
   const c = character.value
