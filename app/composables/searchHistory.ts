@@ -23,6 +23,14 @@ export interface SearchHistoryEntry {
    * the realm list has loaded; the list's own name wins once it is there.
    */
   realmName: string
+  /**
+   * The class the character was when the entry was written, so the front page can tint the
+   * remembered name with its signature colour (see `#shared/utils/wow-class`). Blizzard's id
+   * is the durable half and the Armoury slug is the readable one; both are optional, because a
+   * row written before either was kept resolves to the brand gold instead of to no colour.
+   */
+  classId?: number
+  class?: string
 }
 
 /** Where the list is kept, and how many characters it holds. */
@@ -43,11 +51,16 @@ function toEntry(value: unknown): SearchHistoryEntry | null {
   const region = entry.region === 'us' ? 'us' : entry.region === 'eu' ? 'eu' : null
   if (!region) return null
 
+  const classId = typeof entry.classId === 'number' && entry.classId > 0 ? entry.classId : undefined
+  const classSlug = typeof entry.class === 'string' && entry.class ? entry.class : undefined
+
   return {
     name: entry.name,
     realm: entry.realm,
     region,
-    realmName: typeof entry.realmName === 'string' && entry.realmName ? entry.realmName : entry.realm
+    realmName: typeof entry.realmName === 'string' && entry.realmName ? entry.realmName : entry.realm,
+    classId,
+    class: classSlug
   }
 }
 

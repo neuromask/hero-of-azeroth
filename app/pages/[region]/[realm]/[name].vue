@@ -3,6 +3,9 @@
 // card, which draws the same tiers into its own SVG: one table, so a page and its card can never
 // disagree.
 import { collectionPercent, mPlusQualityTextClass, wowQualityTextClass } from '#shared/utils/wow-quality'
+// The class colour a name is printed in comes from the same table the card draws from, so the
+// page and its card agree (see `#shared/utils/wow-class`).
+import { resolveClass } from '#shared/utils/wow-class'
 // The search history the front page offers: a character that rendered here is a search that
 // worked, and that is what is worth keeping (see the composable for the shape and the limit).
 import { useSearchHistory } from '~/composables/searchHistory'
@@ -42,7 +45,16 @@ const { remember: rememberCharacter } = useSearchHistory()
 watch(character, (loaded) => {
   // `localStorage` exists in the browser alone, and the server has no history to write to.
   if (!import.meta.client || !loaded) return
-  rememberCharacter({ name: loaded.name, realm, region, realmName: loaded.realm })
+  rememberCharacter({
+    name: loaded.name,
+    realm,
+    region,
+    realmName: loaded.realm,
+    // The class rides along so the front page can tint the remembered name with it; the id is
+    // the same in either language, which is what the row is coloured by.
+    classId: loaded.classId,
+    class: resolveClass(loaded)?.slug
+  })
 }, { immediate: true })
 
 const descriptor = computed(() => {
@@ -132,24 +144,7 @@ usePageSeo({
   }
 })
 
-const getClassColor = (className: string) => {
-  const colors: Record<string, string> = {
-    'Rogue': '#FFF468', 'Разбойник': '#FFF468',
-    'Mage': '#3FC7EB', 'Маг': '#3FC7EB',
-    'Paladin': '#F48CBA', 'Паладин': '#F48CBA',
-    'Warrior': '#C69B6D', 'Воин': '#C69B6D',
-    'Warlock': '#8788EE', 'Чернокнижник': '#8788EE',
-    'Priest': '#FFFFFF', 'Жрец': '#FFFFFF',
-    'Hunter': '#AAD372', 'Охотник': '#AAD372',
-    'Druid': '#FF7D0A', 'Друид': '#FF7D0A',
-    'Shaman': '#0070DD', 'Шаман': '#0070DD',
-    'Monk': '#00FF98', 'Монах': '#00FF98',
-    'Demon Hunter': '#A330C9', 'Охотник на демонов': '#A330C9',
-    'Death Knight': '#C41E3A', 'Рыцарь смерти': '#C41E3A',
-    'Evoker': '#33937F', 'Пробудитель': '#33937F'
-  }
-  return colors[className] || '#f8b700'
-}
+/** Class colours are shared with the card and the history (see `#shared/utils/wow-class`). */
 
 /** Formats counts the same way on the server and in the browser. */
 const formatCount = (value: number) => value.toLocaleString('en-US')
@@ -227,9 +222,10 @@ const tileColumns = computed<StatTile[][]>(() => {
  */
 interface MetaPart {
   text: string
-  /** Class colour, which also makes the part bold the way the game prints it. */
-  color?: string
+  /** The plate the part wears: the amber of the meta line, or the class plate. */
   className?: string
+  /** The spec-and-class part, which prints in the class's own colour (see `<CharacterName>`). */
+  isClass?: boolean
 }
 
 const metaParts = computed<MetaPart[]>(() => {
@@ -238,9 +234,6 @@ const metaParts = computed<MetaPart[]>(() => {
 
   // Общий стиль для янтарных баблов
   const amberBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-amber-950/20 text-xs font-medium text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)] backdrop-blur-sm'
-  
-  // Стиль для плашки класса (без удержания цвета текста, цвет придет через color)
-  const classBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-slate-950/40 text-xs font-semibold backdrop-blur-sm'
 
   return [
     // 1. Уровень
@@ -253,11 +246,11 @@ const metaParts = computed<MetaPart[]>(() => {
       text: c.race, 
       className: amberBadge 
     },
-    // 3. Спек + Класс (родной желтый Rogue через color)
+    // 3. Spec and class, printed in its signature colour (see <CharacterName>).
     { 
       text: `${c.spec} ${c.class}`.trim(), 
-      color: getClassColor(c.class), 
-      className: classBadge 
+      // Colour and plate come from <CharacterName>, shared with the rest of the app. 
+      isClass: true 
     },
     // 4. Гильдия (отдельный бабл)
     { 
@@ -523,10 +516,13 @@ onBeforeUnmount(() => {
               
               <p class="text-base sm:text-lg text-gray-400 mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <template v-for="(part, index) in metaParts" :key="index">
-                  <span
-                    :class="[part.className, part.color ? 'font-semibold' : '']"
-                    :style="part.color ? { color: part.color } : undefined"
-                  >{{ part.text }}</span>
+                  <CharacterName
+                    v-if="part.isClass"
+                    variant="badge"
+                    :class-id="character.classId"
+                    :class-name="character.class"
+                  >{{ part.text }}</CharacterName>
+                  <span v-else :class="part.className">{{ part.text }}</span>
                 </template>
               </p>
             </div>

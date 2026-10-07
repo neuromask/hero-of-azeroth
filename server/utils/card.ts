@@ -1,6 +1,9 @@
 import { Resvg } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
 import { mPlusQualityHex, wowQualityHex } from '#shared/utils/wow-quality'
+// The class colours are shared with the page and the search history, so a card, a page and a
+// remembered name all read one table (see `shared/utils/wow-class.ts`).
+import { classColorHex } from '#shared/utils/wow-class'
 import type { CharacterData, CharacterStat } from './blizzard'
 import { pngAlphaBandBounds, pngAlphaBounds } from './png'
 import type { PngBand, PngBounds } from './png'
@@ -48,21 +51,7 @@ const SOURCE_HEIGHT = 1200
  */
 const DEFAULT_RENDER_BOX = { x: 560, y: 190, w: 480, h: 830 }
 
-const CLASS_COLORS: Record<string, string> = {
-  'Rogue': '#FFF468', 'Разбойник': '#FFF468',
-  'Mage': '#3FC7EB', 'Маг': '#3FC7EB',
-  'Paladin': '#F48CBA', 'Паладин': '#F48CBA',
-  'Warrior': '#C69B6D', 'Воин': '#C69B6D',
-  'Warlock': '#8788EE', 'Чернокнижник': '#8788EE',
-  'Priest': '#FFFFFF', 'Жрец': '#FFFFFF',
-  'Hunter': '#AAD372', 'Охотник': '#AAD372',
-  'Druid': '#FF7D0A', 'Друид': '#FF7D0A',
-  'Shaman': '#0070DD', 'Шаман': '#0070DD',
-  'Monk': '#00FF98', 'Монах': '#00FF98',
-  'Demon Hunter': '#A330C9', 'Охотник на демонов': '#A330C9',
-  'Death Knight': '#C41E3A', 'Рыцарь смерти': '#C41E3A',
-  'Evoker': '#33937F', 'Пробудитель': '#33937F'
-}
+/** Class colours live in `#shared/utils/wow-class`, shared with the page and the history. */
 
 const LABELS: Record<string, Record<string, string>> = {
   ru_RU: {
@@ -793,7 +782,7 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
   await loadIcons()
 
   const L = LABELS[locale] || LABELS.ru_RU!
-  const classColor = CLASS_COLORS[data.class] || '#f8b700'
+  const classColor = classColorHex({ classId: data.classId, class: data.class })
 
   const [backgroundEl, renderEl] = await Promise.all([
     loadBackground(data.backgroundUrl),

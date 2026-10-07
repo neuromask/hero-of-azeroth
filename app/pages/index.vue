@@ -32,6 +32,12 @@ const backgrounds = [bg01, bg02, bg03, bg04, bg05, bg06]
 const SLIDER_INTERVAL = 6000
 
 /**
+ * How long each status is held on the button while a search is in flight: long enough to be
+ * read, short enough that a slow realm still reaches the second line before the card lands.
+ */
+const SEARCH_STATUS_INTERVAL = 1600
+
+/**
  * Which picture is showing, and the id of the timer that walks through them. The server
  * renders the first one and the browser starts on that same index, so hydration sees the
  * markup it was given; the timer is only started in `onMounted`, so no rotation runs during
@@ -362,7 +368,37 @@ const restoreSession = () => {
   }
 }
 
-const handleSearch = () => {
+/**
+ * What the button reads while a search is in flight. The address being pushed renders a
+ * character, and that page asks Blizzard for it before it can draw: the navigation is held on
+ * that fetch, so this page - and its button - stays on screen for as long as the request takes.
+ * Two statuses take turns there, so a slow realm reads as progress rather than as a hang.
+ */
+const searching = ref(false)
+const searchStatusIndex = ref(0)
+const searchStatus = computed(() => {
+  const statuses = [t('searchingRealm'), t('renderingCard')]
+  return statuses[searchStatusIndex.value % statuses.length] || ''
+})
+let searchStatusTimer: number | null = null
+
+const startSearchStatus = () => {
+  searchStatusIndex.value = 0
+  searchStatusTimer = window.setInterval(() => {
+    searchStatusIndex.value += 1
+  }, SEARCH_STATUS_INTERVAL)
+}
+
+const stopSearchStatus = () => {
+  if (searchStatusTimer !== null) {
+    window.clearInterval(searchStatusTimer)
+    searchStatusTimer = null
+  }
+}
+
+const handleSearch = async () => {
+  if (searching.value) return
+
   const realm = resolvedRealm.value || (matches.value.length === 1 ? matches.value[0]! : null)
   if (!realm) {
     // Without a realm we cannot tell whether the character is on EU or US.
@@ -378,7 +414,19 @@ const handleSearch = () => {
   // Recorded before the navigation, which leaves this page behind.
   rememberRealm(realm)
 
-  router.push(localePath(locale.value, `/${regionPath(realm.region)}/${realm.slug}/${character}`))
+  // The button turns into the progress indicator for as long as the character page is fetching
+  // from Blizzard. That page only paints once it has its character, and until it does the form is
+  // still on screen - so the wait is shown here, and it is the page unmounting that ends it (see
+  // `onBeforeUnmount`) rather than the address changing, which happens before the character does.
+  searching.value = true
+  startSearchStatus()
+  try {
+    await router.push(localePath(locale.value, `/${regionPath(realm.region)}/${realm.slug}/${character}`))
+  } catch {
+    // The navigation never left - a guard turned it away, say - so the form goes back to normal.
+    stopSearchStatus()
+    searching.value = false
+  }
 }
 
 const onDocumentClick = (event: MouseEvent) => {
@@ -400,6 +448,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocumentClick)
   if (backgroundTimer !== null) window.clearInterval(backgroundTimer)
+  stopSearchStatus()
 })
 </script>
 
@@ -505,7 +554,11 @@ onBeforeUnmount(() => {
                 :class="nameActiveIndex === i ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
                 @click="selectHistory(entry)"
               >
-                <span v-for="(part, k) in highlightName(entry.name)" :key="k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
+                <!-- The remembered name wears the colour of the class it was found with; a
+                     match under the pointer keeps the gold the search marks it with. -->
+                <CharacterName :class-id="entry.classId" :class-name="entry.class">
+                  <span v-for="(part, k) in highlightName(entry.name)" :key="k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
+                </CharacterName>
                 <span class="text-gray-500 text-xs"> · <span v-for="(part, k) in highlightName(historyRealmName(entry))" :key="'realm-' + k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
               </button>
               <button
@@ -589,9 +642,16 @@ onBeforeUnmount(() => {
 
         <button 
           type="submit" 
-          class="w-full mt-2 bg-gradient-to-r from-amber-600 to-wow-gold text-black font-extrabold py-3 rounded-lg hover:brightness-110 transition-all shadow-lg uppercase text-sm tracking-wider"
+          class="w-full mt-2 bg-gradient-to-r from-amber-600 to-wow-gold text-black font-extrabold py-3 rounded-lg hover:brightness-110 transition-all shadow-lg uppercase text-sm tracking-wider disabled:cursor-wait disabled:brightness-95"
+          :disabled="searching"
         >
-          {{ $t('find') }}
+          <!-- While the character page is fetching from Blizzard, the button becomes the wait:
+               a spinner and a status that takes turns, so a slow realm reads as progress. -->
+          <span v-if="searching" class="inline-flex items-center justify-center gap-2.5">
+            <span class="h-4 w-4 animate-spin rounded-full border-2 border-black/70 border-t-transparent" aria-hidden="true"></span>
+            <span class="animate-pulse">{{ searchStatus }}</span>
+          </span>
+          <span v-else>{{ $t('find') }}</span>
         </button>
       </form>
     </div>
