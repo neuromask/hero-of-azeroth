@@ -54,6 +54,16 @@ export default defineNuxtConfig({
     }
   },
   css: ['~/assets/css/main.css'],
+  /**
+   * Where a component is picked up from. `app/components` is scanned the way Nuxt scans it by
+   * default - the name of a sub-folder becomes a prefix - and the leaderboard's own folder is
+   * scanned without one, because the components in it are already named in full
+   * (`LeaderboardTable`), so a prefix would only spell the word twice.
+   */
+  components: [
+    { path: '~/components', pathPrefix: true },
+    { path: '~/components/leaderboard', pathPrefix: false }
+  ],
   /** `nuxt dev` (and `nuxt preview`, which runs the built server) on the same port. */
   devServer: { port: PORT },
   /**
@@ -121,7 +131,24 @@ export default defineNuxtConfig({
      * the sitemap and rewritten whenever a character is seen for the first time.
      */
     storage: {
+      /**
+       * Where a cached endpoint's answers are kept. `memory` is the whole point of the mount: the
+       * hall of fame (`/api/leaderboard`) is served from here, and the promise that page makes is
+       * that a reader costs a few milliseconds and no disk at all. A restart empties it, which
+       * costs one recompute from the in-process snapshot (`server/utils/leaderboardStorage.ts`)
+       * rather than a read of Blizzard or of a file.
+       */
+      cache: { driver: 'memory' },
       characters: { driver: 'fsLite', base: './server/data' }
+    },
+    /**
+     * The same for `nuxt dev`, which otherwise keeps its cache on disk (`.nuxt/cache`) whatever
+     * `storage` above says. With this the two environments answer from the same place, so what is
+     * measured locally is what the host does - and no cache file is written into the project while
+     * the server is being watched.
+     */
+    devStorage: {
+      cache: { driver: 'memory' }
     }
   }
 })

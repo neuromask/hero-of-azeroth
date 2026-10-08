@@ -159,6 +159,11 @@ export interface CharacterData {
   ilvl: number
   mPlusScore: number
   renderUrl: string
+  /**
+   * Blizzard's own square portrait of the character (`-avatar.jpg`, a few kilobytes), which the
+   * leaderboard draws beside a name. Empty when the media call came back without one.
+   */
+  avatarUrl: string
   classId: number
   raceId: number
   gender: string
@@ -309,6 +314,9 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
   const rawAssets = mediaData?.assets || []
   const mainRaw = rawAssets.find((a: any) => a.key === 'main-raw')?.value
   const mainRender = rawAssets.find((a: any) => a.key === 'main')?.value || rawAssets[0]?.value
+  // The square portrait, which is what a table of names can afford to load - the render above is
+  // a full-body PNG of a few hundred kilobytes.
+  const avatarAsset = rawAssets.find((a: any) => a.key === 'avatar')?.value
 
   /**
    * Pets are account-wide by definition, and toys and decor come back identical for
@@ -369,6 +377,7 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
     ilvl: charData.average_item_level || charData.equipped_item_level || 0,
     mPlusScore,
     renderUrl: mainRaw || mainRender || '',
+    avatarUrl: avatarAsset || '',
     classId: charData.character_class?.id || 0,
     raceId: charData.race?.id || 0,
     gender: charData.gender?.type || '',

@@ -41,6 +41,29 @@ export default defineEventHandler(async (event) => {
           mPlusScore: character.mPlusScore,
           mounts: character.stats.mounts.count
         })
+
+        // The same moment feeds the public leaderboard (see `server/utils/leaderboardStorage.ts`):
+        // one row per character the site has rendered, with everything the table and its widgets
+        // are built from. It is written behind the profile's own two hours of cache, so the cost
+        // is paid once per character per two hours and never on a reader's request path.
+        await upsertPlayer({
+          region,
+          realm,
+          realmName: character.realm,
+          name,
+          displayName: character.name,
+          avatar: character.avatarUrl,
+          classId: character.classId,
+          faction: character.faction,
+          level: character.level,
+          ilvl: character.ilvl,
+          mPlusScore: character.mPlusScore,
+          mounts: character.stats.mounts.count,
+          pets: character.stats.pets.count,
+          toys: character.stats.toys.count,
+          decor: character.stats.decor.count,
+          achievements: character.ap
+        })
         return character
       },
       force

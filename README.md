@@ -71,6 +71,7 @@ the size a social network wants, with the character's own render and class artwo
 | `/region-eu/<realm>/<name>` | Overview: the stat tiles, the render, download / share / refresh |
 | `/region-eu/<realm>/<name>/collections/mounts` | A shelf: sections with bars, sources side by side, the two switches, the note |
 | `/region-eu/<realm>/<name>/activity` | The achievement feed with its category filters |
+| `/leaderboard` | The hall of fame: every character the site has looked up, ranked, filtered and searched |
 | `/ru/…` | The very same pages in Russian |
 
 ## 🚀 Quick start
@@ -138,22 +139,59 @@ flowchart LR
 | `/api/card/<region>/<realm>/<name>?locale=ru_RU` | The shareable JPEG, 1200×630 |
 | `/api/realms` | The realm list the search box completes from |
 | `/sitemap.xml` | Every character the site has rendered, with its language alternates |
+| `/api/leaderboard?sort=mounts&faction=horde&realm=…&class=…&q=…&page=1` | One page of the hall of fame together with the community's totals — cached for an hour |
 
 ## 🗂 Project map
 
 | Where | What lives there |
 | --- | --- |
 | `app/pages/index.vue` | The front door and its search |
+| `app/pages/leaderboard.vue` | The hall of fame |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `SupportButton` |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton` |
+| `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (presets, chips, search), `LeaderboardTable` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `leaderboardView`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
-| `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader |
+| `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
 | `shared/data/collectionsSchema.ts` | The collection types, the section shape, and the Russian label map |
+| `shared/data/leaderboardSchema.ts` | The hall of fame's record, query and payload types, shared by the server and the components |
+| `shared/utils/leaderboardScore.ts` | `calculatePlayerScore` and the weights it is made of |
 
 ---
+
+## 🏆 The hall of fame
+
+`/leaderboard` is a public ranking of every character the site has ever rendered — the same population
+the sitemap is built from — with the community's own totals above it. It is built so that opening it
+costs the rest of the site nothing:
+
+- **Nothing is aggregated per request.** One file, `server/data/leaderboard.json`, holds a record per
+  character, and the overall rating is computed when a profile is *written* rather than when the table
+  is read — so a reader costs the same whether the table holds ten players or ten thousand.
+- **A read is a filter and a sort over memory.** The file is parsed once per process and kept in a
+  snapshot; a write replaces the snapshot and clears the memoised statistics.
+- **The endpoint is cached for an hour** (`defineCachedEventHandler`, `maxAge: 3600`, `swr: true`), so
+  a burst of readers is answered from Nitro's memory in single-digit milliseconds and the hour is
+  refreshed *behind* a response rather than in front of one. The first page of the table is rendered
+  on the server and arrives inside the document.
+- **A write is queued and atomic.** Records are appended through one promise chain, and the document
+  is written to a temporary name and renamed over the target: two lookups landing together cannot lose
+  each other, and a process killed mid-write leaves the previous file intact.
+
+The storage sits behind `server/utils/leaderboardStorage.ts`, and that module is the only thing that
+knows the data is a JSON file — `getLeaderboard`, `upsertPlayer` and `getGlobalStats` are the whole
+contract, so moving it to SQLite (`better-sqlite3`, `db0`) is a rewrite of that one file and a change
+to nothing else: not the endpoint, not a component. A table that has never been written is filled from
+the sitemap's own index on the first read, so the page opens with the site's history in it rather than
+empty; a figure the index never kept — pets, toys, decor, achievement points, faction — appears the
+next time that character is looked up.
+
+The weights are one line per category in `shared/utils/leaderboardScore.ts` (`SCORE_WEIGHTS`), each
+chosen so that a top-end character contributes the same order of magnitude to every one of them.
+Adding transmog or reputations is a line there plus a field in the record; the endpoint, the page and
+the components do not have to learn about it.
 
 ## 🎯 Collections: where the numbers come from
 

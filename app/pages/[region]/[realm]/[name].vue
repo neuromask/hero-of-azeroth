@@ -599,19 +599,11 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <!-- The background: the class artwork, fixed so it holds still while the page moves over it,
-           darkened the way the front page darkens its own - a flat scrim and a vignette - so the
-           two read as one site. `pointer-events-none` keeps it clear of every click on the page. -->
-      <div class="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <div class="absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-500/5 blur-[120px]"></div>
-        <img
-          v-if="character.backgroundUrl"
-          :src="character.backgroundUrl"
-          alt=""
-          class="absolute inset-0 h-full w-full object-cover saturate-[1.5] brightness-[1.45]"
-        />
-        <div class="absolute inset-0 bg-wow-dark/45"></div>
-        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(8,10,15,0.65)_100%)]"></div>
-      </div>
+           darkened the way the rest of the site darkens its own - a flat scrim and a vignette - so
+           the pages read as one site. The layers themselves are shared with the hall of fame
+           (`app/components/SiteBackdrop.vue`), and `armoury` is what lifts Blizzard's dark class art
+           to match the site's own pictures. -->
+      <SiteBackdrop :image="character.backgroundUrl" treatment="armoury" />
 
       <!-- The bar at the top of the page: the character's header and the page's own navigation
            (below), pinned together to the top of the window, so a visitor who has scrolled into the
@@ -791,6 +783,12 @@ onBeforeUnmount(() => {
             class="pointer-events-none absolute inset-x-0 top-0 z-0 h-12 bg-gradient-to-b from-wow-dark/90 via-wow-dark/55 to-transparent"
             aria-hidden="true"
           />
+          <!-- The row of tabs: the profile, the shelves, the feed - and then the hall of fame, the
+               site's other public page, one click away from the character a reader has just looked
+               up. It is deliberately one row and one look: stepping from a character into the table
+               of everybody keeps the bar, the tabs and the language pair exactly where they are, so
+               the two pages read as one site rather than two. The fade behind the row lets the cards
+               below dissolve into the bar rather than poke at its edge. -->
           <div class="relative flex flex-wrap gap-2">
             <NuxtLink
               :to="localeUrl(overviewPath)"
@@ -812,6 +810,15 @@ onBeforeUnmount(() => {
               :aria-current="onActivityTab ? 'page' : undefined"
             >
               {{ $t('tabActivity') }}
+            </NuxtLink>
+            <!-- The hall of fame, in the same row and wearing the same tab as the views beside it:
+                 it is not a view of this character, but it is where a reader who has just looked
+                 somebody up wants to go next, and it stands at the end of the row for that. -->
+            <NuxtLink
+              :to="localeUrl('/leaderboard')"
+              class="hoa-tab hoa-liquid-glass"
+            >
+              {{ $t('lbNav') }}
             </NuxtLink>
             <!-- The languages sit at the far end of the row the tabs are on: a reader looks for the
                  switch where the navigation is, and the pair travels with the header as it is pinned

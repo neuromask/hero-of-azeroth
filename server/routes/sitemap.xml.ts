@@ -83,6 +83,9 @@ export default defineEventHandler(async (event) => {
   const characters = (await readCharacterIndex()).slice(0, CHARACTER_LIMIT)
   const pages = [
     { path: '/', lastmod: '', details: '' },
+    // The hall of fame changes whenever a character is looked up - it is the same population the
+    // map below spells out - so it carries the day of the freshest lookup rather than one of its own.
+    { path: '/leaderboard', lastmod: characters[0]?.updatedAt || '', details: '' },
     ...characters.map((entry) => ({
       path: `/${regionPath(entry.region)}/${entry.realm}/${encodeURIComponent(entry.name)}`,
       lastmod: entry.updatedAt,
