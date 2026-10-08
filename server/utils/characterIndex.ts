@@ -23,6 +23,24 @@ export interface IndexedCharacter {
   name: string
   /** The day the character was last seen, `YYYY-MM-DD`, which is the sitemap's `lastmod`. */
   updatedAt: string
+  /** The day the site first met the character, `YYYY-MM-DD`: a later lookup cannot tell it. */
+  firstSeenAt?: string
+  /** The name as the game spells it, which the address cannot carry - an address is lowercased. */
+  displayName?: string
+  /**
+   * What the profile said the day the character was seen: its level, the class Blizzard ids it by,
+   * the item level it was wearing, its Mythic+ rating and the mounts it had gathered.
+   *
+   * None of it is a page - the map is built from the addresses - but it is what makes the map worth
+   * opening for a reader: the file a browser paints is a page about the characters the site has been
+   * asked about, and what they were when they were asked for. A record written before this was kept
+   * simply carries none of it, and every field is optional for exactly that reason.
+   */
+  level?: number
+  classId?: number
+  ilvl?: number
+  mPlusScore?: number
+  mounts?: number
 }
 
 /** The key the whole list is stored under, which is also the file's name on disk. */
@@ -65,17 +83,41 @@ export function rememberCharacter(character: {
   region: BlizzardRegion
   realm: string
   name: string
+  displayName?: string
+  level?: number
+  classId?: number
+  ilvl?: number
+  mPlusScore?: number
+  mounts?: number
 }): Promise<void> {
-  const record: IndexedCharacter = {
-    region: character.region,
-    realm: character.realm.toLowerCase(),
-    name: character.name.toLowerCase(),
-    updatedAt: today()
-  }
-
   writes = writes.then(async () => {
     try {
-      const rest = (await readCharacterIndex()).filter((entry) => identity(entry) !== identity(record))
+      const index = await readCharacterIndex()
+      const key = identity({
+        region: character.region,
+        realm: character.realm.toLowerCase(),
+        name: character.name.toLowerCase()
+      })
+      const previous = index.find((entry) => identity(entry) === key)
+
+      const record: IndexedCharacter = {
+        region: character.region,
+        realm: character.realm.toLowerCase(),
+        name: character.name.toLowerCase(),
+        updatedAt: today(),
+        // What the profile carried is written down; what it did not is kept from the record this one
+        // replaces, so a detail is only ever lost when the character itself stops reporting it. The
+        // first day is the one thing no later lookup can tell, and it is kept for good.
+        firstSeenAt: previous?.firstSeenAt || today(),
+        displayName: character.displayName || previous?.displayName,
+        level: character.level ?? previous?.level,
+        classId: character.classId ?? previous?.classId,
+        ilvl: character.ilvl ?? previous?.ilvl,
+        mPlusScore: character.mPlusScore ?? previous?.mPlusScore,
+        mounts: character.mounts ?? previous?.mounts
+      }
+
+      const rest = index.filter((entry) => identity(entry) !== key)
       // The character just seen goes to the front, so the cap above drops the stalest page.
       await useStorage('characters').setItem(INDEX_KEY, [record, ...rest].slice(0, INDEX_LIMIT))
     } catch {

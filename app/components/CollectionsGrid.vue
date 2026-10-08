@@ -72,14 +72,15 @@ function reveal(index: number): void {
 }
 
 /**
- * The quick anchors: a chip for every group of the shelf, in a rail that stays under the character's
- * header as the page is scrolled.
+ * The quick anchors: a chip for every group of the shelf, in a panel that stands to the left of the
+ * shelf and stays under the character's header as the page is scrolled.
  *
  * The header is sticky and its height is not a constant - it is a column on a narrow screen and a row
- * on a wide one, and the character's name and title wrap - so the rail measures it rather than
+ * on a wide one, and the character's name and title wrap - so the panel measures it rather than
  * guessing a `top`, and follows it as the window changes. The same measurement is handed to
  * `.hoa-section` as `--hoa-anchor-offset`: the room a group keeps above itself when a chip scrolls to
- * it, so the group comes to rest below the header and the rail rather than under them.
+ * it, so the group comes to rest below the header rather than under it. The panel takes none of that
+ * room: it stands beside the shelf, and a group is never under it.
  */
 const railEl = ref<HTMLElement | null>(null)
 const stickyTop = ref(0)
@@ -91,9 +92,8 @@ let headerObserver: ResizeObserver | null = null
 
 function measure(): void {
   const header = document.querySelector('header')
-  const rail = railEl.value
   stickyTop.value = header ? Math.round(header.getBoundingClientRect().height) : 0
-  anchorOffset.value = stickyTop.value + (rail ? Math.round(rail.getBoundingClientRect().height) : 0) + 12
+  anchorOffset.value = stickyTop.value + 12
 }
 
 function setChip(index: number, element: Element | null): void {
@@ -112,17 +112,15 @@ function jumpTo(index: number): void {
 }
 
 /**
- * Keeps the chip of the group being read inside the rail, without moving the page: only the rail
- * scrolls, and only when the chip has left it.
+ * Keeps the chip of the group being read inside the panel, without moving the page: only the panel
+ * scrolls, and only when the chip has left it. The list runs down the column, so the chip is simply
+ * brought into the panel with it - a page read top to bottom needs no travel of its own to keep up.
  */
 function centerChip(index: number): void {
   const chip = chipEls.get(index)
   const rail = railEl.value
   if (!chip || !rail) return
-  const start = chip.offsetLeft
-  const end = start + chip.offsetWidth
-  if (start >= rail.scrollLeft && end <= rail.scrollLeft + rail.clientWidth) return
-  rail.scrollTo({ left: start - (rail.clientWidth - chip.offsetWidth) / 2, behavior: 'smooth' })
+  chip.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 }
 
 watch(activeSection, centerChip)
@@ -141,14 +139,13 @@ onMounted(() => {
   )
   for (const element of sectionEls.values()) observer.observe(element)
 
-  // The rail needs the header's height before the first chip is tapped, and again whenever the
+  // The anchors need the header's height before the first chip is tapped, and again whenever the
   // header changes it - a breakpoint, a longer name, a title that wraps.
   measure()
   const header = document.querySelector('header')
   if (typeof ResizeObserver !== 'undefined') {
     headerObserver = new ResizeObserver(measure)
     if (header) headerObserver.observe(header)
-    if (railEl.value) headerObserver.observe(railEl.value)
   }
 
   // Which chip is lit: the group the rail is standing over. The window it watches is the strip just
@@ -220,15 +217,24 @@ function placeholderHeight(section: CollectionSection): string {
 </script>
 
 <template>
-  <div class="space-y-5" :style="{ '--hoa-anchor-offset': `${anchorOffset}px` }">
+  <div
+    class="space-y-5 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-x-6 lg:gap-y-5 lg:space-y-0"
+    :style="{ '--hoa-anchor-offset': `${anchorOffset}px`, '--hoa-sticky-top': `${stickyTop}px` }"
+  >
     <!-- The quick anchors: a chip for every group of this shelf, so a shelf of twenty-odd groups can
-         be walked without hunting for one. The rail is pinned under the character's header (and under
-         nothing else), the group being read is lit, and a chip scrolls the page to its group - which
-         is what `scroll-behavior: smooth` above and the section's `scroll-margin-top` are for. -->
+         be walked without hunting for one. The group being read is lit, and a chip scrolls the page
+         to its group - which is what `scroll-behavior: smooth` above and the section's
+         `scroll-margin-top` are for.
+
+         They stand in a panel to the left of the shelf, pinned under the character's header as the
+         shelf moves past it and scrolling inside itself when a shelf holds more groups than a window
+         is tall. A phone has no room for the panel beside the tiles and is given none (`hidden`
+         below `lg`): a screen that narrow belongs to the shelf, and a group of it is reached by
+         scrolling a shelf a phone can hold. -->
     <nav
       v-if="page.sections.length > 1"
       ref="railEl"
-      class="hoa-anchors sticky z-30"
+      class="hoa-anchors sticky z-30 hidden lg:flex lg:max-h-[calc(100vh-var(--hoa-sticky-top)-2rem)] lg:w-52 lg:shrink-0 lg:flex-col lg:gap-1 lg:overflow-x-hidden lg:overflow-y-auto"
       :style="{ top: `${stickyTop}px` }"
       :aria-label="$t(page.kind)"
     >
@@ -237,7 +243,7 @@ function placeholderHeight(section: CollectionSection): string {
         :key="section.id"
         :ref="(element) => setChip(index, element as Element | null)"
         type="button"
-        class="hoa-tab shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:text-xs"
+        class="hoa-tab shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:text-xs lg:w-full lg:justify-start lg:whitespace-normal lg:text-left"
         :class="{ 'hoa-tab-active': index === activeSection }"
         :aria-current="index === activeSection ? 'true' : undefined"
         @click="jumpTo(index)"
@@ -246,90 +252,95 @@ function placeholderHeight(section: CollectionSection): string {
       </button>
     </nav>
 
-    <section
-      v-for="(section, index) in page.sections"
-      :key="section.id"
-      :ref="(element) => setSection(index, element as Element | null)"
-      :data-section="index"
-      class="hoa-panel hoa-section"
-    >
-      <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
-          {{ section.label }}
-        </h3>
-        <span class="hoa-tag text-gray-300">
-          <span class="tabular-nums text-wow-goldLight">{{ section.collected }}</span>
-          <span class="tabular-nums">/{{ section.total }}</span>
-          <span class="text-gray-500">({{ section.percent }}%)</span>
-        </span>
-      </div>
-
-      <div class="h-2 w-full overflow-hidden rounded-full border border-white/5 bg-black/60 p-0.5">
-        <div
-          class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"
-          :style="{ width: `${section.percent}%` }"
-        />
-      </div>
-
-      <!-- The tiles: a wall of anchors, each one a link the widget draws a tooltip over.
-           A group is a run of its sources - each a block of its own, its name on a tag over its row
-           of tiles - laid side by side and wrapping as the row fills, the way SimpleArmory reads a
-           group, and the run is the row of this template. The few items Wowhead has no page for are
-           plain spans, so a tile is one node, one image. -->
-      <div v-if="revealed.has(index)" class="hoa-subgroups-container mt-4">
-        <div v-for="row in rowsOf(section)" :key="row.id" class="hoa-subgroup">
-          <h4 v-if="row.label" class="hoa-subgroup-title">
-            <span class="hoa-tag">{{ row.label }}</span>
-          </h4>
-          <template v-for="item in row.items" :key="item.id">
-            <a
-              v-if="item.wow"
-              class="hoa-tile"
-              :class="{ 'hoa-tile-collected': item.collected }"
-              :href="wowheadUrl(locale, item.wow.type, item.wow.id)"
-              :data-wowhead="`${item.wow.type}=${item.wow.id}`"
-              target="_blank"
-              rel="noopener noreferrer"
-              :aria-label="item.name"
-            >
-              <img
-                v-if="item.icon"
-                :src="item.icon"
-                :data-fallback="item.fallback || undefined"
-                :alt="item.name"
-                loading="lazy"
-                decoding="async"
-                @error="onIconError"
-              />
-              <span v-else class="h-1.5 w-1.5 rounded-full bg-white/20" aria-hidden="true" />
-            </a>
-            <span
-              v-else
-              class="hoa-tile"
-              :class="{ 'hoa-tile-collected': item.collected }"
-              :title="item.name"
-            >
-              <img
-                v-if="item.icon"
-                :src="item.icon"
-                :data-fallback="item.fallback || undefined"
-                :alt="item.name"
-                loading="lazy"
-                decoding="async"
-                @error="onIconError"
-              />
-            </span>
-          </template>
+    <!-- The shelf itself: the column of groups the anchors walk. `min-w-0` is what lets a row
+         of tiles shrink rather than widen the column, and the column takes the room the page
+         leaves the shelf rather than a width of its own. -->
+    <div class="min-w-0 flex-1 space-y-5">
+      <section
+        v-for="(section, index) in page.sections"
+        :key="section.id"
+        :ref="(element) => setSection(index, element as Element | null)"
+        :data-section="index"
+        class="hoa-panel hoa-section"
+      >
+        <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+            {{ section.label }}
+          </h3>
+          <span class="hoa-tag text-gray-300">
+            <span class="tabular-nums text-wow-goldLight">{{ section.collected }}</span>
+            <span class="tabular-nums">/{{ section.total }}</span>
+            <span class="text-gray-500">({{ section.percent }}%)</span>
+          </span>
         </div>
-      </div>
 
-      <!-- Not built yet: its place is held so the sections below it do not shift as it opens. -->
-      <div
-        v-else
-        class="mt-4"
-        :style="{ minHeight: placeholderHeight(section) }"
-        aria-hidden="true"
-      />
-    </section>
+        <div class="h-2 w-full overflow-hidden rounded-full border border-white/5 bg-black/60 p-0.5">
+          <div
+            class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"
+            :style="{ width: `${section.percent}%` }"
+          />
+        </div>
+
+        <!-- The tiles: a wall of anchors, each one a link the widget draws a tooltip over.
+             A group is a run of its sources - each a block of its own, its name on a tag over its row
+             of tiles - laid side by side and wrapping as the row fills, the way SimpleArmory reads a
+             group, and the run is the row of this template. The few items Wowhead has no page for are
+             plain spans, so a tile is one node, one image. -->
+        <div v-if="revealed.has(index)" class="hoa-subgroups-container mt-4">
+          <div v-for="row in rowsOf(section)" :key="row.id" class="hoa-subgroup">
+            <h4 v-if="row.label" class="hoa-subgroup-title">
+              <span class="hoa-tag">{{ row.label }}</span>
+            </h4>
+            <template v-for="item in row.items" :key="item.id">
+              <a
+                v-if="item.wow"
+                class="hoa-tile"
+                :class="{ 'hoa-tile-collected': item.collected }"
+                :href="wowheadUrl(locale, item.wow.type, item.wow.id)"
+                :data-wowhead="`${item.wow.type}=${item.wow.id}`"
+                target="_blank"
+                rel="noopener noreferrer"
+                :aria-label="item.name"
+              >
+                <img
+                  v-if="item.icon"
+                  :src="item.icon"
+                  :data-fallback="item.fallback || undefined"
+                  :alt="item.name"
+                  loading="lazy"
+                  decoding="async"
+                  @error="onIconError"
+                />
+                <span v-else class="h-1.5 w-1.5 rounded-full bg-white/20" aria-hidden="true" />
+              </a>
+              <span
+                v-else
+                class="hoa-tile"
+                :class="{ 'hoa-tile-collected': item.collected }"
+                :title="item.name"
+              >
+                <img
+                  v-if="item.icon"
+                  :src="item.icon"
+                  :data-fallback="item.fallback || undefined"
+                  :alt="item.name"
+                  loading="lazy"
+                  decoding="async"
+                  @error="onIconError"
+                />
+              </span>
+            </template>
+          </div>
+        </div>
+
+        <!-- Not built yet: its place is held so the sections below it do not shift as it opens. -->
+        <div
+          v-else
+          class="mt-4"
+          :style="{ minHeight: placeholderHeight(section) }"
+          aria-hidden="true"
+        />
+      </section>
+    </div>
   </div>
 </template>

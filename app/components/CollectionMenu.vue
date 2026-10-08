@@ -71,11 +71,18 @@ watch(
       @click="open = !open"
     >
       {{ $t('tabCollections') }}
-      <span
-        class="text-[10px] leading-none text-gray-400 transition-transform duration-150"
-        :class="open ? 'rotate-180 text-wow-goldLight' : ''"
+      <!-- The arrow is the chevron the Download button and the legend under a shelf wear, so the
+           three controls that open a tray read alike. It is drawn in `currentColor`, which is what
+           warms it with the tab: the tab is lit gold while the menu is open, and the arrow with it. -->
+      <svg
+        class="h-4 w-4 shrink-0 transition-transform duration-200"
+        :class="open ? 'rotate-180' : ''"
+        viewBox="0 0 20 20"
+        fill="currentColor"
         aria-hidden="true"
-      >▾</span>
+      >
+        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+      </svg>
     </button>
 
     <!-- Shut, the panel is invisible but still in the document: the three shelves are addresses a

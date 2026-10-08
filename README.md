@@ -246,6 +246,12 @@ and `app/middleware/lang.global.ts` applies it. Headings that come from SimpleAr
 label map rather than by message keys: a new expansion costs one line there, not a key in every locale
 file.
 
+Every page carries the same pair of plates in its header (`app/components/LocaleSwitch.vue`): a link to
+the same page one segment away, with the language being read warmed in the brand gold. It is a link
+rather than a router push because the two addresses are one route — a navigation to the route the
+browser is already on is dropped as a duplicate - so the pair reads for a crawler too, and the header
+switches with no JavaScript at all.
+
 ## 🔎 SEO & sharing
 
 - `NUXT_PUBLIC_SITE_URL` is what canonical links, `og:url`, the hreflang alternates, the JSON-LD nodes
@@ -255,7 +261,11 @@ file.
   deliberately left crawlable in `robots.txt`: a blocked preview path would leave every shared link
   blank.
 - `/sitemap.xml` lists the characters the site has actually rendered (kept in `server/data/`, capped at
-  50,000 URLs) with `xhtml:link` alternates per language.
+  50,000 URLs) with `xhtml:link` alternates per language. A browser opening it gets the page the map
+  doubles as (`public/sitemap.xsl`): who has been looked up and what they were — level, class, item
+  level, rating — plus the breakdowns worth reading (level, class, realm, the last two weeks, the
+  biggest collections), every figure counted off the map itself, so the page and the file a crawler
+  reads can never disagree.
 - Google Tag Manager is wired in `nuxt.config.ts` — the loader in `<head>`, the `<noscript>` frame right
   after `<body>`.
 

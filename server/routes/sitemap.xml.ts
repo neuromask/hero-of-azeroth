@@ -13,10 +13,18 @@
  * language carries its code in the address, so the English copy is the plain one and the Russian
  * copy sits under `/ru`.
  *
- * The XML carries a stylesheet instruction, so a browser open on the address paints the dark
- * table below instead of showing raw tags (see `public/sitemap.xsl`). A crawler ignores the
- * instruction and reads the tags, which is what it was always going to do.
+ * The XML carries a stylesheet instruction, so a browser open on the address paints the page below
+ * instead of showing raw tags (see `public/sitemap.xsl`): the map doubles as the site's own page
+ * about the characters it has been asked for. A crawler ignores the instruction and reads the tags,
+ * which is what it was always going to do.
+ *
+ * What the site knows about a character - its level, its class, the item level it was wearing - has
+ * no place in a sitemap, and the protocol says where such a thing goes: in a namespace of the site's
+ * own, where a crawler that does not know the elements ignores them (which is every crawler) while
+ * the stylesheet reads them. See `detailsOf`.
  */
+import { classById } from '#shared/utils/wow-class'
+import type { IndexedCharacter } from '../utils/characterIndex'
 
 /** Mirrors `SUPPORTED_LOCALES` in `app/composables/lang.ts`. */
 const LANGUAGES = ['en', 'ru'] as const
@@ -35,6 +43,36 @@ function xml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+/**
+ * One character as the extension elements the stylesheet reads, in the `hoa` namespace the map
+ * declares. A field the record does not carry - one written before the index kept it - is left out
+ * rather than written empty, so the page can tell "not known" from "nothing".
+ *
+ * The class is named and coloured from Blizzard's own id rather than from the profile's string: the
+ * name in the record was read in whatever language the lookup was made in, and a page listing every
+ * character should read in one.
+ */
+function detailsOf(entry: IndexedCharacter): string {
+  const known = classById(entry.classId)
+  const fields: [string, string | number | undefined][] = [
+    ['region', entry.region],
+    ['realm', entry.realm],
+    ['name', entry.displayName || entry.name],
+    ['firstseen', entry.firstSeenAt],
+    ['level', entry.level],
+    ['class', known?.name],
+    ['classcolor', known?.hex],
+    ['ilvl', entry.ilvl],
+    ['mplus', entry.mPlusScore],
+    ['mounts', entry.mounts]
+  ]
+
+  return fields
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([tag, value]) => `    <hoa:${tag}>${xml(String(value))}</hoa:${tag}>`)
+    .join('\n')
+}
+
 export default defineEventHandler(async (event) => {
   const siteUrl = String(useRuntimeConfig(event).public.siteUrl || '').replace(/\/+$/, '')
 
@@ -44,10 +82,11 @@ export default defineEventHandler(async (event) => {
    */
   const characters = (await readCharacterIndex()).slice(0, CHARACTER_LIMIT)
   const pages = [
-    { path: '/', lastmod: '' },
+    { path: '/', lastmod: '', details: '' },
     ...characters.map((entry) => ({
       path: `/${regionPath(entry.region)}/${entry.realm}/${encodeURIComponent(entry.name)}`,
-      lastmod: entry.updatedAt
+      lastmod: entry.updatedAt,
+      details: detailsOf(entry)
     }))
   ]
 
@@ -67,14 +106,15 @@ export default defineEventHandler(async (event) => {
    * the same page also exists in ride along as `xhtml:link` alternates inside that same block,
    * so the map never names a page twice.
    */
-  const entries = pages.map(({ path, lastmod }) => {
+  const entries = pages.map(({ path, lastmod, details }) => {
     const alternates = [
       ...LANGUAGES.map((code) => `    <xhtml:link rel="alternate" hreflang="${code}" href="${xml(urlFor(path, code))}"/>`),
       `    <xhtml:link rel="alternate" hreflang="x-default" href="${xml(urlFor(path, DEFAULT_LANGUAGE))}"/>`
     ].join('\n')
 
     const changed = lastmod ? `\n    <lastmod>${lastmod}</lastmod>` : ''
-    return `  <url>\n    <loc>${xml(urlFor(path, DEFAULT_LANGUAGE))}</loc>${changed}\n${alternates}\n  </url>`
+    const known = details ? `\n${details}` : ''
+    return `  <url>\n    <loc>${xml(urlFor(path, DEFAULT_LANGUAGE))}</loc>${changed}${known}\n${alternates}\n  </url>`
   })
 
   setHeader(event, 'content-type', 'application/xml; charset=utf-8')
@@ -83,7 +123,7 @@ export default defineEventHandler(async (event) => {
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:hoa="https://heroofazeroth.com/sitemap">
 ${entries.join('\n')}
 </urlset>
 `

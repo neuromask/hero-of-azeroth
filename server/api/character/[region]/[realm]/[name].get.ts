@@ -28,8 +28,19 @@ export default defineEventHandler(async (event) => {
         const character = await getCharacter(realm, name, region, locale)
         // A lookup that came back with a character is the one moment the site learns a page
         // exists, so it is written down for the sitemap as the fresh copy is fetched (see
-        // `server/utils/characterIndex.ts`).
-        await rememberCharacter({ region, realm, name })
+        // `server/utils/characterIndex.ts`). What the profile says about the character rides along:
+        // the map a browser paints is a page about who has been looked up, and what they were.
+        await rememberCharacter({
+          region,
+          realm,
+          name,
+          displayName: character.name,
+          level: character.level,
+          classId: character.classId,
+          ilvl: character.ilvl,
+          mPlusScore: character.mPlusScore,
+          mounts: character.stats.mounts.count
+        })
         return character
       },
       force

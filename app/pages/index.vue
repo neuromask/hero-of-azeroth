@@ -61,19 +61,8 @@ interface RealmOption {
 }
 
 const { locale, t } = useI18n()
-const route = useRoute()
 const router = useRouter()
 const publicConfig = useRuntimeConfig().public
-
-// The language is the first path segment, so switching it is a move between the two
-// addresses of this page (`/` and `/ru`). Both of them are one route - the Russian one
-// is an alias of the English one - and a router navigation to the route it is already
-// on is dropped as a duplicate, so the address changes with a real page load. Nothing
-// is lost by it: what the form remembers lives in `sessionStorage`.
-const changeLocale = (code: 'en' | 'ru') => {
-  if (code === locale.value) return
-  window.location.assign(localePath(code, stripLocalePrefix(route.path)))
-}
 
 const realmQuery = ref('')
 const selectedRealm = ref<RealmOption | null>(null)
@@ -484,22 +473,9 @@ onBeforeUnmount(() => {
           <p class="text-xs text-white-400 mt-2">{{ $t('tagline') }}</p>
         </div>
 
-        <div class="flex gap-1.5 shrink-0">
-          <button
-            type="button"
-            title="English"
-            @click="changeLocale('en')"
-            class="px-2 py-1.5 rounded-lg border text-xs font-bold leading-none inline-flex items-center justify-center transition-all"
-            :class="locale === 'en' ? 'border-wow-gold bg-wow-gold/10' : 'border-white/10 bg-black/40 opacity-60 hover:opacity-100'"
-          >EN</button>
-          <button
-            type="button"
-            title="Русский"
-            @click="changeLocale('ru')"
-            class="px-2 py-1.5 rounded-lg border text-xs font-bold leading-none inline-flex items-center justify-center transition-all"
-            :class="locale === 'ru' ? 'border-wow-gold bg-wow-gold/10' : 'border-white/10 bg-black/40 opacity-60 hover:opacity-100'"
-          >RU</button>
-        </div>
+        <!-- The languages are the pair every page carries, so the switch a reader learns on the
+             character page is the one they meet here (`app/components/LocaleSwitch.vue`). -->
+        <LocaleSwitch />
       </div>
 
       <form @submit.prevent="handleSearch" class="space-y-4">
@@ -656,13 +632,11 @@ onBeforeUnmount(() => {
       </form>
     </div>
 
-    <!-- The brand line under the box, exactly the one the character page carries in
-         its footer. The column above centres the box and the line as one block, so
-         the box keeps its place while the brand reads the same on both pages. -->
-    <footer class="relative z-10 mt-4 flex items-center gap-1.5 text-xs text-gray-500">
-      <a href="https://heroofazeroth.com" class="transition-colors hover:text-wow-goldLight">heroofazeroth.com</a>
-      <span aria-hidden="true">&middot;</span>
-      <span>copyright &copy; {{ new Date().getFullYear() }}</span>
+    <!-- The brand line under the box, drawn by the same component the character page's footer
+         carries, so the two pages sign off identically. The column above centres the box and the
+         line as one block, so the box keeps its place while the line stays the same. -->
+    <footer class="relative z-10 mt-4 text-xs text-gray-500">
+      <SiteFooter />
     </footer>
 
     <SupportButton />

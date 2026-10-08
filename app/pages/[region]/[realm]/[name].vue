@@ -813,6 +813,10 @@ onBeforeUnmount(() => {
             >
               {{ $t('tabActivity') }}
             </NuxtLink>
+            <!-- The languages sit at the far end of the row the tabs are on: a reader looks for the
+                 switch where the navigation is, and the pair travels with the header as it is pinned
+                 to the top of the window. -->
+            <LocaleSwitch class="ml-auto" />
           </div>
         </nav>
       </header>
@@ -825,13 +829,9 @@ onBeforeUnmount(() => {
            the Refresh button above it are never rebuilt by a switch between the two. -->
       <NuxtPage />
 
-      <footer class="relative z-20 container mx-auto px-4 pb-6 flex flex-col items-center gap-1.5 text-xs text-gray-500">
+      <footer class="relative z-20 container mx-auto px-4 pb-2 flex flex-col items-center gap-1.5 text-xs text-gray-500">
         <AppIcon name="hoa-logotype" alt="HeroOfAzeroth" class="h-7 w-auto" />
-        <span class="flex items-center gap-1.5">
-          <a href="https://heroofazeroth.com" class="transition-colors hover:text-wow-goldLight">heroofazeroth.com</a>
-          <span aria-hidden="true">&middot;</span>
-          <span>copyright &copy; {{ new Date().getFullYear() }}</span>
-        </span>
+        <SiteFooter />
       </footer>
 
       <SupportButton />
