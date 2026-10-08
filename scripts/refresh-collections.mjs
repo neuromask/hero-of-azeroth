@@ -212,16 +212,18 @@ const WOWHEAD_REF = {
 const DROPPED_GROUPS = new Set(['Undiscovered'])
 
 /**
- * What a group the file leaves nameless is called. SimpleArmory's pets file opens with the bucket
- * that holds the pets collected, bought or handed out rather than earned in one expansion, and gives
- * it no name; their mounts tree names the same bucket after the shelf it sits on ("Mounts"), so the
- * shelf's own name is what this one is drawn under.
+ * The heading every shelf opens with, and the names SimpleArmory files that bucket under. It holds the
+ * items a collector buys, is handed or earns outside one expansion, and the site names it after the
+ * shelf it sits on in three of its four files - "Mounts", "Pets", "Toys" - while its decor file calls
+ * it `General`, which is where this name comes from: filed under the one name, the first section of
+ * every shelf reads the same, in either language. A group the file leaves nameless is that same bucket
+ * - the pets file opens with it and gives it no name - so it is filed here too.
  *
- * A *source* the file leaves nameless (the pets caught anywhere in a continent, in `battlepets.json`)
- * is left nameless here too: the grid draws a block with no heading above it, which is what those
- * tiles read like at SimpleArmory - they belong to the whole continent rather than to a zone.
+ * The names are matched as the files write them, so a bucket the site renames reads under its own
+ * heading again rather than being folded into this one.
  */
-const NAMELESS_GROUP = { mounts: 'Mounts', pets: 'Pets', toys: 'Toys', decors: 'Decor' }
+const GENERAL_GROUP = 'General'
+const GENERAL_BUCKETS = new Set([GENERAL_GROUP, 'Mounts', 'Pets', 'Toys', 'Decor', ''])
 
 /**
  * The shelves, the files each is read from, and where Blizzard's own index names its rows.
@@ -276,7 +278,7 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
   for (const file of files) {
     for (const group of await readGroups(file)) {
       if (DROPPED_GROUPS.has(group.name)) continue
-      const section = tree.section(group.name || NAMELESS_GROUP[kind])
+      const section = tree.section(GENERAL_BUCKETS.has(group.name || '') ? GENERAL_GROUP : group.name)
       for (const cat of group.subcats || []) {
         const source = tree.source(section, cat.name)
         for (const item of cat.items || []) {

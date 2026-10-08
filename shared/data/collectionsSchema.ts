@@ -30,8 +30,9 @@ export const COLLECTION_KINDS = ['mounts', 'pets', 'toys', 'decors'] as const
  * collector would not read in English. A name the map does not carry is left in English.
  */
 export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
-  // Groups.
-  Mounts: 'Основные',
+  // Groups. Every shelf opens with `General`, the bucket holding everything a collector does not earn
+  // in one expansion, which the builder files under that name whichever name SimpleArmory gives it.
+  General: 'Основное',
   'Limited Time': 'Ограниченное время',
   'Past Limited Time': 'Прошлые ограничения',
   Classic: 'Классика',
@@ -343,12 +344,10 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   "Zul'Aman": 'Зул’Аман',
   'Eversong Woods': 'Леса Вечной Песни',
   "Isle of Quel'Danas": 'Остров Кель’Данас',
-  'Silvermoon City': 'Луносвет',  // Russian translation names them, the newest as the game and its players write them.  // The pets tree opens with the bucket that holds the pets collected, bought or handed out rather
-  // than earned in one expansion; the shelf itself is what it is drawn under.
-  Pets: 'Питомцы',
+  'Silvermoon City': 'Луносвет',
+  // Russian translation names them, the newest as the game and its players write them.
   // The decorations' own vocabulary: the housing side of the game, and the sources a decoration is
   // bought or earned through.
-  General: 'Общее',
   Neighbourhoods: 'Районы',
   'Neighbourhood Vendor': 'Продавец в районе',
   'Holiday Vendor': 'Праздничный продавец',
