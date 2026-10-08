@@ -64,7 +64,7 @@ watch(
   <div ref="root" class="relative">
     <button
       type="button"
-      class="hoa-tab"
+      class="hoa-tab hoa-liquid-glass"
       :class="{ 'hoa-tab-active': props.active || open }"
       aria-haspopup="true"
       :aria-expanded="open"

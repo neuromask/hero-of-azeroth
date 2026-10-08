@@ -783,15 +783,18 @@ onBeforeUnmount(() => {
           <!-- The fade the row of tabs sits on. It is kept under everything the navigation opens -
                the collections menu, the share tray - which is what `z-0` says: `pointer-events-none`
                already keeps it out of the way of a click, and the layer is what keeps it from
-               darkening a menu that opens over it. -->
+               darkening a menu that opens over it. It reaches only just past the row it stands behind
+               (`h-12`, against a row of `pt-3` and tabs about forty pixels tall), and its stops are
+               light enough that the content underneath is dimmed rather than blacked out: the bar has
+               to be readable, not to cast a shadow halfway down the page. -->
           <div
-            class="pointer-events-none absolute inset-x-0 top-0 z-0 h-24 bg-gradient-to-b from-wow-dark via-wow-dark/85 to-transparent"
+            class="pointer-events-none absolute inset-x-0 top-0 z-0 h-12 bg-gradient-to-b from-wow-dark/90 via-wow-dark/55 to-transparent"
             aria-hidden="true"
           />
           <div class="relative flex flex-wrap gap-2">
             <NuxtLink
               :to="localeUrl(overviewPath)"
-              class="hoa-tab"
+              class="hoa-tab hoa-liquid-glass"
               :class="{ 'hoa-tab-active': !onActivityTab && !onCollectionsTab }"
               :aria-current="!onActivityTab && !onCollectionsTab ? 'page' : undefined"
             >
@@ -804,7 +807,7 @@ onBeforeUnmount(() => {
             <CollectionMenu :path="collectionsPath" :active="onCollectionsTab" />
             <NuxtLink
               :to="localeUrl(activityPath)"
-              class="hoa-tab"
+              class="hoa-tab hoa-liquid-glass"
               :class="{ 'hoa-tab-active': onActivityTab }"
               :aria-current="onActivityTab ? 'page' : undefined"
             >

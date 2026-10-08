@@ -22,6 +22,18 @@
     @apply inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-white sm:text-base;
   }
 
+  /* Liquid glass: the frosted pane of `.hoa-panel` drawn on a small surface, which is what a
+     navigation button is cut from (`main.css` has one recipe per surface, and this is the one a
+     control wears). A button is smaller than a panel and stands over artwork that moves under it,
+     so the material carries what the frame would: the page behind is blurred and saturated rather
+     than shown through, a brighter hairline draws the lit edge, and the line inset along the top is
+     the specular edge a glass surface has. It is written after `.hoa-tab` and before
+     `.hoa-tab-active` on purpose - a tab is this surface with the layout of a tab, and the chosen
+     one still warms it with the brand gold. */
+  .hoa-liquid-glass {
+    @apply border-white/20 bg-white/[0.1] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),0_6px_18px_rgba(0,0,0,0.3)] hover:border-white/35 hover:bg-white/[0.16];
+  }
+
   /* The chosen tab, warmed with the brand gold the rest of the site accents with. */
   .hoa-tab-active {
     @apply border-wow-gold/60 bg-wow-gold/10 text-wow-goldLight shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_0_18px_rgba(248,183,0,0.25)];
