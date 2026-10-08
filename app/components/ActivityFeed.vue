@@ -238,6 +238,7 @@ function accentOf(item: ActivityItem) {
               </p>
 
               <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                <span v-if="item.category" class="truncate hoa-tag">{{ item.category }}</span>
                 <!-- How long ago it happened, with the exact moment on hover. -->
                 <span
                   class="group/date relative cursor-help font-medium text-gray-300"
@@ -250,7 +251,6 @@ function accentOf(item: ActivityItem) {
                     {{ formatAbsolute(item.completedAt) }}
                   </span>
                 </span>
-                <span v-if="item.category" class="truncate">{{ item.category }}</span>
               </div>
             </div>
           </div>

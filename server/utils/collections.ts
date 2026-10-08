@@ -88,13 +88,17 @@ function collectionIconFallback(entry: AtlasItem, region: string): string {
 }
 
 /**
- * Where Blizzard keeps a character's collected ids per shelf, and the field each entry names the
- * item with. A pet is filed under its `species` where a mount and a toy carry their own id.
+ * Where Blizzard keeps a character's collected ids per shelf, and the field each entry names the item
+ * with. A pet is filed under its `species` and a decoration under the decoration itself, where a
+ * mount and a toy carry their own id.
  */
 const PROFILE: Record<CollectionKind, { path: string; key: string; field: string }> = {
   mounts: { path: 'mounts', key: 'mounts', field: 'mount' },
   pets: { path: 'pets', key: 'pets', field: 'species' },
-  toys: { path: 'toys', key: 'toys', field: 'toy' }
+  toys: { path: 'toys', key: 'toys', field: 'toy' },
+  // Decorations come from the housing side of the profile, and their ids are the ids the decor index
+  // and SimpleArmory's file both speak in.
+  decors: { path: 'decor', key: 'decor_collected', field: 'decor' }
 }
 
 /** Whether `kind` names a shelf the site serves. */
@@ -136,8 +140,11 @@ function heldCount(items: CollectionItem[]): number {
 
 /**
  * Turns a run of atlas rows into tiles, dropping the ones with no name to show - a placeholder row
- * Blizzard is still using for something that has not shipped. The items the character holds lead,
- * and the rest keep the order SimpleArmory files them in.
+ * Blizzard is still using for something that has not shipped.
+ *
+ * The order is the atlas's, which is SimpleArmory's: every item has its slot in the grid whether the
+ * character holds it or not, so a shelf reads the same for everyone and a tile does not move the
+ * moment it is collected. `collected` is only what the tile is drawn as - bright, in gold, or grey.
  */
 function toItems(
   entries: AtlasItem[],
@@ -160,7 +167,7 @@ function toItems(
     })
   }
 
-  return items.sort((a, b) => Number(b.collected) - Number(a.collected))
+  return items
 }
 
 /**

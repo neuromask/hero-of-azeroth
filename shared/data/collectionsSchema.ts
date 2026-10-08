@@ -16,10 +16,10 @@
  */
 
 /** The shelves a collection is shown on, which is also how Blizzard spells them. */
-export type CollectionKind = 'mounts' | 'pets' | 'toys'
+export type CollectionKind = 'mounts' | 'pets' | 'toys' | 'decors'
 
 /** The shelves, in the order the collections menu lists them. */
-export const COLLECTION_KINDS = ['mounts', 'pets', 'toys'] as const
+export const COLLECTION_KINDS = ['mounts', 'pets', 'toys', 'decors'] as const
 
 /**
  * The Russian names of the headings SimpleArmory ships, keyed by the English name it ships them
@@ -343,22 +343,34 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   "Zul'Aman": 'Зул’Аман',
   'Eversong Woods': 'Леса Вечной Песни',
   "Isle of Quel'Danas": 'Остров Кель’Данас',
-  'Silvermoon City': 'Луносвет',
-  // The expansions, under the names the shelves are read by - the older ones as Blizzard's own
-  // Russian translation names them, the newest as the game and its players write them.
-  'The Burning Crusade': 'Пылающий крестовый поход',
-  'Wrath of the Lich King': 'Гнев Короля-лича',
-  Cataclysm: 'Катаклизм',
-  'Mists of Pandaria': 'Туманы Пандарии',
-  'Warlords of Draenor': 'Полководцы Дренора',
-  Legion: 'Легион',
-  'Battle for Azeroth': 'Битва за Азерот',
-  Shadowlands: 'Тёмные земли',
-  'The War Within': 'Внутренняя война',
-  Midnight: 'Полночь',
-  // The pets tree opens with the bucket that holds the pets collected, bought or handed out rather
+  'Silvermoon City': 'Луносвет',  // Russian translation names them, the newest as the game and its players write them.  // The pets tree opens with the bucket that holds the pets collected, bought or handed out rather
   // than earned in one expansion; the shelf itself is what it is drawn under.
   Pets: 'Питомцы',
+  // The decorations' own vocabulary: the housing side of the game, and the sources a decoration is
+  // bought or earned through.
+  General: 'Общее',
+  Undiscovered: 'Не обнаружено',
+  'Undiscovered Sources': 'Неизвестные источники',
+  Neighbourhoods: 'Районы',
+  'Neighbourhood Vendor': 'Продавец в районе',
+  'Holiday Vendor': 'Праздничный продавец',
+  'Alliance Reputation': 'Репутация Альянса',
+  'Horde Reputation': 'Репутация Орды',
+  'Alliance Garrison Vendor': 'Продавец гарнизона Альянса',
+  'Horde Garrison Vendor': 'Продавец гарнизона Орды',
+  'Garrison Vendor': 'Продавец гарнизона',
+  Assaults: 'Вторжения',
+  'Class Hall Vendors': 'Продавцы оплота',
+  'Class Hall Achievements': 'Достижения оплота',
+  Paragon: 'Парагон',
+  Participation: 'Участие',
+  'Marks of Honor': 'Знаки чести',
+  'House Level': 'Уровень дома',
+  'Mechagon Tinkering': 'Мехагон: мастерская',
+  'Mechagon Dailies': 'Мехагон: ежедневные задания',
+  'Dracthyr Quest': 'Задания драктиров',
+  'Expansion Editions': 'Издания дополнений',
+  Prey: 'Добыча',
 }
 
 /** One item on a shelf: what it is, how it looks, and whether this character has it. */

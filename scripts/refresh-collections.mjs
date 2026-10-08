@@ -1,17 +1,21 @@
 /**
  * Builds `server/utils/collections-data.json`, the whole of what can be collected.
  *
- * The Collections pages are drawn against every mount, pet and toy in the game, not only the ones a
- * character holds, so a shelf reads 69 of 79 rather than 69 of 69. That catalogue - and every tile's
- * icon - is SimpleArmory's. Each shelf is read from the file they keep it in
- * (`https://simplearmory.com/data/{mounts,pets,battlepets,toys}.json`) and what is stored is that
- * file's own tree: the groups it names (an expansion, an event, a continent), the sources under each
- * ("Raid Drop", "Vendor", a zone), and the items under those. An item carries four things, which is
- * what a tile and a tooltip need: its id, its name in both languages, the icon NAME SimpleArmory
- * writes down for it (`inv_dwarvenmechboss_bronze`) and the Wowhead address the ids it already
- * carries name. The icon name is what a ZamImg address is built from - the same name the game's own
- * 2D sprite is filed under - and a Blizzard icon URL cannot stand in for it, because ZamImg serves
- * sprites by name and rejects the numeric file id Blizzard hands out in its place.
+ * The Collections pages are drawn against every mount, pet, toy and decoration in the game, not only
+ * the ones a character holds, so a shelf reads 69 of 79 rather than 69 of 69. That catalogue - and
+ * every tile's icon - is SimpleArmory's. Each shelf is read from the file they keep it in
+ * (`https://simplearmory.com/data/{mounts,pets,battlepets,toys,decors}.json`) and what is stored is
+ * that file's own tree: the groups it names (an expansion, an event, a continent), the sources under
+ * each ("Raid Drop", "Vendor", a zone), and the items under those. Running this script is the whole
+ * of adding what a patch brought - a new Trading Post rotation, a new expansion's vendors - so
+ * nothing here is keyed to an item or an id: the files are read afresh every run, and a group, a
+ * source or an item that has appeared since the last one is simply in the atlas the next time round.
+ * An item carries four things, which is what a tile and a tooltip need: its id, its name in both
+ * languages, the icon NAME SimpleArmory writes down for it (`inv_dwarvenmechboss_bronze`) and the
+ * Wowhead address the ids it already carries name. The icon name is what a ZamImg address is built
+ * from - the same name the game's own 2D sprite is filed under - and a Blizzard icon URL cannot
+ * stand in for it, because ZamImg serves sprites by name and rejects the numeric file id Blizzard
+ * hands out in its place.
  *
  * Blizzard is read once for a shelf, and not for an icon: its static index names every mount, pet and
  * toy in both languages (SimpleArmory carries English only), and the difference between that index
@@ -107,12 +111,14 @@ async function pool(items, worker) {
 }
 
 /**
- * Reads one URL as text, waiting and retrying on a stumble. A `403` is not retried: it is a refusal,
- * and pressing it again only deepens it.
+ * Reads one URL as text, waiting and retrying on a stumble, and never from a cache: every run reads
+ * the files as they stand, so the Trading Post rotation that moved this week - or the decoration a
+ * patch added - is in the atlas the next time this script is run. A `403` is not retried: it is a
+ * refusal, and pressing it again only deepens it.
  */
 async function fetchText(url, attempt = 0) {
   try {
-    const response = await fetch(url, { headers: FETCH_HEADERS })
+    const response = await fetch(url, { headers: FETCH_HEADERS, cache: 'no-store' })
     if (response.status === 403 || response.status === 404) return ''
     if (!response.ok) throw new Error(`${response.status}`)
     return await response.text()
@@ -241,15 +247,18 @@ function newTree() {
 /**
  * The Wowhead address an item is drawn as, from the ids SimpleArmory already carries for it. A mount
  * is the item that teaches it or the spell that summons it; a pet is its creature, because Wowhead
- * draws a battle pet as the NPC it is and not as the `pet=` hunter-pet family; a toy is the item it
- * is, which is the one address of its own Wowhead answers with a page.
+ * draws a battle pet as the NPC it is and not as the `pet=` hunter-pet family; a toy and a decoration
+ * are the item itself, which is the one address of their own Wowhead answers with a page. The ids are
+ * read as numbers because a file is free to write them as strings - `decors.json` does - and the
+ * atlas, the endpoint and the widget all speak in numbers.
  */
 const WOWHEAD_REF = {
   mounts: (item) =>
-    item.itemId ? { t: 'item', id: item.itemId } : item.spellid ? { t: 'spell', id: item.spellid } : null,
+    item.itemId ? { t: 'item', id: Number(item.itemId) } : item.spellid ? { t: 'spell', id: Number(item.spellid) } : null,
   pets: (item) =>
-    item.creatureId ? { t: 'npc', id: item.creatureId } : item.itemId ? { t: 'item', id: item.itemId } : null,
-  toys: (item) => (item.itemId ? { t: 'item', id: item.itemId } : null)
+    item.creatureId ? { t: 'npc', id: Number(item.creatureId) } : item.itemId ? { t: 'item', id: Number(item.itemId) } : null,
+  toys: (item) => (item.itemId ? { t: 'item', id: Number(item.itemId) } : null),
+  decors: (item) => (item.itemId ? { t: 'item', id: Number(item.itemId) } : null)
 }
 
 /**
@@ -262,21 +271,28 @@ const WOWHEAD_REF = {
  * is left nameless here too: the grid draws a block with no heading above it, which is what those
  * tiles read like at SimpleArmory - they belong to the whole continent rather than to a zone.
  */
-const NAMELESS_GROUP = { mounts: 'Mounts', pets: 'Pets', toys: 'Toys' }
+const NAMELESS_GROUP = { mounts: 'Mounts', pets: 'Pets', toys: 'Toys', decors: 'Decor' }
 
 /**
- * The three shelves, the files each is read from, and where Blizzard's own index names its rows.
+ * The shelves, the files each is read from, and where Blizzard's own index names its rows.
  *
  * Pets are read from two files, because SimpleArmory keeps them apart: the pets that are earned
  * somewhere (a drop, a vendor, a promotion) are one list, and the ones caught in the world are
  * another, filed by the zone they live in. Both are battle pets once they are in a journal, and a
  * character's collection does not tell them apart either, so one shelf holds them - and a group both
  * files name is one section (see `newTree`).
+ *
+ * Decorations are read like the rest, though their file differs from the others in two ways: the
+ * `icon` it carries is the icon's numeric file id rather than its name (ZamImg serves that address
+ * just as readily - `medium/7425121.jpg` is the same sprite as any named one), and Blizzard names
+ * them through the housing index (`data/wow/decor`, which their `collections/decor` answers in), so
+ * a shelf whose index is missing falls back to the names the file itself carries.
  */
 const SHELVES = [
   { kind: 'mounts', files: ['mounts.json'], indexPath: 'mount', indexKey: 'mounts' },
   { kind: 'pets', files: ['pets.json', 'battlepets.json'], indexPath: 'pet', indexKey: 'pets' },
-  { kind: 'toys', files: ['toys.json'], indexPath: 'toy', indexKey: 'toys' }
+  { kind: 'toys', files: ['toys.json'], indexPath: 'toy', indexKey: 'toys' },
+  { kind: 'decors', files: ['decors.json'], indexPath: 'decor', indexKey: 'decor_items' }
 ]
 
 /** One SimpleArmory file, as the array of groups it is. */
@@ -296,7 +312,11 @@ async function readGroups(file) {
  * language and the site serves two; an item Blizzard's index has not got is named by SimpleArmory.
  */
 async function buildShelf({ kind, files, indexPath, indexKey }) {
-  const index = (await api(`https://${REGION}.api.blizzard.com/data/wow/${indexPath}/index?${ns}`))?.[indexKey] || []
+  // A shelf Blizzard has no index for is not a failure: its names then come from the files, which is
+  // what SimpleArmory's English list is for.
+  const index = indexPath
+    ? (await api(`https://${REGION}.api.blizzard.com/data/wow/${indexPath}/index?${ns}`))?.[indexKey] || []
+    : []
   const names = new Map(index.map((entry) => [entry.id, { en: entry.name?.en_US || '', ru: entry.name?.ru_RU || '' }]))
 
   const tree = newTree()

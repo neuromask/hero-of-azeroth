@@ -152,13 +152,13 @@ const seoOgDescription = computed(() => {
   const c = character.value
   if (!c) return ''
   return [
-    `⚔️ ${seoOgWho.value || c.name}`,
-    `🏆 ${c.ap}`,
-    `🛡️ ilvl ${c.ilvl}`,
-    `🔑 M+ ${c.mPlusScore}`,
-    `🐎 ${t('mounts')} ${c.stats.mounts.count}`,
-    `🐾 ${t('seoPets')} ${c.stats.pets.count}`,
-    `🧸 ${t('toys')} ${c.stats.toys.count}`,
+    `${seoOgWho.value || c.name}`,
+    `${c.ap}`,
+    `ilvl ${c.ilvl}`,
+    `M+ ${c.mPlusScore}`,
+    `${t('mounts')} ${c.stats.mounts.count}`,
+    `${t('seoPets')} ${c.stats.pets.count}`,
+    `${t('toys')} ${c.stats.toys.count}`,
     t('seoCharacterSuffix')
   ].join(' · ')
 })

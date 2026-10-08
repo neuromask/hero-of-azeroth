@@ -9,7 +9,7 @@
      by naming it instead of copying forty characters of utilities, and a change to the frame reaches
      every block at once. */
   .hoa-panel {
-    @apply rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)];
+    @apply rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)];
   }
 
   /* The same frame under the pointer, which is how the tiles and the summary answer it. */
@@ -35,17 +35,17 @@
      on the frosted glass these sections are cut from such a picture would otherwise dissolve into
      the pane. The dark well and its inner shadow are what keep every square a place in the grid. */
   .hoa-tile {
-    @apply grid aspect-square w-full place-items-center overflow-hidden rounded-md border border-white/10 bg-black/45 shadow-[inset_0_1px_3px_rgba(0,0,0,0.7),inset_0_-1px_0_rgba(255,255,255,0.05)] transition-all duration-200;
+    @apply grid aspect-square w-full place-items-center overflow-hidden rounded-md border border-white/10 bg-black/45;
   }
 
   /* An item the character has not collected: dimmed to grey, which is what tells it from the rest. */
   .hoa-tile > img {
-    @apply h-full w-full object-cover opacity-30 grayscale;
+    @apply h-full w-full object-cover opacity-60 grayscale;
   }
 
   /* An item the character holds: bright, in the gold frame a collection is framed with. */
   .hoa-tile-collected {
-    @apply border-wow-gold/60 bg-black/40 hover:border-wow-gold hover:shadow-[0_0_12px_rgba(248,183,0,0.45)];
+    @apply border-wow-gold/80 bg-black/40 hover:border-wow-gold hover:shadow-[0_0_12px_rgba(248,183,0,0.45)];
   }
 
   .hoa-tile-collected > img {
@@ -90,7 +90,7 @@
   /* A tag: the small rounded frame a name is read in - the name of a source over its row of tiles,
      the count beside a group's heading. */
   .hoa-tag {
-    @apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1 text-[11px] font-semibold leading-none text-gray-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)];
+    @apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1 text-[12px] font-semibold leading-none text-gray-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)];
   }
 
   /* A tile inside a source is the size the flat shelves draw their squares at, rather than filling

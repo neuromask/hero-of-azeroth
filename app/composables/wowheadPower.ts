@@ -12,6 +12,9 @@
  * so the same object is handed to every name and whichever one the script looks for it finds.
  */
 
+// The tick a booked scan of the document runs on (see `refreshLinks`).
+import { nextTick } from 'vue'
+
 /** The kinds of game data a link can name, which is also the widget's own spelling of them. */
 export type WowheadType = 'achievement' | 'item' | 'spell' | 'mount' | 'pet' | 'npc' | 'faction'
 
@@ -70,18 +73,41 @@ function loadPowerScript(): Promise<void> {
 }
 
 /**
- * Connects the page to the Wowhead Power widget and hands back the one method a page needs from it:
- * `refreshLinks`, which makes the widget look again for links it has not seen yet. The feed is read
- * lazily and a switch of language rewrites every address, so a link can appear after the widget's
- * first pass - calling this is what gives such a link its tooltip.
+ * Whether a scan of the document is already booked.
+ *
+ * The widget's `refreshLinks` walks the whole page, and a page asks for it far more often than it has
+ * anything new to show: the activity feed mounts two hundred links in one flush - a card carries its
+ * icon and its name - and every one of them asks on its own mount, on its own update and on a change
+ * of language. Two hundred walks of a hundred-card timeline is what would make the page crawl, so a
+ * burst of asks is collapsed into a single scan on the tick after them. Nothing is lost by waiting:
+ * the asks all name the same document, and a scan that runs last sees every link the earlier ones
+ * would have found.
  */
-export function useWowheadPower() {
-  function refreshLinks(): void {
-    if (!import.meta.client) return
+let scanBooked = false
+
+/**
+ * Asks the widget to look again for links it has not seen yet, at most once per tick.
+ *
+ * The feed is read after the page has painted and a switch of language rewrites every address, so a
+ * link can appear after the widget's first pass; this is what gives such a link its tooltip. The
+ * server has no widget to ask - the links it renders are plain anchors - so the ask is a no-op there.
+ */
+function refreshLinks(): void {
+  if (!import.meta.client || scanBooked) return
+
+  scanBooked = true
+  nextTick(() => {
+    scanBooked = false
     const power = (window as unknown as { $WowheadPower?: { refreshLinks?: () => void } }).$WowheadPower
     power?.refreshLinks?.()
-  }
+  })
+}
 
+/**
+ * Connects the page to the Wowhead Power widget and hands back the one method a page needs from it:
+ * `refreshLinks`, which makes the widget look again for links it has not seen yet.
+ */
+export function useWowheadPower() {
   // The server has no window and no widget; the links it renders are plain anchors.
   if (import.meta.client) {
     const globals = window as unknown as Record<string, unknown>

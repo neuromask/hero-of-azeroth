@@ -58,6 +58,17 @@ Horde one on patch 12.1.0 - and the same read records the top of each faction's 
 The snapshot is also what tells a finished reputation from one the character merely has a
 record with. Refresh it after a patch that adds factions.
 
+The activity feed shows the hundred achievements a character earned most recently, and a card is
+drawn from what an achievement *is*, in both of the site's languages: its name, its description,
+the points it is worth, the category it sits in and its icon. Blizzard publishes none of that in
+bulk - the static index lists ids and names alone, and the rest is one document per achievement
+plus one more for its icon - so a feed that read it per request would spend two hundred calls on
+its own cards. That is both the waiting and the 429 that costs a card its icon, so
+`npm run refresh:achievement-meta` reads all 9,041 achievements once and writes
+`server/utils/achievement-meta.json`; the feed answers from that catalogue instead and leaves
+Blizzard the character's own list. Refresh it after a patch: it is also what gives a newly shipped
+achievement its icon, because only the achievements the catalogue does not carry are read live.
+
 Reading an account's whole journal instead would need a user OAuth login
 (`/profile/user/wow/collections/mounts` answers 403 to a client-credentials token),
 so a public deployment shows one character at a time.
