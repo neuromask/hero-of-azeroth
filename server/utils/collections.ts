@@ -34,6 +34,18 @@ interface AtlasItem {
    * Horde - and absent for an item both sides can hold, which is most of them.
    */
   side?: 'A' | 'H'
+  /**
+   * The rest of the marks SimpleArmory makes a row with, written down only where its file makes one.
+   * Its own pages draw and count by these, so they are read the same way here (see `toItems`):
+   * `notObtainable` for an item the game has done away with, `highlighted` for one the site spotlights
+   * elsewhere, `new` for one it has not shipped, and `dupe`/`bounty` for a row it lists twice and
+   * counts once.
+   */
+  notObtainable?: boolean
+  highlighted?: boolean
+  new?: boolean
+  dupe?: boolean
+  bounty?: boolean
 }
 
 /** One source of a group - the "Raid Drop", the "Vendor", the zone - and the items filed under it. */
@@ -144,18 +156,17 @@ function shelfLabel(english: string, russian: boolean): string {
  */
 const FACTION_SIDE: Record<string, 'A' | 'H'> = { ALLIANCE: 'A', HORDE: 'H' }
 
-/** How many of `items` the character holds. */
-function heldCount(items: CollectionItem[]): number {
-  return items.filter((item) => item.collected).length
-}
-
 /**
- * Turns a run of atlas rows into tiles, dropping the ones with no name to show - a placeholder row
- * Blizzard is still using for something that has not shipped.
+ * Turns a run of atlas rows into tiles, dropping the ones SimpleArmory's own shelf would not draw, so
+ * that a character's numbers read the same here as they do there.
  *
- * An item only the other faction can hold is dropped here too, and before anything is counted, so a
- * group of the Horde's items reads 14 of 14 rather than 14 of 17 with the Alliance's three greyed out
- * at the end of it.
+ * A row the file marks for the other faction is dropped, and before anything is counted, so a group of
+ * the Horde's items reads 14 of 14 rather than 14 of 17 with the Alliance's three greyed out at the end
+ * of it. A row the site draws elsewhere in a spotlight of its own (`highlighted`), and one the game has
+ * not shipped yet (`new`), are left off its list whatever the character holds - its own shelf hides
+ * them, and a shelf that drew them would count them too. An item that can no longer be obtained is
+ * drawn only for a character who holds it: it is a rare thing to show off rather than something to go
+ * and get, and counting the rest is what made this shelf read 1404 where SimpleArmory reads 1302.
  *
  * The order is the atlas's, which is SimpleArmory's: every item has its slot in the grid whether the
  * character holds it or not, so a shelf reads the same for everyone and a tile does not move the
@@ -172,19 +183,42 @@ function toItems(
 
   for (const entry of entries) {
     if (entry.side && side && entry.side !== side) continue
+    if (entry.highlighted || entry.new) continue
+
+    const held = collected.has(entry.id)
+    if (!held && entry.notObtainable) continue
+
     const name = (russian ? entry.ru || entry.en : entry.en || entry.ru).trim()
     if (!name) continue
-    items.push({
+
+    const item: CollectionItem = {
       id: entry.id,
       name,
       icon: collectionIcon(entry),
       fallback: collectionIconFallback(entry, region),
-      collected: collected.has(entry.id),
+      collected: held,
       wow: entry.wow ? { type: entry.wow.t, id: entry.wow.id } : null
-    })
+    }
+
+    // A row SimpleArmory lists twice is drawn twice - it is genuinely filed under both headings - and
+    // counted once, which is what its own `dupe`/`bounty` mark says. The heading above it is measured
+    // without the row; the count it is drawn under is the one its twin stands in.
+    if (entry.dupe || entry.bounty) item.uncounted = true
+
+    items.push(item)
   }
 
   return items
+}
+
+/** How many of `items` the character holds, leaving out a row no count is kept of. */
+function heldCount(items: CollectionItem[]): number {
+  return items.filter((item) => item.collected && !item.uncounted).length
+}
+
+/** How many of `items` the heading above them is measured by. */
+function countedTotal(items: CollectionItem[]): number {
+  return items.filter((item) => !item.uncounted).length
 }
 
 /**
@@ -193,7 +227,8 @@ function toItems(
  *
  * A source or a group that came out empty is dropped - a group whose every item belongs to the other
  * faction, a source a patch emptied - so a shelf shows only the rows it actually has, and the counts
- * a heading is measured by are the counts of what is drawn under it.
+ * a heading is measured by are the counts of what is drawn under it, less the few rows the site draws
+ * twice and counts once.
  */
 function buildSections(
   kind: CollectionKind,
@@ -213,7 +248,7 @@ function buildSections(
         id: source.id,
         label: shelfLabel(source.en, russian),
         collected: heldCount(items),
-        total: items.length,
+        total: countedTotal(items),
         items
       })
     }

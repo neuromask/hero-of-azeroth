@@ -394,6 +394,12 @@ export interface CollectionItem {
    * link to nowhere.
    */
   wow: { type: 'item' | 'spell' | 'npc'; id: number } | null
+  /**
+   * Set on a row SimpleArmory lists twice: it is drawn where it stands, because it is genuinely filed
+   * under both headings, and the numbers over a heading are kept without it - which is how the site
+   * counts it, and what keeps a shelf's totals the same as its own. Absent on every other row.
+   */
+  uncounted?: true
 }
 
 /**

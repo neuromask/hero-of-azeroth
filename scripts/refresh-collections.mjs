@@ -12,14 +12,15 @@
  * source or an item that has appeared since the last one is simply in the atlas the next time round.
  * An item carries four things, which is what a tile and a tooltip need: its id, its name in both
  * languages, the icon NAME SimpleArmory writes down for it (`inv_dwarvenmechboss_bronze`) and the
- * Wowhead address the ids it already carries name - plus, for the few hundred items only one faction
- * can hold, the `side` the file marks them with (`'A'`, `'H'`), which is what keeps the other side's
- * items off a character's shelf. An item the file marks as not released yet is not stored - a
- * collector can neither go and get it nor plan for it - while one it marks as no longer obtainable is
- * stored: a character may still hold it, and this shelf is the only place that says so. The icon name
- * is what a ZamImg address is built from - the same name the game's own 2D sprite is filed under - and
- * a Blizzard icon URL cannot stand in for it, because ZamImg serves sprites by name and rejects the
- * numeric file id Blizzard hands out in its place.
+ * Wowhead address the ids it already carries name. Every mark the file makes a row with is carried
+ * through as the file writes it - the `side` that keeps the other faction's items off a character's
+ * shelf, and the `notObtainable`, `highlighted`, `new`, `dupe` and `bounty` marks a shelf is drawn and
+ * counted by - because what one character sees, and what the numbers over a heading add up to, is
+ * decided from those marks when the shelf is read (see `server/utils/collections.ts`), and the two
+ * sites only read the same numbers if both count from the same marks. The icon name is what a ZamImg
+ * address is built from - the same name the game's own 2D sprite is filed under - and a Blizzard icon
+ * URL cannot stand in for it, because ZamImg serves sprites by name and rejects the numeric file id
+ * Blizzard hands out in its place.
  *
  * Blizzard is read once for a shelf, and not for an icon: its static index names every mount, pet, toy
  * and decoration in both languages (SimpleArmory carries English only), which is what a shelf falls
@@ -272,6 +273,11 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
   const names = new Map(index.map((entry) => [entry.id, { en: entry.name?.en_US || '', ru: entry.name?.ru_RU || '' }]))
 
   const tree = newTree()
+  // A shelf read from more than one file (the pets, from `pets.json` and `battlepets.json`) leaves the
+  // repeat out: the two files are two halves of one collection, and a pet both list is one tile here.
+  // A shelf read from a single file keeps every row that file lists, duplicates and all, because
+  // SimpleArmory counts its own rows - and a row it lists twice is two of the numbers it reads.
+  const shared = files.length > 1
   const filed = new Set()
   let written = 0
 
@@ -282,14 +288,10 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
       for (const cat of group.subcats || []) {
         const source = tree.source(section, cat.name)
         for (const item of cat.items || []) {
-          if (filed.has(item.ID)) continue
-          filed.add(item.ID)
-          // An item SimpleArmory marks as not released yet is not something a collector can go and get
-          // or plan for, so it is left out of the atlas - and the next run of this script brings it in
-          // when the mark is lifted. It is that mark alone that keeps an item out: an item marked as
-          // no longer obtainable is kept, because it may be one a character already owns, and a shelf
-          // that hid it would quietly drop it from that character's own count.
-          if (item.notReleased) continue
+          if (shared) {
+            if (filed.has(item.ID)) continue
+            filed.add(item.ID)
+          }
           const named = names.get(item.ID)
           const row = {
             id: item.ID,
@@ -298,11 +300,17 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
             icon: iconName(item.icon),
             wow: WOWHEAD_REF[kind](item)
           }
-          // An item only one faction can hold is marked with that faction - `'A'` for the Alliance,
-          // `'H'` for the Horde - and an item both can hold carries no mark at all, so the field is
-          // left off rather than written empty. Whose shelf it lands on is decided when the shelf is
-          // read, not here.
+          // The marks a row is drawn and counted by, written down only where the file makes one, so a
+          // row SimpleArmory leaves unmarked carries nothing: `side` (`'A'` for the Alliance, `'H'` for
+          // the Horde, absent for one both sides can hold), `notObtainable` for an item the game has
+          // done away with, `highlighted` for one the site spotlights elsewhere, `new` for one it has
+          // not shipped, and `dupe`/`bounty` for a row it lists twice and counts once.
           if (item.side === 'A' || item.side === 'H') row.side = item.side
+          if (item.notObtainable) row.notObtainable = true
+          if (item.highlighted) row.highlighted = true
+          if (item.new) row.new = true
+          if (item.dupe) row.dupe = true
+          if (item.bounty) row.bounty = true
           source.items.push(row)
           written++
         }
