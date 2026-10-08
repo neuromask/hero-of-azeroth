@@ -27,6 +27,37 @@ export const LEADERBOARD_PER_PAGE = 25
 
 export function useLeaderboardView() {
   /**
+   * Which columns the table shows.
+   *
+   * The model is one of two states rather than a free set of columns, because that is how the row of
+   * chips above reads. `total` - the overall score - means *every* column: that is where the page
+   * opens, and it is the only chip lit while it holds. Picking any other chip steps out of that state
+   * and the table shows exactly the figures that are lit; clearing the last one steps back into it.
+   * So a reader is never looking at a table with no figures in it, and the overall chip is never lit
+   * beside the others.
+   */
+  const columns = ref<LeaderboardSort[]>(['total'])
+
+  /** True while every column is shown, which is what the overall chip means. */
+  const showsAllColumns = computed(() => columns.value.includes('total'))
+
+  function toggleColumn(key: LeaderboardSort) {
+    // The overall chip is not one column among the others: it is the state the others leave behind.
+    if (key === 'total') {
+      columns.value = ['total']
+      return
+    }
+
+    const picked = columns.value.filter((entry) => entry !== 'total')
+    const next = picked.includes(key)
+      ? picked.filter((entry) => entry !== key)
+      : [...picked, key]
+
+    // The last figure switched off hands the table back to the overall chip.
+    columns.value = next.length ? next : ['total']
+  }
+
+  /**
    * What the reader has chosen. `page` is reset by every other filter, because a page number means
    * nothing once the list under it has changed: asking for page 7 of a filtered table would land
    * on whatever happens to be there rather than on what the reader was looking at.
@@ -131,6 +162,9 @@ export function useLeaderboardView() {
   return {
     filters,
     search,
+    columns,
+    showsAllColumns,
+    toggleColumn,
     page,
     rows,
     stats,

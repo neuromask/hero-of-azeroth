@@ -29,6 +29,8 @@ const localeUrl = useLocaleUrl()
 const {
   filters,
   search,
+  columns,
+  toggleColumn,
   page,
   rows,
   stats,
@@ -38,7 +40,6 @@ const {
   setSort,
   setFaction,
   setRealm,
-  setClass,
   setPage
 } = useLeaderboardView()
 
@@ -149,17 +150,15 @@ onMounted(loadHistory)
 
       <LeaderboardFilters
         class="mt-3"
-        :sort="filters.sort"
         :faction="filters.faction"
         :realm="filters.realm"
-        :class-id="filters.classId"
         :search="search"
+        :columns="columns"
         :stats="stats"
-        @update:sort="setSort"
         @update:faction="setFaction"
         @update:realm="setRealm"
-        @update:class="setClass"
         @update:search="search = $event"
+        @toggle-column="toggleColumn"
       />
 
       <p v-if="error" class="mt-3 flex items-center gap-3 text-sm text-red-400">
@@ -173,6 +172,7 @@ onMounted(loadHistory)
         class="mt-3"
         :players="rows"
         :sort="filters.sort"
+        :columns="columns"
         :offset="offset"
         :pending="pending"
         @update:sort="setSort"
@@ -211,6 +211,9 @@ onMounted(loadHistory)
       <SiteFooter />
     </footer>
 
+    <!-- Back to the top once the table has run past the window, and the support plate, which holds
+         the other bottom corner. -->
+    <BackToTop />
     <SupportButton />
   </div>
 </template>

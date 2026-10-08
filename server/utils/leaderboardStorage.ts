@@ -150,6 +150,36 @@ function isPlayerLike(value: unknown): value is LeaderboardPlayer {
 }
 
 /**
+ * Whether the record on file already says everything this profile does.
+ *
+ * Every field that is ever printed is compared, `updatedAt` included: a day later the same figures
+ * are still written down, because the day is what the table's freshness line and the cap on its
+ * length both read. This comparison is what makes feeding the table on *every* request affordable -
+ * a reader opening a page the table already knows does not touch the disk - while a record written
+ * from the sitemap's thinner index (which knows no faction, no portrait, no pets) fails the test on
+ * the first field it is missing and is replaced the first time somebody looks that character up.
+ */
+function isSameRecord(a: LeaderboardPlayer, b: LeaderboardPlayer): boolean {
+  return (
+    a.updatedAt === b.updatedAt &&
+    a.displayName === b.displayName &&
+    a.realmName === b.realmName &&
+    (a.avatar || '') === (b.avatar || '') &&
+    a.classId === b.classId &&
+    a.faction === b.faction &&
+    a.level === b.level &&
+    a.ilvl === b.ilvl &&
+    a.mPlusScore === b.mPlusScore &&
+    a.mounts === b.mounts &&
+    a.pets === b.pets &&
+    a.toys === b.toys &&
+    a.decor === b.decor &&
+    a.achievements === b.achievements &&
+    a.score === b.score
+  )
+}
+
+/**
  * A stored record built from a profile: every field normalised, the realm and the name lowercased
  * for the address, and the overall rating computed once, here, so no read ever has to.
  */
@@ -365,6 +395,13 @@ export function upsertPlayer(profile: PlayerProfileInput): Promise<void> {
         },
         previous?.firstSeenAt || today()
       )
+
+      // A record that already says everything this profile does is not written again. It is the
+      // common case - the profile itself is cached for two hours, so a reader who comes back to a
+      // character they have already opened changes nothing - and skipping it is what keeps feeding
+      // the table on every request from touching the disk. A record the sitemap's index wrote half
+      // of, on the other hand, differs at the first field it never knew, so it is replaced here.
+      if (previous && isSameRecord(previous, record)) return
 
       // Newest first, which is the order the cap drops from the end of: the stalest character
       // falls off the table once it is longer than the site ever needs.

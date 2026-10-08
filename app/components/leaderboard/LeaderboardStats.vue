@@ -26,6 +26,9 @@ const props = defineProps<{
 
 const { locale, t } = useI18n()
 const localeUrl = useLocaleUrl()
+// A record stores the realm's name in the language its profile was read in, so the name a plate
+// shows comes from the site's own realm list instead (`app/composables/realmNames.ts`).
+const { realmLabel } = useRealmNames()
 
 /** A dash, which is what a figure the table does not know is printed as. */
 const DASH = '—'
@@ -73,7 +76,7 @@ const cards = computed<Card[]>(() => {
   const topClass = stats?.topClass
 
   const nameOf = (player?: LeaderboardPlayer | null) =>
-    player ? `${player.displayName} · ${player.realmName}` : DASH
+    player ? `${player.displayName} · ${realmLabel(player.region, player.realm, player.realmName)}` : DASH
 
   return [
     {

@@ -149,9 +149,9 @@ flowchart LR
 | `app/pages/leaderboard.vue` | The hall of fame |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton` |
-| `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (presets, chips, search), `LeaderboardTable` |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `leaderboardView`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop` |
+| `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
@@ -179,6 +179,11 @@ costs the rest of the site nothing:
 - **A write is queued and atomic.** Records are appended through one promise chain, and the document
   is written to a temporary name and renamed over the target: two lookups landing together cannot lose
   each other, and a process killed mid-write leaves the previous file intact.
+- **It is fed by the pages themselves.** Every character page a reader opens hands the table that
+  character's figures — from the profile cache or from Blizzard, it makes no difference — so a record
+  the sitemap's thinner index could only half write fills in the first time somebody looks that
+  character up. A record that already says everything the profile does is not written again, which is
+  what keeps a reader from costing the disk anything at all.
 
 The storage sits behind `server/utils/leaderboardStorage.ts`, and that module is the only thing that
 knows the data is a JSON file — `getLeaderboard`, `upsertPlayer` and `getGlobalStats` are the whole
@@ -192,6 +197,12 @@ The weights are one line per category in `shared/utils/leaderboardScore.ts` (`SC
 chosen so that a top-end character contributes the same order of magnitude to every one of them.
 Adding transmog or reputations is a line there plus a field in the record; the endpoint, the page and
 the components do not have to learn about it.
+
+On the page itself the figures are the reader's to choose: a row of chips switches columns on and off —
+the overall chip means every column, and picking any other one shows exactly the figures it names,
+several at once — the realm names come from the site's realm list rather than from whichever language
+the record happened to be written in, and an item level is printed only for a character at the current
+level cap, a figure that says nothing among characters still climbing.
 
 ## 🎯 Collections: where the numbers come from
 

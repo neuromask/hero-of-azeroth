@@ -843,5 +843,10 @@ onBeforeUnmount(() => {
 
       <SupportButton />
     </template>
+
+    <!-- Back to the top of a long page: it stands outside the three states above, so a reader who
+         has scrolled far down a shelf or a feed has it whether the profile loaded, is loading or came
+         back as a miss. -->
+    <BackToTop />
   </div>
 </template>

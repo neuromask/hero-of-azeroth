@@ -16,12 +16,15 @@
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
 import { factionById } from '#shared/utils/wow-faction'
+import { CURRENT_MAX_LEVEL } from '#shared/data/leaderboardSchema'
 import type { LeaderboardPlayer, LeaderboardSort } from '#shared/data/leaderboardSchema'
 
 const props = defineProps<{
   players: LeaderboardPlayer[]
   /** The preset in force, so the column that decides the order can mark itself. */
   sort: LeaderboardSort
+  /** The figures the table is showing, by column key. The rank and the name are always drawn. */
+  columns: LeaderboardSort[]
   /** The rank the first row carries, which is 1 on the first page and moves with the page number. */
   offset?: number
   /** True while a fresh answer is on its way, which dims the table rather than emptying it. */
@@ -32,6 +35,9 @@ const emit = defineEmits<{ (event: 'update:sort', value: LeaderboardSort): void 
 
 const { locale, t } = useI18n()
 const localeUrl = useLocaleUrl()
+// A record stores the realm's name in the language its profile was read in, so the name a row shows
+// comes from the site's own realm list instead (`app/composables/realmNames.ts`).
+const { realmLabel } = useRealmNames()
 
 /** The medal colours of the first three ranks: gold, silver, bronze. */
 const MEDALS = ['#f8b700', '#cbd5e1', '#d08b4a']
@@ -79,16 +85,55 @@ function initial(player: LeaderboardPlayer): string {
  * The columns a reader can order the table by, in the order they are drawn. The header of each one
  * is a button, and the figure it names is the preset the endpoint already understands - so ordering
  * by pets is the same request as ordering by mounts, with a different word in it.
+ *
+ * Two of the seven are written out rather than translated: `M+` and `ilvl` are the game's own
+ * shorthand, a player reads them the same in either language, and a translated header is exactly
+ * what makes a table look foreign.
  */
-const COLUMNS: { key: LeaderboardSort; label: string; field: keyof LeaderboardPlayer }[] = [
+const COLUMNS: {
+  key: LeaderboardSort
+  label: string
+  field: keyof LeaderboardPlayer
+  /** Set for the labels that are the game's own words and are never translated. */
+  literal?: boolean
+}[] = [
   { key: 'mounts', label: 'mounts', field: 'mounts' },
   { key: 'pets', label: 'pets', field: 'pets' },
   { key: 'toys', label: 'toys', field: 'toys' },
   { key: 'decor', label: 'decor', field: 'decor' },
   { key: 'achievements', label: 'achievements', field: 'achievements' },
-  { key: 'mplus', label: 'mPlus', field: 'mPlusScore' },
-  { key: 'ilvl', label: 'seoItemLevel', field: 'ilvl' }
+  { key: 'mplus', label: 'M+', field: 'mPlusScore', literal: true },
+  { key: 'ilvl', label: 'ilvl', field: 'ilvl', literal: true }
 ]
+
+/**
+ * The columns being drawn.
+ *
+ * While the overall chip holds (`columns` carries `total`), every column is drawn - that is what the
+ * chip means - and once the reader has stepped out of it, exactly the figures they lit are drawn, in
+ * the order the table always draws them in. The overall rating is the one figure with a header of its
+ * own outside that list, and it is drawn only in the first of the two states.
+ */
+const visible = computed(() =>
+  props.columns.includes('total')
+    ? COLUMNS
+    : COLUMNS.filter((column) => props.columns.includes(column.key))
+)
+
+const showsScore = computed(() => props.columns.includes('total'))
+
+/**
+ * The figure a column prints for a player.
+ *
+ * An item level is the one column with a rule of its own: it only means something among characters
+ * who have finished the climb, so a character below the cap prints a dash rather than a number that
+ * cannot be read beside the others (see `CURRENT_MAX_LEVEL`). Every other column prints what it
+ * holds, and an unknown figure prints as a dash in any case.
+ */
+function cell(player: LeaderboardPlayer, column: { key: LeaderboardSort; field: keyof LeaderboardPlayer }): string {
+  if (column.key === 'ilvl' && player.level < CURRENT_MAX_LEVEL) return '—'
+  return format(player[column.field] as number)
+}
 
 /** The rank a row carries in the whole table, not just on the page it is drawn on. */
 function rankOf(index: number): number {
@@ -123,7 +168,12 @@ function open(player: LeaderboardPlayer) {
           <tr class="border-b border-white/10 text-[11px] font-bold uppercase tracking-wider text-gray-400">
             <th class="w-14 px-3 py-2.5 text-left" scope="col">#</th>
             <th class="px-3 py-2.5 text-left" scope="col">{{ t('lbColPlayer') }}</th>
-            <th v-for="column in COLUMNS" :key="column.key" class="w-20 px-2 py-2.5 text-right" scope="col">
+            <th
+              v-for="column in visible"
+              :key="column.key"
+              class="w-20 px-2 py-2.5 text-right"
+              scope="col"
+            >
               <button
                 type="button"
                 class="inline-flex items-center gap-1 transition-colors"
@@ -131,7 +181,7 @@ function open(player: LeaderboardPlayer) {
                 :title="t('lbSortBy')"
                 @click="emit('update:sort', column.key)"
               >
-                <span>{{ t(column.label) }}</span>
+                <span>{{ column.literal ? column.label : t(column.label) }}</span>
                 <svg
                   v-if="sort === column.key"
                   class="h-2.5 w-2.5"
@@ -141,7 +191,7 @@ function open(player: LeaderboardPlayer) {
                 ><path d="M5 8L1 3h8z" /></svg>
               </button>
             </th>
-            <th class="hidden w-24 px-3 py-2.5 text-right xl:table-cell" scope="col">
+            <th v-if="showsScore" class="w-24 px-3 py-2.5 text-right" scope="col">
               <button
                 type="button"
                 class="inline-flex items-center gap-1 transition-colors"
@@ -234,26 +284,29 @@ function open(player: LeaderboardPlayer) {
                   </div>
 
                   <p class="truncate text-xs text-gray-500">
-                    {{ player.realmName }} · {{ className(player.classId) }} · {{ t('lbLevel') }} {{ player.level }}
+                    {{ realmLabel(player.region, player.realm, player.realmName) }} · {{ className(player.classId) }} · {{ t('lbLevel') }} {{ player.level }}
                   </p>
                 </div>
               </div>
             </td>
 
-            <!-- The figures, one column per collection, each orderable by its own header. -->
+            <!-- The figures, one column per figure the reader kept switched on, each orderable by
+                 its own header. -->
             <td
-              v-for="column in COLUMNS"
+              v-for="column in visible"
               :key="column.key"
               class="px-2 py-2.5 text-right tabular-nums"
               :class="column.key === 'mplus'
                 ? mPlusQualityTextClass(player.mPlusScore)
                 : 'text-gray-200'"
-            >{{ format(player[column.field] as number) }}</td>
+            >{{ cell(player, column) }}</td>
 
-            <!-- The rating the overall preset orders by, which only a wide table has room for. -->
-            <td class="hidden px-3 py-2.5 text-right font-bold tabular-nums text-wow-gold xl:table-cell">
-              {{ format(player.score) }}
-            </td>
+            <!-- The overall rating, which is what the table is ordered by when nothing else is
+                 asked for - the one figure with a header of its own outside the list above. -->
+            <td
+              v-if="showsScore"
+              class="px-3 py-2.5 text-right font-bold tabular-nums text-wow-gold"
+            >{{ format(player.score) }}</td>
           </tr>
         </tbody>
       </table>

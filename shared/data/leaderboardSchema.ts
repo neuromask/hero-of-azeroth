@@ -51,6 +51,17 @@ export const LEADERBOARD_SORTS: readonly LeaderboardSort[] = [
 ]
 
 /**
+ * The level the current expansion ends at: the one fact about levelling the table needs.
+ *
+ * An item level is only a comparison among characters who have finished the climb. A character at 40
+ * wearing 120 says nothing beside a capped one wearing 700, and a table of "who is geared" that mixes
+ * the two misleads the reader who scans it. So the table prints an item level for a character at the
+ * cap and a dash for everybody else, and this is the number that decides which is which - bump it
+ * when an expansion raises the cap, and the table follows on its own.
+ */
+export const CURRENT_MAX_LEVEL = 90
+
+/**
  * One player, as the leaderboard stores and serves them.
  *
  * The record is keyed by the three address segments - region, realm, name - because that triple

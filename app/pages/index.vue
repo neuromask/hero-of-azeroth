@@ -639,6 +639,9 @@ onBeforeUnmount(() => {
       <SiteFooter />
     </footer>
 
+    <!-- Back to the top of the page, and the support plate - the two corners the site keeps a
+         floating control in. -->
+    <BackToTop />
     <SupportButton />
   </div>
 </template>

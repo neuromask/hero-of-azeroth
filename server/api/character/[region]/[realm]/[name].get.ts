@@ -22,10 +22,11 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await profiles(
+    const character = await profiles(
       `${region}:${locale}:${realm}:${name}`,
       async () => {
-        const character = await getCharacter(realm, name, region, locale)
+        const profile = await getCharacter(realm, name, region, locale)
+
         // A lookup that came back with a character is the one moment the site learns a page
         // exists, so it is written down for the sitemap as the fresh copy is fetched (see
         // `server/utils/characterIndex.ts`). What the profile says about the character rides along:
@@ -34,40 +35,46 @@ export default defineEventHandler(async (event) => {
           region,
           realm,
           name,
-          displayName: character.name,
-          level: character.level,
-          classId: character.classId,
-          ilvl: character.ilvl,
-          mPlusScore: character.mPlusScore,
-          mounts: character.stats.mounts.count
+          displayName: profile.name,
+          level: profile.level,
+          classId: profile.classId,
+          ilvl: profile.ilvl,
+          mPlusScore: profile.mPlusScore,
+          mounts: profile.stats.mounts.count
         })
 
-        // The same moment feeds the public leaderboard (see `server/utils/leaderboardStorage.ts`):
-        // one row per character the site has rendered, with everything the table and its widgets
-        // are built from. It is written behind the profile's own two hours of cache, so the cost
-        // is paid once per character per two hours and never on a reader's request path.
-        await upsertPlayer({
-          region,
-          realm,
-          realmName: character.realm,
-          name,
-          displayName: character.name,
-          avatar: character.avatarUrl,
-          classId: character.classId,
-          faction: character.faction,
-          level: character.level,
-          ilvl: character.ilvl,
-          mPlusScore: character.mPlusScore,
-          mounts: character.stats.mounts.count,
-          pets: character.stats.pets.count,
-          toys: character.stats.toys.count,
-          decor: character.stats.decor.count,
-          achievements: character.ap
-        })
-        return character
+        return profile
       },
       force
     )
+
+    // The leaderboard is fed on *every* request, not only on a fresh lookup, and that is the whole
+    // point of this call standing outside the cache above. A profile lives there for two hours, so a
+    // character opened twice in an afternoon is one Blizzard lookup and two table updates - and that
+    // second update is what fills in a record the sitemap's thinner index could only write half of
+    // (`server/utils/leaderboardStorage.ts`). The write is skipped when the record already says
+    // everything this profile does, so a reader who opens a page the table already knows costs the
+    // disk nothing at all.
+    await upsertPlayer({
+      region,
+      realm,
+      realmName: character.realm,
+      name,
+      displayName: character.name,
+      avatar: character.avatarUrl,
+      classId: character.classId,
+      faction: character.faction,
+      level: character.level,
+      ilvl: character.ilvl,
+      mPlusScore: character.mPlusScore,
+      mounts: character.stats.mounts.count,
+      pets: character.stats.pets.count,
+      toys: character.stats.toys.count,
+      decor: character.stats.decor.count,
+      achievements: character.ap
+    })
+
+    return character
   } catch (err: any) {
     if (err.statusCode) throw err
     throw createError({
