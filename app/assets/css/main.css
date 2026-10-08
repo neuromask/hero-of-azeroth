@@ -9,7 +9,7 @@
      by naming it instead of copying forty characters of utilities, and a change to the frame reaches
      every block at once. */
   .hoa-panel {
-    @apply rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)];
+    @apply rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_rgba(0,0,0,0.35)];
   }
 
   /* The same frame under the pointer, which is how the tiles and the summary answer it. */
@@ -31,7 +31,7 @@
      `.hoa-tab-active` on purpose - a tab is this surface with the layout of a tab, and the chosen
      one still warms it with the brand gold. */
   .hoa-liquid-glass {
-    @apply border-white/20 bg-white/[0.1] backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),0_6px_18px_rgba(0,0,0,0.3)] hover:border-white/35 hover:bg-white/[0.16];
+    @apply border-white/20 bg-white/[0.1] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),0_6px_18px_rgba(0,0,0,0.3)] hover:border-white/35 hover:bg-white/[0.16];
   }
 
   /* The chosen tab, warmed with the brand gold the rest of the site accents with. */
@@ -113,7 +113,7 @@
      group of the shelf. Its own scrollbar is left out - the rail is dragged, wheeled and tapped, and
      a bar under it would read as a second progress bar. */
   .hoa-anchors {
-    @apply flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-wow-dark/80 p-2 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_10px_30px_rgba(0,0,0,0.35)];
+    @apply flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-wow-dark/80 p-2 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_10px_30px_rgba(0,0,0,0.35)];
     scrollbar-width: none;
   }
 

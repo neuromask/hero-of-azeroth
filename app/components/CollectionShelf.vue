@@ -3,17 +3,40 @@
 import type { CollectionKind } from '#shared/data/collectionsSchema'
 
 /**
- * One shelf of a character's collections - mounts, pets or toys - with its heading and its grid.
+ * One shelf of a character's collections - mounts, pets or toys - with its heading, its two switches
+ * and its grid.
  *
  * The three shelves share this view because they are the same page with a different list behind it:
  * the heading, the running total and the grid are identical, and only the endpoint's `kind` changes.
- * Which shelf is being read is the address the page was reached on, and the choice between them is
- * the menu on the character's own navigation above, so the page carries no second navigation bar of
- * its own.
+ * Which shelf is being read is the address the page was reached on, and the choice between them is the
+ * menu on the character's own navigation above, so the page carries no second navigation bar of its
+ * own.
+ *
+ * The two switches are SimpleArmory's own pair and sit under the bar they change: one draws the items
+ * the game has done away with, the other the ones it has not shipped yet (see `useCollectionView`).
+ * Each is drawn as a switch with a knob rather than as a lit chip, so whether it is on is read at a
+ * glance, and the note beside them folds out the three reasons this shelf reads lower than the game's
+ * own counter - it is a button with an arrow, because the area it opens is below it.
  */
 const props = defineProps<{ kind: CollectionKind }>()
 
-const { data, pending, error, refresh } = await useCollection(() => props.kind)
+const view = useCollectionView()
+const legendOpen = ref(false)
+
+/** The two switches, in the order they are drawn: what the game retired, then what it has not shipped. */
+const SWITCHES = [
+  { key: 'unobtainable', label: 'collectionsShowUnobtainable' },
+  { key: 'upcoming', label: 'collectionsShowUpcoming' }
+] as const
+
+/** The three things the note says about the numbers, in the order it says them. */
+const LEGEND = [
+  { title: 'collectionsLegendAvailableTitle', text: 'collectionsLegendAvailableText' },
+  { title: 'collectionsLegendLegacyTitle', text: 'collectionsLegendLegacyText' },
+  { title: 'collectionsLegendGameTitle', text: 'collectionsLegendGameText' }
+] as const
+
+const { data, pending, error, refresh } = await useCollection(() => props.kind, view)
 </script>
 
 <template>
@@ -45,9 +68,83 @@ const { data, pending, error, refresh } = await useCollection(() => props.kind)
             :style="{ width: `${data.percent}%` }"
           />
         </div>
+
+        <!-- The two switches and the note: a switch is a small track with a knob that slides across it
+             and lights up in the brand gold, so on and off are told apart without reading a word - and
+             the note is a button carrying an arrow, because what it opens lands under it. -->
+        <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <button
+            v-for="item in SWITCHES"
+            :key="item.key"
+            type="button"
+            role="switch"
+            :aria-checked="Boolean(view[item.key])"
+            class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1 pl-2 pr-3 text-xs font-semibold text-gray-300 transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+            @click="view[item.key] = !view[item.key]"
+          >
+            <span
+              class="relative h-4 w-7 shrink-0 rounded-full border transition-colors duration-200"
+              :class="view[item.key] ? 'border-wow-gold/60 bg-wow-gold/25' : 'border-white/15 bg-black/50'"
+            >
+              <span
+                class="absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full transition-all duration-200"
+                :class="
+                  view[item.key]
+                    ? 'translate-x-3 bg-wow-goldLight shadow-[0_0_6px_rgba(248,183,0,0.55)]'
+                    : 'translate-x-0 bg-gray-500'
+                "
+              />
+            </span>
+            {{ $t(item.label) }}
+          </button>
+
+          <button
+            type="button"
+            class="ml-auto inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-gray-400 transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-gray-100"
+            aria-controls="collections-legend"
+            :aria-expanded="legendOpen"
+            @click="legendOpen = !legendOpen"
+          >
+            {{ $t('collectionsLegendTitle') }}
+            <svg
+              class="h-3.5 w-3.5 transition-transform duration-200"
+              :class="{ 'rotate-180': legendOpen }"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+
+
+        <!-- The note itself: one small card per reason, side by side on a wide screen so the shelf is
+             not pushed down by a paragraph, stacked on a phone where three columns would be unreadable. -->
+        <div
+          v-if="legendOpen"
+          id="collections-legend"
+          class="mt-3 grid gap-2 border-t border-white/10 pt-3 sm:grid-cols-3"
+        >
+          <div
+            v-for="point in LEGEND"
+            :key="point.title"
+            class="rounded-xl border border-white/5 bg-black/25 p-3"
+          >
+            <p class="text-xs font-bold uppercase tracking-wider text-wow-goldLight">
+              {{ $t(point.title) }}
+            </p>
+            <p class="mt-1 text-xs leading-relaxed text-gray-400">{{ $t(point.text) }}</p>
+          </div>
+        </div>
       </div>
 
       <CollectionsGrid :page="data" />
     </template>
   </div>
 </template>
+

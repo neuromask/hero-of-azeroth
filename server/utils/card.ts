@@ -489,16 +489,16 @@ interface Tile {
 }
 
 /**
- * One tile: its heading, the count centred in the room under it, and the bar along the
- * bottom edge.
+ * One tile: its heading, the count under it, and the bar along the bottom edge.
  *
  * `numberSize` is the size every tile's count is set at (`tileNumberSize`); it is handed in
- * rather than picked here because all six have to hold the same one, and it is what the count
- * is centred on between the heading and the bar. The count is set in the tier colour its
- * collection has reached - the same ladder the page's tiles set theirs in - and the bar's fill
- * is the share of the collection that is complete. The tile carries no small print: at this
- * width there is no room for the total and the percentage beside the label, which is what the
- * bar is for.
+ * rather than picked here because all six have to hold the same one, and it is what places the
+ * count between the heading and the bar. The count is set in the tier colour its collection has
+ * reached - the same ladder the page's tiles set theirs in - and the bar's fill is the share of
+ * the collection that is complete. The count is written as plain digits, with no thousands
+ * separator, so it reads the same here as it does on the page and in the game. The tile carries
+ * no small print: at this width there is no room for the total and the percentage beside the
+ * label, which is what the bar is for.
  */
 function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: number): string {
   const inset = width - TILE_PAD * 2
@@ -510,7 +510,7 @@ function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: nu
   // bloom the bars have on the page, and crisp on top of it so the fill keeps its edges.
   return `<rect x="${round2(x)}" y="${y}" width="${round2(width)}" height="${TILE_HEIGHT}" rx="14" fill="#05070b" fill-opacity="0.6" stroke="#1e293b" stroke-width="2"/>
   ${headingSvg(tile.icon, tile.label, x + TILE_PAD, y + TILE_LABEL_Y, inset)}
-  <text x="${round2(x + width / 2)}" y="${round2(y + tileNumberY(numberSize))-6}" font-size="${numberSize}" font-weight="700" fill="${tile.color}" text-anchor="middle">${tile.count.toLocaleString('en-US')}</text>
+  <text x="${round2(x + width / 2)}" y="${round2(y + tileNumberY(numberSize))}" font-size="${numberSize}" font-weight="700" fill="${tile.color}" text-anchor="middle">${tile.count}</text>
   <rect x="${barX}" y="${barY}" width="${barWidth}" height="${TILE_BAR_HEIGHT}" rx="4" fill="#0b1220" stroke="#334155" stroke-width="1"/>
   <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)" filter="url(#barGlow)"/>
   <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)"/>`
@@ -576,29 +576,41 @@ const COLUMN_RIGHT = COLUMN_X + COLUMN_WIDTH
 /**
  * The header: the name against the left edge, and the character's own details - the level, the
  * race, the spec and class, the guild and the realm - as the rounded plates the character page
- * prints them on, running to the right of the name. The wordmark keeps the top-right corner.
+ * prints them on, in a band under the name. The wordmark keeps the top-right corner.
  *
  * The name is set in plain white, so the eye reads it first and the plates after it; the class
- * gold it used to wear is now worn by the spec-and-class plate alone.
+ * gold it used to wear is now worn by the spec-and-class plate alone. The name has the band to
+ * itself - the character's title is not drawn on the card - so it may run most of the width
+ * before it is set any smaller, and the plates wait on the row under it either way.
  *
- * The plates flow left to right and wrap when the next one would pass `BADGE_RIGHT`, which stops
- * short of the wordmark and the portrait, so a long guild name drops to a second line instead of
- * running into the artwork. `BADGE_X` is where they begin, clear of the name and its title.
+ * The plates flow left to right from the one left guide, and a row below centres on the row above
+ * it, so a set of details too long for one line reads as a block rather than as a ragged second
+ * row. A row reaching for the wordmark stops short of it; a row below the wordmark may run to the
+ * card's own padding.
  */
 const LOGO_X = 964
+/** The size the wordmark is drawn at in the corner, 52 below the top edge. */
+const LOGO_SIZE = 52
 /** The one left guide every block is set on: the name, the plates, the tiles and the foot band. */
 const LEFT_PAD = 44
-const BADGE_X = 405
-const BADGE_TOP = 52
-const BADGE_RIGHT = 870
-const BADGE_HEIGHT = 38
-const BADGE_PAD_X = 14
-const BADGE_GAP = 10
-const BADGE_ROW_GAP = 12
-const BADGE_TEXT_SIZE = 18
-const BADGE_RADIUS = 10
-/** The room the name and its title have before the plates begin. */
-const NAME_WIDTH = BADGE_X - LEFT_PAD - 26
+const BADGE_X = LEFT_PAD
+const BADGE_TOP = 102
+/** As far as a row of plates may run: the card's own padding, mirrored. */
+const BADGE_RIGHT = CARD_WIDTH - LEFT_PAD
+/** As far as a row may run while it is up beside the wordmark. */
+const BADGE_RIGHT_UNDER_WORDMARK = LOGO_X - 20
+/** The bottom edge of the wordmark, under which a row has the full width. */
+const BADGE_WORDMARK_BOTTOM = 52 + LOGO_SIZE
+const BADGE_HEIGHT = 32
+const BADGE_PAD_X = 12
+const BADGE_GAP = 8
+const BADGE_ROW_GAP = 5
+/** The air a block of rows keeps above the grid when it has to be lifted to clear it. */
+const BADGE_CLEAR = 4
+const BADGE_TEXT_SIZE = 16
+const BADGE_RADIUS = 9
+/** The room the name has before the wordmark begins. */
+const NAME_WIDTH = LOGO_X - 24 - LEFT_PAD
 
 /**
  * The two headline figures - the item level and the Mythic+ rating - and the plates they sit on.
@@ -619,22 +631,29 @@ const STATS_NUMBER_SIZES = [40, 36, 32]
 const STATS_ICON_RATIO = 0.85
 const STATS_ICON_GAP_RATIO = 0.3
 
-/** The band the address line sits in. */
-const FOOTER_TOP = 572
+/**
+ * The band the address line sits in. It is anchored to the card's own foot rather than to a fixed
+ * number - the band's bottom edge is `FOOTER_BOTTOM_PAD` above it - and the plates and the grid
+ * above the band are measured off it.
+ */
 const FOOTER_HEIGHT = 32
+/** The room the address line keeps under it, so the band is framed by the card's own edge. */
+const FOOTER_BOTTOM_PAD = 36
+const FOOTER_TOP = CARD_HEIGHT - FOOTER_BOTTOM_PAD - FOOTER_HEIGHT
 
 /**
  * The two plates the headline figures sit on, under the grid: the item level in the left half of
  * the column and the Mythic+ rating in the right, each the full half less the gap between them.
  * `PLATES_TOP` is anchored to the foot band the way the grid is, so the plates, the grid and the
  * band keep their distances to each other. `PLATE_LABEL_Y` and `PLATE_NUMBER_Y` are the baselines
- * of a figure's label and of its number, off the top edge of its plate.
+ * of a figure's label and of its number, off the top edge of its plate, and a plate is taller than
+ * that pair needs: a figure sits at the top of its plate and the plate runs on below it.
  */
 const PLATES_COLUMNS = 2
 const PLATES_GAP = 16
 const PLATE_WIDTH = (COLUMN_WIDTH - (PLATES_COLUMNS - 1) * PLATES_GAP) / PLATES_COLUMNS
-const PLATES_HEIGHT = 78
-const PLATES_GAP_BELOW = 34
+const PLATES_HEIGHT = 84
+const PLATES_GAP_BELOW = 14
 const PLATES_TOP = FOOTER_TOP - PLATES_GAP_BELOW - PLATES_HEIGHT
 const PLATE_RADIUS = 12
 const PLATE_LABEL_Y = 28
@@ -654,8 +673,8 @@ const PLATE_NUMBER_Y = 64
 const TILE_GAP = 16
 const TILE_COLUMNS = 3
 const TILE_ROWS = 2
-const TILE_TOP = 170
-const PLATES_GAP_ABOVE = 18
+const TILE_TOP = 166
+const PLATES_GAP_ABOVE = 12
 const TILE_HEIGHT = (PLATES_TOP - PLATES_GAP_ABOVE - TILE_TOP - (TILE_ROWS - 1) * TILE_GAP) / TILE_ROWS
 
 /**
@@ -738,29 +757,58 @@ function characterBadges(data: CharacterData, classColor: string): Badge[] {
 }
 
 /**
- * The plates of detail as the header draws them, left to right: each a rounded box with an amber
- * hairline - the frame the character page plates the same details on - sized to the text inside
- * it, with its own colour on that text. A plate that would pass `BADGE_RIGHT` wraps to a new line
- * under the one before it, so a long guild name drops to a second line instead of running into
- * the wordmark or the portrait. The text of a plate is the only thing that measures it, so its
- * box never crowds what is written on it.
+ * The plates of detail as the header draws them, left to right from the one left guide: each a
+ * rounded box with an amber hairline - the frame the character page plates the same details on -
+ * sized to the text inside it, with its own colour on that text.
+ *
+ * A plate that would pass the edge of its row wraps to the row under it, so a long guild name
+ * drops to a second row instead of running into the wordmark or the portrait: a row beside the
+ * wordmark stops short of it and a row below the wordmark may run to the card's own padding. The
+ * rows are then centred on the widest of them, which is what makes two rows read as one block of
+ * detail rather than as a line with a remainder under it, and the whole block is lifted when it
+ * would reach the grid under it. The text of a plate is the only thing that measures it, so its box
+ * never crowds what is written on it.
  */
 function badgeFlow(badges: Badge[]): string {
   const baseline = (top: number) => round2(top + BADGE_HEIGHT / 2 + (BADGE_TEXT_SIZE * HEADING_CAP_HEIGHT) / 2)
-  const plates: string[] = []
-  let x = BADGE_X
-  let top = BADGE_TOP
+  const widths = badges.map((badge) => round2(measuredTextWidth(badge.text, BADGE_TEXT_SIZE) + BADGE_PAD_X * 2))
+  const rows: { top: number; from: number; to: number; width: number }[] = []
 
-  for (const badge of badges) {
-    const width = round2(measuredTextWidth(badge.text, BADGE_TEXT_SIZE) + BADGE_PAD_X * 2)
-    if (x !== BADGE_X && x + width > BADGE_RIGHT) {
-      top += BADGE_HEIGHT + BADGE_ROW_GAP
-      x = BADGE_X
+  badges.forEach((badge, index) => {
+    const last = rows[rows.length - 1]
+    const grown = last ? last.width + BADGE_GAP + widths[index] : widths[index]
+    const limit = !last || last.top < BADGE_WORDMARK_BOTTOM ? BADGE_RIGHT_UNDER_WORDMARK : BADGE_RIGHT
+
+    if (last && BADGE_X + grown <= limit) {
+      last.to = index
+      last.width = grown
+      return
     }
 
-    plates.push(`<rect x="${round2(x)}" y="${round2(top)}" width="${width}" height="${BADGE_HEIGHT}" rx="${BADGE_RADIUS}" fill="#0b1220" fill-opacity="0.55" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
-  <text x="${round2(x + BADGE_PAD_X)}" y="${baseline(top)}" font-size="${BADGE_TEXT_SIZE}" font-weight="600" fill="${badge.color}">${esc(badge.text)}</text>`)
-    x += width + BADGE_GAP
+    rows.push({
+      top: last ? last.top + BADGE_HEIGHT + BADGE_ROW_GAP : BADGE_TOP,
+      from: index,
+      to: index,
+      width: widths[index]
+    })
+  })
+
+  // A block that would reach into the grid is lifted just far enough to clear it: the header is
+  // laid out for the one row a character usually has, and a row of plates running under a tile
+  // reads as a mistake rather than as a tighter header.
+  const foot = rows.length ? rows[rows.length - 1].top + BADGE_HEIGHT : BADGE_TOP
+  const lift = Math.max(0, foot + BADGE_CLEAR - TILE_TOP)
+  const widest = rows.reduce((max, row) => Math.max(max, row.width), 0)
+  const plates: string[] = []
+
+  for (const row of rows) {
+    const top = round2(row.top - lift)
+    let x = round2(BADGE_X + (widest - row.width) / 2)
+    for (let index = row.from; index <= row.to; index++) {
+      plates.push(`<rect x="${round2(x)}" y="${top}" width="${widths[index]}" height="${BADGE_HEIGHT}" rx="${BADGE_RADIUS}" fill="#0b1220" fill-opacity="0.55" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+  <text x="${round2(x + BADGE_PAD_X)}" y="${baseline(top)}" font-size="${BADGE_TEXT_SIZE}" font-weight="600" fill="${badges[index].color}">${esc(badges[index].text)}</text>`)
+      x = round2(x + widths[index] + BADGE_GAP)
+    }
   }
 
   return plates.join('\n  ')
@@ -776,23 +824,29 @@ function statWidth(icon: string, value: string, numberSize: number): number {
 }
 
 /**
- * What one tile holds: its heading, the count centred in the room under it, and the bar along
- * the bottom edge. All of it is measured from the tile's own corner, so a tile is drawn the
- * same at any width in the grid.
+ * What one tile holds: its heading, the count under it, and the bar along the bottom edge. All of
+ * it is measured from the tile's own corner, so a tile is drawn the same at any width in the grid,
+ * and the heading keeps its air at the top: `TILE_LABEL_Y` is the baseline of the label and
+ * `headingBoxTop` turns it into the icon box drawn above it.
  *
- * `TILE_NUMBER_CENTER` is the middle of the room between the bottom of the heading's icon box
- * and the top of the bar, and `tileNumberY` turns it into the baseline a count of a given size
- * has to sit on to be centred in that room - a line of that size has a cap height of about
- * 0.72em, so the baseline goes half a cap below the middle.
+ * `tileNumberY` places the count off that heading rather than off the middle of the room under
+ * it: a line of a given size rises `HEADING_CAP_HEIGHT` of its size above the baseline, so the
+ * air the count keeps under the icon box is what its baseline is measured from.
  */
 const TILE_PAD = 14
-const TILE_LABEL_Y = 36
+const TILE_LABEL_Y = 29
 const TILE_BAR_HEIGHT = 8
 const TILE_BAR_Y = TILE_HEIGHT - TILE_PAD - TILE_BAR_HEIGHT
-const TILE_NUMBER_CENTER = round2((headingBoxTop(TILE_LABEL_Y) + HEADING_ICON_BOX + TILE_BAR_Y) / 2)
+/** The air the count keeps under its heading: the icon box's bottom edge to the cap of the number. */
+const TILE_NUMBER_GAP = 9
 
+/**
+ * The baseline a count of a given size sits on, measured off the heading above it rather than off
+ * the middle of the room between the two: the heading and its top padding are placed first - a
+ * tile is read by its label before its number - and the count takes the room left above the bar.
+ */
 function tileNumberY(numberSize: number): number {
-  return TILE_NUMBER_CENTER + (numberSize * HEADING_CAP_HEIGHT) / 2
+  return headingBoxTop(TILE_LABEL_Y) + HEADING_ICON_BOX + TILE_NUMBER_GAP + numberSize * HEADING_CAP_HEIGHT
 }
 
 /**
@@ -808,7 +862,7 @@ function tileNumberY(numberSize: number): number {
  */
 function measurementPlan(tiles: Tile[], data: CharacterData, L: Record<string, string>, classColor: string): MeasureRequest[] {
   const plan: MeasureRequest[] = []
-  const counts = tiles.map(tile => tile.count.toLocaleString('en-US'))
+  const counts = tiles.map(tile => String(tile.count))
 
   for (const size of TILE_NUMBER_SIZES) {
     for (const count of counts) plan.push({ value: count, size })
@@ -877,7 +931,7 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
   // All six counts are set at one size - the largest that fits a tile's room - and every column
   // of the grid is the same width, so the room is the column less the padding on either side.
   const tileWidth = (COLUMN_WIDTH - (TILE_COLUMNS - 1) * TILE_GAP) / TILE_COLUMNS
-  const numberSize = tileNumberSize(tiles.map(tile => tile.count.toLocaleString('en-US')), tileWidth - TILE_PAD * 2)
+  const numberSize = tileNumberSize(tiles.map(tile => String(tile.count)), tileWidth - TILE_PAD * 2)
 
   /**
    * The grid, drawn row by row. A last row holding fewer tiles than the grid is wide shares
@@ -941,14 +995,13 @@ async function buildCardSvg(
   ) || STATS_NUMBER_SIZES[STATS_NUMBER_SIZES.length - 1]
 
   /**
-   * A name that does not fit at 46px is set smaller before it is cut, and the title line
-   * follows the name down so the two keep their spacing.
+   * A name that does not fit at 46px is set smaller before it is cut. It is the only line of the
+   * header - the character's title is not drawn on the card - so it may run to the wordmark before
+   * it is set any smaller, and the plates of detail wait on the row under it.
    */
   const nameSize = NAME_SIZES.find(size => textWidth(data.name, size) <= NAME_WIDTH) || NAME_SIZES[NAME_SIZES.length - 1]
-  const titleSize = nameSize >= 40 ? 21 : 18
-  const titleY = 90 + (nameSize >= 40 ? 28 : 24)
 
-  // The plates of detail beside the name, left to right, wrapping under the name's title.
+  // The plates of detail under the name, left to right, wrapping and centring as they go.
   const badgesSvg = badgeFlow(badges)
 
   /**
@@ -957,7 +1010,7 @@ async function buildCardSvg(
    * the card. The artwork is 3.45:1, giving a 179.6x52 box. The plain text is
    * kept for a server that cannot read the icon.
    */
-  const logotype = iconElement('hoa-logotype', LOGO_X, 52, 52, '#94a3b8')
+  const logotype = iconElement('hoa-logotype', LOGO_X, 52, LOGO_SIZE, '#94a3b8')
     || '<text font-size="26" fill="#94a3b8" x="1144" y="88" text-anchor="end">HeroOfAzeroth</text>'
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" font-family="${FONT_FAMILY}">
@@ -1013,10 +1066,9 @@ async function buildCardSvg(
   <rect y="430" width="${CARD_WIDTH}" height="200" fill="url(#bottomFade)"/>
   <rect x="0" y="0" width="12" height="${CARD_HEIGHT}" fill="${classColor}" fill-opacity="0.9"/>
 
-  <!-- The name is set in plain white, and the character's own details run to its right as the
-       plates the header prints them on. -->
-  <text x="${LEFT_PAD}" y="90" font-size="${nameSize}" font-weight="700" fill="#ffffff">${esc(fitText(data.name, NAME_WIDTH, nameSize))}</text>
-  ${data.title ? `<text x="${LEFT_PAD}" y="${titleY}" font-size="${titleSize}" font-style="italic" fill="#ffe395">${esc(fitText(data.title, NAME_WIDTH, titleSize))}</text>` : ''}
+  <!-- The name is set in plain white and given the whole header, with the character's own details
+       as the plates the header prints them on, on the row under it. -->
+  <text x="${LEFT_PAD}" y="78" font-size="${nameSize}" font-weight="700" fill="#ffffff">${esc(fitText(data.name, NAME_WIDTH, nameSize))}</text>
   ${badgesSvg}
   ${logotype}
 

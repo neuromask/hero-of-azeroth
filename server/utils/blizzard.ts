@@ -1,4 +1,4 @@
-import { resolveArmoryBackground } from './armory'
+import { armouryMountJournal, resolveArmoryBackground } from './armory'
 import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
 import { isExalted, isReputationMaxed, reputationTotal } from './reputations'
 import { mountTotal } from './mounts'
@@ -349,6 +349,12 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
     classId: charData.character_class?.id
   }).catch(() => '')
 
+  // The journal a character's mounts are measured against is its own - it follows the faction and the
+  // patch, not the index - so it is read for the character being looked at and kept for a day (see
+  // `mountTotal`). A process that cannot reach the Armoury falls back on the snapshot, and a checkout
+  // that has none on Blizzard's index.
+  const mountJournal = await armouryMountJournal(region, realm, name)
+
   return {
     name: charData.name,
     title: charData.active_title?.display_string?.replace('{name}', charData.name) || '',
@@ -368,7 +374,7 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
     gender: charData.gender?.type || '',
     backgroundUrl,
     stats: {
-      mounts: { count: mountIds.size, total: mountTotal(totalsData.mounts, mountIds.size) },
+      mounts: { count: mountIds.size, total: mountTotal(mountJournal?.total, totalsData.mounts, mountIds.size) },
       pets: { count: collectedSpecies.size, total: totalsData.pets },
       toys: { count: toysData?.toys?.length || 0, total: totalsData.toys },
       decor: { count: decorData?.decor_collected?.length || 0, total: totalsData.decor },

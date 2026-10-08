@@ -6,8 +6,9 @@
  * under it ("Raid Drop", "Vendor", "Zul'Aman"), and the items under that, exactly as the files they
  * publish name them. A section therefore carries `subgroups`, one per source, and the heading above
  * each is a plain string, taken from that tree and translated here. A bucket the site has not finished
- * filing - it names one "Undiscovered" - is left out of the atlas altogether rather than drawn as a
- * heading that says nothing about where its items come from.
+ * filing - their decor file names one "Undiscovered" - is drawn as it stands rather than left out: the
+ * numbers a visitor reads here are meant to be the numbers that site reads, and a shelf that quietly
+ * dropped a bucket would never add up to theirs.
  *
  * A heading is resolved to the language of the page before it leaves the server, so the grid draws
  * it like any other string and no shelf needs a message key that a new expansion would not have.
@@ -33,6 +34,7 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   // Groups. Every shelf opens with `General`, the bucket holding everything a collector does not earn
   // in one expansion, which the builder files under that name whichever name SimpleArmory gives it.
   General: 'Основное',
+  Undiscovered: 'Неизвестно',
   'Limited Time': 'Ограниченное время',
   'Past Limited Time': 'Прошлые ограничения',
   Classic: 'Классика',
@@ -347,7 +349,9 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   'Silvermoon City': 'Луносвет',
   // Russian translation names them, the newest as the game and its players write them.
   // The decorations' own vocabulary: the housing side of the game, and the sources a decoration is
-  // bought or earned through.
+  // bought or earned through. "Undiscovered Sources" is the bucket the site has not traced an origin
+  // for, which is drawn as it names it rather than hidden.
+  'Undiscovered Sources': 'Источник неизвестен',
   Neighbourhoods: 'Районы',
   'Neighbourhood Vendor': 'Продавец в районе',
   'Holiday Vendor': 'Праздничный продавец',
@@ -368,6 +372,22 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   'Dracthyr Quest': 'Задания драктиров',
   'Expansion Editions': 'Издания дополнений',
   Prey: 'Добыча',
+}
+
+/**
+ * What a visitor asked a shelf to show beyond its default. Both switches are SimpleArmory's own - the
+ * one that uncovers the items the game has done away with and the one that uncovers the items it has
+ * not shipped yet - so a shelf read with either of them on reads the numbers that site reads with the
+ * same setting on.
+ */
+export interface CollectionViewOptions {
+  /**
+   * Show the items that can no longer be obtained, the way the site's own "hidden items" setting does.
+   * An item the game has not shipped stays hidden whatever this is: the site keeps it back too.
+   */
+  unobtainable?: boolean
+  /** Show the items the game has not shipped yet, the way the site's own "upcoming" setting does. */
+  upcoming?: boolean
 }
 
 /** One item on a shelf: what it is, how it looks, and whether this character has it. */

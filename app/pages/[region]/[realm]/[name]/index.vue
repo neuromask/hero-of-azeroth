@@ -10,8 +10,11 @@ import { useCharacterView } from '~/composables/characterView'
 const { character } = useCharacterView()
 const { t } = useI18n()
 
-/** Formats counts the same way on the server and in the browser. */
-const formatCount = (value: number) => value.toLocaleString('en-US')
+/**
+ * Counts are written as plain digits - no thousands separator - so a number reads the same on the
+ * page, on the card and in the game.
+ */
+const formatCount = (value: number) => String(value)
 
 /**
  * The rating wears the tier it has reached, off the same Mythic+ bands the card colours the

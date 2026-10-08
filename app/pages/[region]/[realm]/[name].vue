@@ -81,7 +81,7 @@ watch(character, (loaded) => {
 const descriptor = computed(() => {
   const c = character.value
   if (!c) return ''
-  return `${t('itemLevel')}: ${c.ilvl} · ${t('mPlus')}: ${c.mPlusScore} · ${t('achievements')}: ${c.ap.toLocaleString('en-US')} · ${c.realm}`
+  return `${t('itemLevel')}: ${c.ilvl} · ${t('mPlus')}: ${c.mPlusScore} · ${t('achievements')}: ${c.ap} · ${c.realm}`
 })
 
 /**

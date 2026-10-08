@@ -1,6 +1,6 @@
 /**
  * Refreshes `server/utils/armoury-totals.json`, the two "how much can actually be
- * earned" numbers the tiles are measured against.
+ * earned" numbers the tiles fall back on.
  *
  * Both exist because the static indexes over-count:
  *
@@ -14,7 +14,12 @@
  *  - Mounts. The static mount index holds 1,676 entries, but 289 of them are not in any
  *    character's journal: unreleased and placeholder content ("[PH] Purple Cat Mount",
  *    "Wintry Witchwick's Rider", the Trading Post's coming stock). The Armoury lists the
- *    mounts a character's journal actually holds, 1,387 for the reference character.
+ *    mounts a character's journal actually holds, 1,387 for the reference character - and
+ *    that number belongs to the character it was read with, not to the game: the server
+ *    reads the journal of whichever character is being looked at, and keeps it for a day
+ *    (`armouryMountJournal`). The value written here is what stands in for a process that
+ *    cannot reach the Armoury at all, so it is refreshed after a patch and left alone
+ *    otherwise.
  *
  * A patch that adds achievements or releases mounts moves both numbers, so the script is
  * run after a patch. It needs one character to read the Armoury with - any character

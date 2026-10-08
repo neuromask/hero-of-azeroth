@@ -1,186 +1,300 @@
-# Nuxt Minimal Starter
+<div align="center">
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+<img src="app/assets/img/emblem.png" width="104" alt="Hero of Azeroth" />
 
-## Setup
+# ⚔️ Hero of Azeroth
 
-Make sure to install dependencies:
+**Everything a World of Warcraft character is — on one page, and in one image.**
+
+Item level · M+ score · achievements · mounts · pets · toys · decor · reputations
+
+[![Nuxt](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxtdotjs&logoColor=white)](https://nuxt.com)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Data](https://img.shields.io/badge/data-Blizzard%20API%20%2B%20Armoury-0074D9)](https://develop.battle.net)
+[![Locales](https://img.shields.io/badge/locales-en%20%7C%20ru-9b59b6)](#-bilingual)
+[![Unofficial](https://img.shields.io/badge/fan%20project-unofficial-orange)](#-disclaimer)
+
+[🌐 heroofazeroth.com](https://heroofazeroth.com) · 🇬🇧 English · 🇷🇺 Русский · 🌍 EU & US realms
+
+<a href="https://heroofazeroth.com"><img src="app/assets/img/hoa-prev.jpg" alt="Hero of Azeroth" width="880" /></a>
+
+</div>
+
+---
+
+## ✨ What it does
+
+- 🎴 **Character cards** — a profile rendered as a 1200×630 image. Every page carries its own card as
+  its link preview, and the header hands you the file to download or the link to copy.
+- 🔎 **Look up anyone** — EU and US realms, realm autocomplete, a search history that remembers what
+  you looked at, and addresses that are stable enough to share.
+- 🏅 **Overview tab** — item level, M+ score, achievement points against what is reachable, mounts,
+  pets, toys, decor and reputations, each tile marked `account-wide` or `per character`.
+- 🐎 **Collection shelves** — mounts, pets, toys and decor drawn against the **whole game**: every
+  expansion and event bucket with its own bar, every source ("Raid Drop", "Vendor", a zone) as a block
+  of tiles beside its neighbours, and a rail of anchors to jump between them.
+- 🧭 **Numbers that mean something** — a shelf counts what the character can *still get*
+  (SimpleArmory's own numbers), and two switches uncover what it cannot: the retired items and the ones
+  the game has not shipped yet. A short note under the bar says where every number comes from.
+- 📜 **Activity feed** — the hundred achievements a character earned most recently, with icons and
+  filters for all / achievements / PvE / collections / PvP.
+- 🏆 **Achievements & reputations** — the account-wide Exalted counter the game's own pane shows, plus
+  the ladders this character has finished on its own.
+- 🌍 **Bilingual** — English at the plain address, Russian under `/ru`: pages, SEO alternates, the
+  card image, and the collection headings themselves.
+- ⚡ **Built to be fast** — Blizzard is read once per character and answered from a stale-while-
+  revalidate cache; the game's whole catalogue (collections tree, achievement wording, faction
+  ladders) is paid for offline and shipped with the build.
+- 🎨 **A look of its own** — dark fantasy theme, the character's own Armoury artwork, Wowhead tooltips
+  on hover, mobile-first layout.
+
+---
+
+## 🖼 A real card — live, not a screenshot
+
+<div align="center">
+
+<a href="https://heroofazeroth.com/ru/region-eu/gordunni/%D0%BD%D0%B5%D0%B9%D1%80%D0%BE%D0%BC%D0%B0%D1%81%D0%BA">
+<img src="https://heroofazeroth.com/api/card/eu/gordunni/%D0%BD%D0%B5%D0%B9%D1%80%D0%BE%D0%BC%D0%B0%D1%81%D0%BA?locale=ru_RU" alt="A character card" width="760" />
+</a>
+
+<sub>The picture above is drawn on demand by <code>/api/card/…</code> and served as a JPEG — 1200×630,
+the size a social network wants, with the character's own render and class artwork in it.</sub>
+
+</div>
+
+### The pages behind it
+
+| Address | What it shows |
+| --- | --- |
+| `/` | Front door: region switch, realm autocomplete, character name, recent searches |
+| `/region-eu/<realm>/<name>` | Overview: the stat tiles, the render, download / share / refresh |
+| `/region-eu/<realm>/<name>/collections/mounts` | A shelf: sections with bars, sources side by side, the two switches, the note |
+| `/region-eu/<realm>/<name>/activity` | The achievement feed with its category filters |
+| `/ru/…` | The very same pages in Russian |
+
+## 🚀 Quick start
 
 ```bash
-# npm
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
 ```
 
-## Configuration
-
-Create a `.env` with a Blizzard API client (Creator portal, client credentials):
+Create a `.env` with a Blizzard API client
+([Creator portal](https://develop.battle.net/access/clients) → client credentials):
 
 ```bash
 NUXT_BLIZZARD_CLIENT_ID=...
 NUXT_BLIZZARD_CLIENT_SECRET=...
 ```
 
-Blizzard reports mounts and reputations per character, while the game shows an
-account-wide mount journal and reputation tab; pets, toys and decor come back
-account-wide already. Most tiles therefore report the character the way the API returns
-it, and each says in small print whose numbers it shows: `account-wide` for pets, toys,
-decor and reputations, `per character` for mounts and achievement points.
-
-Reputations are the exception among the per-character collections. The account-wide
-"Exalted Reputations" counter rides along with the character's achievements - every
-`5 Exalted Reputations` ... `110 Exalted Reputations` achievement carries the account's
-live number in the amount of its criterion - so the tile shows what the game's own
-achievement pane shows: every faction any character of the account has brought to Exalted.
-That is why it runs ahead of the character's own reputation list (129 against 105 when
-this was measured). Factions whose ladder has no Exalted tier are missing from that
-counter, so the ladders this character has finished - a renown faction at its last renown
-level, a delve companion at its last level, the brokers of K'aresh at Mastermind - are
-added on top of it. When the achievement list cannot be read, the tile falls back to what
-this character has maxed on its own, and its note switches to `per character`.
-
-The denominator is what a character of that faction can actually reach, not Blizzard's
-whole faction index: that index lists 284 entries, of which 37 belong to the Horde alone
-and 40 to the Alliance alone (a character is only ever on one side) and 18 only group the
-rest (the twelve expansions, the two faction groups, `Guild`, a placeholder). The index
-carries neither the side nor a "this is only a heading" flag, so
-`npm run refresh:reputations` reads every faction once and writes
-`server/utils/reputation-totals.json` - 231 factions as an Alliance character, 228 as a
-Horde one on patch 12.1.0 - and the same read records the top of each faction's ladder.
-The snapshot is also what tells a finished reputation from one the character merely has a
-record with. Refresh it after a patch that adds factions.
-
-The activity feed shows the hundred achievements a character earned most recently, and a card is
-drawn from what an achievement *is*, in both of the site's languages: its name, its description,
-the points it is worth, the category it sits in and its icon. Blizzard publishes none of that in
-bulk - the static index lists ids and names alone, and the rest is one document per achievement
-plus one more for its icon - so a feed that read it per request would spend two hundred calls on
-its own cards. That is both the waiting and the 429 that costs a card its icon, so
-`npm run refresh:achievement-meta` reads all 9,041 achievements once and writes
-`server/utils/achievement-meta.json`; the feed answers from that catalogue instead and leaves
-Blizzard the character's own list. Refresh it after a patch: it is also what gives a newly shipped
-achievement its icon, because only the achievements the catalogue does not carry are read live.
-
-Reading an account's whole journal instead would need a user OAuth login
-(`/profile/user/wow/collections/mounts` answers 403 to a client-credentials token),
-so a public deployment shows one character at a time.
-
-The two facts a deployment has of its own — where it is published and which tag
-manager container it reports to — are configuration as well, so a staging copy or a
-second host needs no code change:
+Then:
 
 ```bash
-NUXT_PUBLIC_SITE_URL=https://heroofazeroth.com
-NUXT_PUBLIC_GTM_ID=GTM-WXMVB755
+npm run dev       # development server on http://localhost:3100
+npm run build     # production build into .output
+npm run preview   # run the built server locally
+npm run deploy    # build, push the sources, upload the build to the host (see Deploying)
 ```
 
-`NUXT_PUBLIC_SITE_URL` is what canonical links, `og:url`, the hreflang alternates,
-the JSON-LD nodes and `sitemap.xml` are built on. `public/robots.txt` names the same
-host literally, so the two have to be changed together. The Google Tag Manager
-snippet itself (the loader in `<head>`, the `<noscript>` frame right after `<body>`)
-is set up in `nuxt.config.ts` under `app.head`; the container carries the tags.
+---
 
-An address names its language and its region: a character page is
-`/region-eu/gordunni/neromask`, a front door that stays on `/`. Only the non-default
-language spells itself out, so the Russian copy of every page sits under `/ru`
-(`/ru`, `/ru/region-eu/gordunni/neromask`) and the English one is the plain address.
-The region is the bare `eu` / `us` of the Blizzard API spelled as `region-eu`, which
-leaves room for a language in the first segment and keeps `/api/card/eu/...` and the
-page that shows it telling the same story. The pages serve the Russian address as an
-alias of the English one and `app/middleware/lang.global.ts` applies the language an
-address names.
+## 🧩 How it works
 
-The built server listens on `PORT`, else on `NITRO_PORT`, else on **3100**: Nitro's
-own fallback is 3000, which the second application on this host already owns, so
-`server/plugins/port.ts` supplies the number (from `runtimeConfig.port`, set in
-`nuxt.config.ts`). A host that assigns a port through `PORT` or `NITRO_PORT` still
-overrides it. `nuxt dev` uses the same 3100 through `devServer.port`.
+A page is rendered on the server, so the first response already carries the data — no spinner before
+the content. Three kinds of things meet in the process:
 
-## Development Server
+- **Live reads.** A character's profile, achievements, collection lists, media and M+ score come from
+  Blizzard's profile API, once per character, and the next visitor is answered from a
+  stale-while-revalidate cache (ten minutes for a profile, two hours for a shelf or a card) — a burst
+  of traffic pays for one lookup.
+- **Shipped catalogues.** Everything the game *contains* is paid for offline and compiled into the
+  build: the collections atlas, the achievement catalogue, the faction ladders and the total
+  fallbacks. None of it is read per request.
+- **The card.** `/api/card/…` composes the very icons the page draws into an SVG and rasterises it
+  with resvg into a JPEG. That file is what a link preview shows.
 
-Start the development server on `http://localhost:3100`:
+```mermaid
+flowchart LR
+  V["Visitor"] --> N["Nuxt / Nitro server<br/>(SSR pages + JSON endpoints)"]
+
+  N -->|"profile, achievements,<br/>collections, media, M+"| BL["Blizzard API"]
+  N -->|"mount journal<br/>of this character"| AR["Blizzard Armoury"]
+  N -->|"character's ids laid over<br/>the shipped tree"| AT[("Atlas & catalogues<br/>collections-data.json<br/>achievement-meta.json<br/>reputation-totals.json")]
+  N -->|"SVG → resvg"| CD["Card JPEG<br/>1200×630"]
+
+  BL --> SW["SWR caches<br/>10 min profile · 2 h shelf/card"]
+  AT --> SW
+  SW --> V
+  CD --> V
+```
+
+### Endpoints
+
+| Endpoint | Answers |
+| --- | --- |
+| `/api/character/<region>/<realm>/<name>` | The entire profile the overview draws (`?force=true` re-reads Blizzard) |
+| `/api/collections/<region>/<realm>/<name>?kind=mounts` | One shelf, laid over the character's ids — `kind` is `mounts`, `pets`, `toys` or `decors`, and `?unobtainable=1` / `?upcoming=1` are the two switches |
+| `/api/activity/<region>/<realm>/<name>` | The recent-achievement feed |
+| `/api/card/<region>/<realm>/<name>?locale=ru_RU` | The shareable JPEG, 1200×630 |
+| `/api/realms` | The realm list the search box completes from |
+| `/sitemap.xml` | Every character the site has rendered, with its language alternates |
+
+## 🗂 Project map
+
+| Where | What lives there |
+| --- | --- |
+| `app/pages/index.vue` | The front door and its search |
+| `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
+| `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `activity` |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `SupportButton` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `server/api/` | The endpoints above |
+| `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader |
+| `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
+| `shared/data/collectionsSchema.ts` | The collection types, the section shape, and the Russian label map |
+
+---
+
+## 🎯 Collections: where the numbers come from
+
+Every mount, pet, toy and decoration in the game, in SimpleArmory's own tree: a bucket per expansion or
+event, the sources under it ("Raid Drop", "Vendor", a zone), the items under those. The server lays the
+character's own ids over that tree, so a shelf looks the same for everybody and the counts belong to
+the character.
+
+Two rules make a shelf read **lower** than the counter in the game — and truer for it:
+
+- 🚫 **Retired items are hidden.** An item the game has done away with is drawn only for a character
+  who already holds it: a rarity to show off rather than a goal to chase. It is left out of the count
+  too, which is what keeps a 1,300-item shelf from reading 1,404.
+- ⏳ **Unreleased items wait.** The Trading Post's coming stock and the mounts of a patch that is not
+  live are not drawn at all.
+
+Both are SimpleArmory's own settings, and both are yours as well — the two switches under the shelf's
+bar, with a three-line note beside them that says the same:
+
+| Switch | What it uncovers |
+| --- | --- |
+| **Unobtainable** | Every retired item the site knows, drawn as a grey tile. Items that were never released stay hidden, exactly as they do there |
+| **Upcoming** | The handful of items Blizzard has in the files but has not shipped |
+
+With a switch on, a shelf reads exactly what SimpleArmory reads with its own setting on — the numbers
+were matched item by item, not approximated.
+
+### Why they differ from the game's own counter
+
+They are meant to: the sources count different sets, and every one of them is right.
+
+| Source | Reads | What it counts |
+| --- | --- | --- |
+| **In game · Wowhead tracker** | `1215 / 1334` | Everything the character has learned, over the journal the client shows for its faction |
+| **Blizzard Armoury** | `1215 / 1387` | The same list, over the Armoury's own journal size — a number that belongs to the character and moves with the patch |
+| **Blizzard API** | `1215` learned · `1117` usable | The raw list, ~98 of them unusable mounts of the other faction |
+| **Hero of Azeroth — a shelf** | `1163 / 1302` | What this character can still get: SimpleArmory's numbers, to the item |
+| **dataforazeroth** | `1162 / 1303` | Their own list, keyed by id rather than by row |
+
+*(one Alliance character, patch 12.1.0 — the absolute numbers move with every patch, the reasons do not)*
+
+The stubborn ±1 against other sites is data, not arithmetic: SimpleArmory counts the **rows** of its own
+file, and one mount in it (`Deathtusk Felboar`) sits twice under the same source — a character who owns
+it reads one higher there than on any site that keys by id. This project reproduces its rows, because
+the tree is its tree.
+
+---
+
+## 🔄 Keeping the data current
+
+Everything a character *is* — collections, achievements, item level, reputations, the artwork — is read
+live per request, and those caches expire on their own (a shelf in two hours, a profile in ten minutes,
+the Armoury journal a mounts tile is measured against in a day). What a patch moves are the numbers the
+site pays for once and ships with the build. One command runs all of them, in the order they are read:
 
 ```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
+npm run refresh:all                     # every step, read with the character it remembers
+npm run refresh:all eu gordunni name    # the same, read with another character
+npm run refresh:all --only=collections,reputations
+npm run refresh:all -- --dry-run        # print the commands and run nothing
+npm run deploy                          # nothing is live until this runs
 ```
 
-## Production
+| Step | Writes | What goes stale without it |
+| --- | --- | --- |
+| `collections` | `server/utils/collections-data.json` | an item a patch added, a new expansion's bucket, a new source — a shelf keeps the tree of the last run |
+| `armoury` | `server/utils/armoury-totals.json` | the two fallbacks (a mount tile is normally measured against the live Armoury journal of that character) |
+| `meta` | `server/utils/achievement-meta.json` | the feed cards' wording, points and icons — a new achievement is read live, so it is slower rather than wrong |
+| `points` | `server/utils/achievement-points.json` | the fallback total for achievement points |
+| `reputations` | `server/utils/reputation-totals.json` | how many factions each side can work on, and the top of every ladder |
 
-Build the application for production:
+The three walks (`meta`, `points`, `reputations`) run with `--fresh`, which drops the progress cache each
+of them keeps in the OS temp directory and re-reads every achievement and faction: minutes rather than
+seconds, which is what a patch wants.
 
-```bash
-# npm
-npm run build
+A heading a patch introduces reads in English until it is named in `SIMPLEARMORY_LABELS_RU`
+(`shared/data/collectionsSchema.ts`) — the one regular hand edit, and the run prints the headings that
+map has not got yet:
 
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
+```text
+  ⚠ not in the Russian label map yet (they read in English): Midnight: Season 2
 ```
 
-Locally preview production build:
+## 🌍 Bilingual
 
-```bash
-# npm
-npm run preview
+An address carries its language and its region: `/region-eu/gordunni/<name>` is English, the same page
+under `/ru` is Russian, and the front door stays on `/`. Only the non-default language spells itself
+out, so links stay short — i18n runs in `no_prefix` mode, the pages read the language off the address
+and `app/middleware/lang.global.ts` applies it. Headings that come from SimpleArmory are translated by a
+label map rather than by message keys: a new expansion costs one line there, not a key in every locale
+file.
 
-# pnpm
-pnpm preview
+## 🔎 SEO & sharing
 
-# yarn
-yarn preview
+- `NUXT_PUBLIC_SITE_URL` is what canonical links, `og:url`, the hreflang alternates, the JSON-LD nodes
+  and `sitemap.xml` are built on, so a staging copy never advertises the production host —
+  `public/robots.txt` names the same host literally, so the two are changed together.
+- Every character page is `og:image`d with its own card (`summary_large_image`), and `/api/card/` is
+  deliberately left crawlable in `robots.txt`: a blocked preview path would leave every shared link
+  blank.
+- `/sitemap.xml` lists the characters the site has actually rendered (kept in `server/data/`, capped at
+  50,000 URLs) with `xhtml:link` alternates per language.
+- Google Tag Manager is wired in `nuxt.config.ts` — the loader in `<head>`, the `<noscript>` frame right
+  after `<body>`.
 
-# bun
-bun run preview
-```
+## ⚙️ Configuration
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `NUXT_BLIZZARD_CLIENT_ID` | — *(required)* | Blizzard API client id |
+| `NUXT_BLIZZARD_CLIENT_SECRET` | — *(required)* | Blizzard API client secret |
+| `NUXT_PUBLIC_SITE_URL` | `https://heroofazeroth.com` | Canonical host for SEO and the sitemap |
+| `NUXT_PUBLIC_GTM_ID` | `GTM-WXMVB755` | Tag manager container |
+| `PORT` / `NITRO_PORT` | `3100` | Port the built server binds (`server/plugins/port.ts`) |
+| `HOST` | — | Address the built server binds |
+| `FTP_*` | — | Deploy target — see below |
 
-## Deploying
+The built server listens on `PORT`, else `NITRO_PORT`, else **3100**: Nitro's own fallback is 3000, which
+the second application on that host already owns. `nuxt dev` uses the same number.
 
-`npm run deploy` builds the project, pushes the sources to GitHub and uploads the
-build to the FTP target, so the machine that serves the site needs no toolchain:
+---
+
+## 📦 Deploying
 
 ```bash
 npm run deploy
 ```
 
 1. `nuxt build` writes `.output`, the Nitro `node-server` preset.
-2. The sources are committed and pushed to the current branch, `main`. GitHub
-   holds the project only: `.output` is ignored by git and is never committed.
-3. The contents of `.output` are uploaded over FTP to `FTP_PATH`, together with a
-   `deploy.json` that records which source commit they were built from.
+2. The sources are committed and pushed to the current branch, `main`. GitHub holds the project only —
+   `.output` is ignored by git and never committed.
+3. The contents of `.output` are uploaded over FTP to `FTP_PATH`, together with a `deploy.json` that
+   records which source commit they were built from.
 
-The build output of a Nuxt server app cannot be served by GitHub Pages: the pages
-are server-rendered, and `/api/card`, `/api/character` and `/api/realms` are real
-endpoints that call the Blizzard API with your client secret. A Node process has
-to run the build, which is why the build goes to FTP instead of the repository.
+The build output of a Nuxt server app cannot be served by GitHub Pages: the pages are server-rendered,
+and `/api/card`, `/api/character` and `/api/realms` are real endpoints that call the Blizzard API with
+your client secret. A Node process has to run the build — hence the FTP upload.
 
 ### FTP settings
 
-The upload reads these from the environment, falling back to `.env` (gitignored):
+The upload reads these from the environment, falling back to the gitignored `.env`:
 
 ```bash
 FTP_SERVER=www.example.com
@@ -195,17 +309,15 @@ FTP_INSECURE=true    # waive the certificate check when the host's certificate
                      # connections tend to be aborted by these hosts)
 ```
 
-`FTP_PATH` is the directory the server runs from, and it receives the *contents*
-of `.output`: `server/`, `public/` and `nitro.json` land directly inside it. The
-transfers are plain `curl` calls (Windows 10+ ships curl, and it speaks FTP and
-FTPS); the password is passed to curl through a throwaway netrc file, so it never
-appears on a command line or in the process list.
+`FTP_PATH` is the directory the server runs from, and it receives the *contents* of `.output`:
+`server/`, `public/` and `nitro.json` land directly inside it. The transfers are plain `curl` calls
+(Windows 10+ ships curl, and it speaks FTP and FTPS); the password travels in a throwaway netrc file, so
+it never appears on a command line or in the process list.
 
 ### Running what was uploaded
 
-The uploaded directory is the application. No `npm install` and no build tools are
-needed there, because `.output` carries its own `node_modules`, including both the
-linux-x64 and the win32-x64 resvg binaries:
+The uploaded directory is the application — no `npm install`, no build tools. `.output` carries its own
+`node_modules`, including both the linux-x64 and the win32-x64 resvg binaries:
 
 ```bash
 cd /data02/virt32423/domeenid/www.example.com/heroofazeroth
@@ -215,13 +327,10 @@ NUXT_BLIZZARD_CLIENT_SECRET=... \
 node server/index.mjs
 ```
 
-The server listens on `PORT`, else on `NITRO_PORT`, and on 3100 when neither is set
-(the host's other application owns Nitro's 3000 default); set `HOST` to choose the
-address it binds. The variables are read per request (`useRuntimeConfig()`), so
-changing them needs a restart, not a rebuild — and shipping a new version is another
-`npm run deploy`.
+The variables are read per request (`useRuntimeConfig()`), so changing them needs a restart, not a
+rebuild — and shipping a new version is another `npm run deploy`.
 
-### Options
+### Deploy options
 
 ```bash
 npm run deploy                     # build, GitHub, FTP
@@ -234,14 +343,39 @@ npm run deploy -- --verify         # read every directory back and report missin
 npm run deploy -- -m "Fix the card"
 ```
 
-`npm run deploy:ftp` uploads without building and without touching GitHub;
-`npm run deploy:github` pushes the sources only.
+`npm run deploy:ftp` uploads without building and without touching GitHub; `npm run deploy:github`
+pushes the sources only.
 
-`--verify` reads the upload back: every file has to be present, at the size it was
-built with (one request per file, so it is the slow part of a deploy). Transfers
-are retried a few times as well, because FTP hosts throttle a burst of uploads and
-answer 451 for a while.
+`--verify` reads the upload back: every file has to be present, at the size it was built with (one
+request per file, so it is the slow part of a deploy). Transfers are retried a few times as well,
+because FTP hosts throttle a burst of uploads and answer 451 for a while.
 
-`--prune` never deletes directories, and only deletes files
-inside `public/` and `server/chunks/` — the content-hashed bundles that change on
-every build — so a mistyped `FTP_PATH` cannot wipe anything else.
+`--prune` never deletes directories, and only deletes files inside `public/` and `server/chunks/` — the
+content-hashed bundles that change on every build — so a mistyped `FTP_PATH` cannot wipe anything else.
+
+---
+
+## ☕ Support
+
+The site is free, has no ads and runs out of pocket. If it saved you a look-up,
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/neuromask)
+is what keeps it that way.
+
+## ⚖️ Disclaimer
+
+An unofficial fan project. World of Warcraft, its names, items, icons and artwork belong to Blizzard
+Entertainment; the numbers come from Blizzard's public API and Armoury, and the collection tree from
+[SimpleArmory](https://simplearmory.com)'s own published files; tooltips and sprites come from
+Wowhead/ZamImg. Nothing here is endorsed by any of them. The repository ships no licence file yet, so
+all rights are reserved by default — ask first if you want to reuse the code.
+
+<div align="center">
+
+<sub>Made for collectors, by a collector · <a href="https://heroofazeroth.com">heroofazeroth.com</a></sub>
+
+</div>
+
+
+
+
+

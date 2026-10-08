@@ -14,6 +14,7 @@
     "refresh:achievements": "node scripts/refresh-achievement-points.mjs",
     "refresh:achievement-meta": "node scripts/refresh-achievement-meta.mjs",
     "refresh:armoury-totals": "node scripts/refresh-armoury-totals.mjs",
+  "refresh:all": "node scripts/refresh-all.mjs",
     "refresh:collections": "node scripts/refresh-collections.mjs",
     "refresh:reputations": "node scripts/refresh-reputation-totals.mjs"
   },

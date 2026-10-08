@@ -111,7 +111,7 @@ function accentOf(item: ActivityItem) {
       </h2>
       <span class="text-xs text-gray-400 sm:text-sm">
         {{ $t('achievements') }}:
-        <b class="text-white tabular-nums">{{ totalPoints.toLocaleString('en-US') }}</b>
+        <b class="text-white tabular-nums">{{ totalPoints }}</b>
       </span>
     </div>
 

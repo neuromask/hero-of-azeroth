@@ -16,7 +16,8 @@ import {
   type CollectionKind,
   type CollectionPage,
   type CollectionSection,
-  type CollectionSubgroup
+  type CollectionSubgroup,
+  type CollectionViewOptions
 } from '#shared/data/collectionsSchema'
 import atlas from './collections-data.json'
 
@@ -37,11 +38,12 @@ interface AtlasItem {
   /**
    * The rest of the marks SimpleArmory makes a row with, written down only where its file makes one.
    * Its own pages draw and count by these, so they are read the same way here (see `toItems`):
-   * `notObtainable` for an item the game has done away with, `highlighted` for one the site spotlights
-   * elsewhere, `new` for one it has not shipped, and `dupe`/`bounty` for a row it lists twice and
-   * counts once.
+   * `notObtainable` for an item the game has done away with, `notReleased` for one it has not shipped,
+   * `highlighted` for one the site draws in a spotlight of its own, `new` for one it holds back until a
+   * visitor asks for it, and `dupe`/`bounty` for a row it lists twice and counts once.
    */
   notObtainable?: boolean
+  notReleased?: boolean
   highlighted?: boolean
   new?: boolean
   dupe?: boolean
@@ -162,11 +164,15 @@ const FACTION_SIDE: Record<string, 'A' | 'H'> = { ALLIANCE: 'A', HORDE: 'H' }
  *
  * A row the file marks for the other faction is dropped, and before anything is counted, so a group of
  * the Horde's items reads 14 of 14 rather than 14 of 17 with the Alliance's three greyed out at the end
- * of it. A row the site draws elsewhere in a spotlight of its own (`highlighted`), and one the game has
- * not shipped yet (`new`), are left off its list whatever the character holds - its own shelf hides
- * them, and a shelf that drew them would count them too. An item that can no longer be obtained is
- * drawn only for a character who holds it: it is a rare thing to show off rather than something to go
- * and get, and counting the rest is what made this shelf read 1404 where SimpleArmory reads 1302.
+ * of it. A row the site draws in a spotlight of its own (`highlighted`) is left off its list whatever
+ * the character holds.
+ *
+ * What an item the game has done away with reads as is the visitor's choice, and it is exactly
+ * SimpleArmory's own: by default it is drawn only for a character who holds it - a rare thing to show
+ * off rather than something to go and get - and a visitor who asks for the hidden ones (`unobtainable`)
+ * is shown every retired item the site has. An item the game has not shipped (`notReleased`) stays out
+ * of that second view as well, which is where the site keeps it; and an item it holds back until asked
+ * for (`new`, its "upcoming" stock) is drawn only for a visitor who asks for those.
  *
  * The order is the atlas's, which is SimpleArmory's: every item has its slot in the grid whether the
  * character holds it or not, so a shelf reads the same for everyone and a tile does not move the
@@ -177,16 +183,18 @@ function toItems(
   russian: boolean,
   region: string,
   collected: Set<number>,
-  side: 'A' | 'H' | null
+  side: 'A' | 'H' | null,
+  view: CollectionViewOptions
 ): CollectionItem[] {
   const items: CollectionItem[] = []
 
   for (const entry of entries) {
     if (entry.side && side && entry.side !== side) continue
-    if (entry.highlighted || entry.new) continue
+    if (entry.highlighted) continue
+    if (entry.new && !view.upcoming) continue
 
     const held = collected.has(entry.id)
-    if (!held && entry.notObtainable) continue
+    if (!held && entry.notObtainable && !(view.unobtainable && !entry.notReleased)) continue
 
     const name = (russian ? entry.ru || entry.en : entry.en || entry.ru).trim()
     if (!name) continue
@@ -235,14 +243,15 @@ function buildSections(
   russian: boolean,
   region: string,
   collected: Set<number>,
-  side: 'A' | 'H' | null
+  side: 'A' | 'H' | null,
+  view: CollectionViewOptions
 ): CollectionSection[] {
   const sections: CollectionSection[] = []
 
   for (const group of SHELVES[kind] || []) {
     const subgroups: CollectionSubgroup[] = []
     for (const source of group.subs) {
-      const items = toItems(source.items, russian, region, collected, side)
+      const items = toItems(source.items, russian, region, collected, side, view)
       if (!items.length) continue
       subgroups.push({
         id: source.id,
@@ -278,17 +287,20 @@ function buildSections(
  *
  * `faction` is the one Blizzard names the character with (`HORDE`, `ALLIANCE`), and it is what keeps
  * the other side's items off the shelf: they are dropped before anything is counted, so the totals a
- * visitor reads are the totals of what they can actually collect.
+ * visitor reads are the totals of what they can actually collect. `view` is what the visitor asked to
+ * be shown beyond the default - the retired items and the upcoming ones (see `toItems`), which is the
+ * same pair of switches SimpleArmory's own pages carry.
  */
 export function buildCollectionPage(
   kind: CollectionKind,
   locale: string,
   region: string,
   collected: Set<number>,
-  faction?: string | null
+  faction?: string | null,
+  view: CollectionViewOptions = {}
 ): CollectionPage {
   const side = FACTION_SIDE[String(faction || '').toUpperCase()] || null
-  const sections = buildSections(kind, locale.startsWith('ru'), region, collected, side)
+  const sections = buildSections(kind, locale.startsWith('ru'), region, collected, side, view)
 
   let collectedInAll = 0
   let totalInAll = 0

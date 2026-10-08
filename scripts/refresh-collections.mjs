@@ -14,13 +14,13 @@
  * languages, the icon NAME SimpleArmory writes down for it (`inv_dwarvenmechboss_bronze`) and the
  * Wowhead address the ids it already carries name. Every mark the file makes a row with is carried
  * through as the file writes it - the `side` that keeps the other faction's items off a character's
- * shelf, and the `notObtainable`, `highlighted`, `new`, `dupe` and `bounty` marks a shelf is drawn and
- * counted by - because what one character sees, and what the numbers over a heading add up to, is
- * decided from those marks when the shelf is read (see `server/utils/collections.ts`), and the two
- * sites only read the same numbers if both count from the same marks. The icon name is what a ZamImg
- * address is built from - the same name the game's own 2D sprite is filed under - and a Blizzard icon
- * URL cannot stand in for it, because ZamImg serves sprites by name and rejects the numeric file id
- * Blizzard hands out in its place.
+ * shelf, and the `notObtainable`, `notReleased`, `highlighted`, `new`, `dupe` and `bounty` marks a
+ * shelf is drawn and counted by - because what one character sees, and what the numbers over a heading
+ * add up to, is decided from those marks when the shelf is read (see `server/utils/collections.ts`),
+ * and the two sites only read the same numbers if both count from the same marks. The icon name is
+ * what a ZamImg address is built from - the same name the game's own 2D sprite is filed under - and a
+ * Blizzard icon URL cannot stand in for it, because ZamImg serves sprites by name and rejects the
+ * numeric file id Blizzard hands out in its place.
  *
  * Blizzard is read once for a shelf, and not for an icon: its static index names every mount, pet, toy
  * and decoration in both languages (SimpleArmory carries English only), which is what a shelf falls
@@ -203,16 +203,6 @@ const WOWHEAD_REF = {
 }
 
 /**
- * The groups SimpleArmory has not finished filing, left out of a shelf. Their decor file carries one:
- * `Undiscovered`, two hundred and twenty-five decorations whose source the site has not traced yet,
- * filed under a single heading that says "somewhere, we do not know". A shelf that draws them under
- * that heading says less than one that does not draw them at all - and they join the tree, under
- * their real source, on the day SimpleArmory files them. It is matched by name, so a bucket the site
- * renames or does away with simply stops matching.
- */
-const DROPPED_GROUPS = new Set(['Undiscovered'])
-
-/**
  * The heading every shelf opens with, and the names SimpleArmory files that bucket under. It holds the
  * items a collector buys, is handed or earns outside one expansion, and the site names it after the
  * shelf it sits on in three of its four files - "Mounts", "Pets", "Toys" - while its decor file calls
@@ -283,7 +273,6 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
 
   for (const file of files) {
     for (const group of await readGroups(file)) {
-      if (DROPPED_GROUPS.has(group.name)) continue
       const section = tree.section(GENERAL_BUCKETS.has(group.name || '') ? GENERAL_GROUP : group.name)
       for (const cat of group.subcats || []) {
         const source = tree.source(section, cat.name)
@@ -303,10 +292,12 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
           // The marks a row is drawn and counted by, written down only where the file makes one, so a
           // row SimpleArmory leaves unmarked carries nothing: `side` (`'A'` for the Alliance, `'H'` for
           // the Horde, absent for one both sides can hold), `notObtainable` for an item the game has
-          // done away with, `highlighted` for one the site spotlights elsewhere, `new` for one it has
-          // not shipped, and `dupe`/`bounty` for a row it lists twice and counts once.
+          // done away with, `notReleased` for one it has not shipped, `highlighted` for one the site
+          // draws in a spotlight of its own, and `dupe`/`bounty` for a row it lists twice and counts
+          // once.
           if (item.side === 'A' || item.side === 'H') row.side = item.side
           if (item.notObtainable) row.notObtainable = true
+          if (item.notReleased) row.notReleased = true
           if (item.highlighted) row.highlighted = true
           if (item.new) row.new = true
           if (item.dupe) row.dupe = true
