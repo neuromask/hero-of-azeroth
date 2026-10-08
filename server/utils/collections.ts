@@ -29,6 +29,11 @@ interface AtlasItem {
   icon: string
   /** The `type`/`id` Wowhead answers a tooltip for, or `null` when the item carries neither. */
   wow: { t: 'item' | 'spell' | 'npc'; id: number } | null
+  /**
+   * The faction the item is for, where SimpleArmory marks one - `'A'` for the Alliance, `'H'` for the
+   * Horde - and absent for an item both sides can hold, which is most of them.
+   */
+  side?: 'A' | 'H'
 }
 
 /** One source of a group - the "Raid Drop", the "Vendor", the zone - and the items filed under it. */
@@ -38,12 +43,11 @@ interface AtlasSource {
   items: AtlasItem[]
 }
 
-/** One group of a shelf, cut into its sources; the unfiled tail carries `items` of its own instead. */
+/** One group of a shelf: the expansion, the event, the continent, and the sources filed under it. */
 interface AtlasGroup {
   id: string
   en: string
   subs: AtlasSource[]
-  items?: AtlasItem[]
 }
 
 /** The three trees, as the builder wrote them. */
@@ -70,8 +74,8 @@ const BLIZZARD_ICON_SIZE = 56
 
 /**
  * The address of one row's tile: the icon name the atlas stores, which is the name the sprite is
- * filed under. The question mark stands in for a row with no name at all - an item SimpleArmory has
- * not filed yet - so every tile still shows something.
+ * filed under. The question mark stands in for a row with no icon name of its own, so every tile
+ * still shows something.
  */
 function collectionIcon(entry: AtlasItem): string {
   return entry.icon ? `${ZAMIMG_ICONS}/${ICON_SIZE}/${entry.icon}.jpg` : COLLECTION_ICON_FALLBACK
@@ -133,6 +137,13 @@ function shelfLabel(english: string, russian: boolean): string {
   return russian ? SIMPLEARMORY_LABELS_RU[english] || english : english
 }
 
+/**
+ * The side an item is filed under, read off the faction Blizzard names the character with: the two
+ * say the same thing in different words (`ALLIANCE` and `'A'`), and a character whose faction is
+ * neither - one Blizzard answers `NEUTRAL` for - reads a shelf with nothing taken out of it.
+ */
+const FACTION_SIDE: Record<string, 'A' | 'H'> = { ALLIANCE: 'A', HORDE: 'H' }
+
 /** How many of `items` the character holds. */
 function heldCount(items: CollectionItem[]): number {
   return items.filter((item) => item.collected).length
@@ -142,6 +153,10 @@ function heldCount(items: CollectionItem[]): number {
  * Turns a run of atlas rows into tiles, dropping the ones with no name to show - a placeholder row
  * Blizzard is still using for something that has not shipped.
  *
+ * An item only the other faction can hold is dropped here too, and before anything is counted, so a
+ * group of the Horde's items reads 14 of 14 rather than 14 of 17 with the Alliance's three greyed out
+ * at the end of it.
+ *
  * The order is the atlas's, which is SimpleArmory's: every item has its slot in the grid whether the
  * character holds it or not, so a shelf reads the same for everyone and a tile does not move the
  * moment it is collected. `collected` is only what the tile is drawn as - bright, in gold, or grey.
@@ -150,11 +165,13 @@ function toItems(
   entries: AtlasItem[],
   russian: boolean,
   region: string,
-  collected: Set<number>
+  collected: Set<number>,
+  side: 'A' | 'H' | null
 ): CollectionItem[] {
   const items: CollectionItem[] = []
 
   for (const entry of entries) {
+    if (entry.side && side && entry.side !== side) continue
     const name = (russian ? entry.ru || entry.en : entry.en || entry.ru).trim()
     if (!name) continue
     items.push({
@@ -172,22 +189,25 @@ function toItems(
 
 /**
  * The sections of one shelf, in the order SimpleArmory names them: each group with its own count and
- * bar, and the sources under it side by side, each a named block of tiles. A group with no sources -
- * the tail of what SimpleArmory has not filed - is one wall of tiles instead, and a group or a source
- * that came out empty is dropped, so a shelf shows only the rows it actually has.
+ * bar, and the sources under it side by side, each a named block of tiles.
+ *
+ * A source or a group that came out empty is dropped - a group whose every item belongs to the other
+ * faction, a source a patch emptied - so a shelf shows only the rows it actually has, and the counts
+ * a heading is measured by are the counts of what is drawn under it.
  */
 function buildSections(
   kind: CollectionKind,
   russian: boolean,
   region: string,
-  collected: Set<number>
+  collected: Set<number>,
+  side: 'A' | 'H' | null
 ): CollectionSection[] {
   const sections: CollectionSection[] = []
 
   for (const group of SHELVES[kind] || []) {
     const subgroups: CollectionSubgroup[] = []
     for (const source of group.subs) {
-      const items = toItems(source.items, russian, region, collected)
+      const items = toItems(source.items, russian, region, collected, side)
       if (!items.length) continue
       subgroups.push({
         id: source.id,
@@ -198,15 +218,10 @@ function buildSections(
       })
     }
 
-    const items = subgroups.length ? [] : toItems(group.items || [], russian, region, collected)
-    if (!subgroups.length && !items.length) continue
+    if (!subgroups.length) continue
 
-    const held = subgroups.length
-      ? subgroups.reduce((sum, subgroup) => sum + subgroup.collected, 0)
-      : heldCount(items)
-    const total = subgroups.length
-      ? subgroups.reduce((sum, subgroup) => sum + subgroup.total, 0)
-      : items.length
+    const held = subgroups.reduce((sum, subgroup) => sum + subgroup.collected, 0)
+    const total = subgroups.reduce((sum, subgroup) => sum + subgroup.total, 0)
 
     sections.push({
       id: group.id,
@@ -214,8 +229,7 @@ function buildSections(
       collected: held,
       total,
       percent: total ? Math.round((held / total) * 100) : 0,
-      items,
-      subgroups: subgroups.length ? subgroups : undefined
+      subgroups
     })
   }
 
@@ -224,16 +238,22 @@ function buildSections(
 
 /**
  * Assembles one shelf: its sections, each item flagged for whether the character holds it, and the
- * counts the headings are measured by. Both shapes are counted into one running total, which is what
+ * counts the headings are measured by. Every section is counted into one running total, which is what
  * the shelf's own heading and bar read.
+ *
+ * `faction` is the one Blizzard names the character with (`HORDE`, `ALLIANCE`), and it is what keeps
+ * the other side's items off the shelf: they are dropped before anything is counted, so the totals a
+ * visitor reads are the totals of what they can actually collect.
  */
 export function buildCollectionPage(
   kind: CollectionKind,
   locale: string,
   region: string,
-  collected: Set<number>
+  collected: Set<number>,
+  faction?: string | null
 ): CollectionPage {
-  const sections = buildSections(kind, locale.startsWith('ru'), region, collected)
+  const side = FACTION_SIDE[String(faction || '').toUpperCase()] || null
+  const sections = buildSections(kind, locale.startsWith('ru'), region, collected, side)
 
   let collectedInAll = 0
   let totalInAll = 0

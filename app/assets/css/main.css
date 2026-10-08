@@ -52,17 +52,6 @@
     @apply opacity-100 grayscale-0;
   }
 
-  /* The wall of tiles inside a section: the shape a group with no sources of its own is drawn in -
-     the tail of what SimpleArmory has not filed yet. `content-visibility` lets the browser skip the
-     paint of a wall that has scrolled off, and the intrinsic size gives an unbuilt one a placeholder
-     height so the scrollbar does not jump as it comes in. */
-  .hoa-tiles {
-    @apply grid gap-1.5;
-    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-    content-visibility: auto;
-    contain-intrinsic-size: auto 38px;
-  }
-
   /* The sources inside a group, laid side by side rather than stacked: SimpleArmory reads a group as
      a run of small blocks, and that is what a collector is used to. The blocks wrap as a row of them
      fills. */
@@ -93,8 +82,7 @@
     @apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1 text-[12px] font-semibold leading-none text-gray-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)];
   }
 
-  /* A tile inside a source is the size the flat shelves draw their squares at, rather than filling
-     the row it sits in. */
+  /* A tile inside a source is the size a square is drawn at, rather than filling the row it sits in. */
   .hoa-subgroup > .hoa-tile {
     @apply w-[38px] shrink-0;
   }

@@ -102,7 +102,7 @@ const regionCode = computed(() => region.toUpperCase())
 const seoName = computed(() => {
   const c = character.value
   if (!c) return ''
-  return [c.class, c.realm].filter(Boolean).join(', ')
+  return [c.realm].filter(Boolean).join(', ')
 })
 
 /** The class and the realm as a link preview names them: `Рыцарь смерти (Tarren Mill)`. */
@@ -128,8 +128,8 @@ const seoTitle = computed(() => {
   const base = !c
     ? name
     : (seoName.value ? `${c.name} - ${seoName.value} (${regionCode.value})` : `${c.name} (${regionCode.value})`)
-  if (onActivityTab.value) return `${base} — ${t('tabActivity')}`
-  if (onCollectionsTab.value) return `${base} — ${t('tabCollections')}`
+  if (onActivityTab.value) return `${base} - ${t('tabActivity')}`
+  if (onCollectionsTab.value) return `${base} - ${t('tabCollections')}`
   return base
 })
 
@@ -153,7 +153,7 @@ const seoOgDescription = computed(() => {
   if (!c) return ''
   return [
     `${seoOgWho.value || c.name}`,
-    `${c.ap}`,
+    `🏆 ${c.ap}`,
     `ilvl ${c.ilvl}`,
     `M+ ${c.mPlusScore}`,
     `${t('mounts')} ${c.stats.mounts.count}`,

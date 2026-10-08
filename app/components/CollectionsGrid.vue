@@ -177,7 +177,7 @@ onBeforeUnmount(() => {
   headerObserver = null
 })
 
-/** One row of tiles inside a section: a name to head it with (empty on a flat shelf) and its items. */
+/** One row of tiles inside a section: a name to head it with (empty for a nameless source) and its items. */
 interface GridRow {
   id: string
   label: string
@@ -185,19 +185,15 @@ interface GridRow {
 }
 
 /**
- * The rows a section is built from. A mounts group names its own - the source headings from the
- * SimpleArmory tree, each a row of tiles - while a flat shelf (pets, toys) is one unnamed row, so
- * the one template below draws both without a second branch.
+ * The rows a section is built from: one per source, each a name over its own block of tiles - the
+ * source headings of the SimpleArmory tree, laid side by side under the group's own heading.
  */
 function rowsOf(section: CollectionSection): GridRow[] {
-  if (section.subgroups?.length) {
-    return section.subgroups.map((subgroup) => ({
-      id: subgroup.id,
-      label: subgroup.label,
-      items: subgroup.items
-    }))
-  }
-  return [{ id: section.id, label: '', items: section.items }]
+  return section.subgroups.map((subgroup) => ({
+    id: subgroup.id,
+    label: subgroup.label,
+    items: subgroup.items
+  }))
 }
 
 /** How many tiles one line of a shelf holds, near enough: 38px squares with 6px between them. */
@@ -210,15 +206,14 @@ const SUBGROUP_TITLE = 22
 /**
  * A rough height for a section that is not built yet, so the page does not jump as it is built.
  *
- * A mounts group lays its sources side by side, so what it will take is the lines its tiles fill,
- * plus a name for each source - not a line per source, which is what the old stack of them was.
- * A flat shelf is the same wall with no names in it.
+ * A group lays its sources side by side, so what it will take is the lines its tiles fill, plus a
+ * name for each source - not a line per source, which is what the old stack of them was.
  */
 function placeholderHeight(section: CollectionSection): string {
   const rows = rowsOf(section)
   const tiles = rows.reduce((sum, row) => sum + row.items.length, 0)
   const lines = Math.ceil(tiles / TILES_PER_LINE)
-  // Only a named block takes the room of a heading; a group's own tiles have none above them.
+  // Only a named block takes the room of a heading.
   const headings = rows.filter((row) => row.label).length * SUBGROUP_TITLE
   return `${lines * TILE_LINE + headings}px`
 }
@@ -279,16 +274,10 @@ function placeholderHeight(section: CollectionSection): string {
       <!-- The tiles: a wall of anchors, each one a link the widget draws a tooltip over.
            A group is a run of its sources - each a block of its own, its name on a tag over its row
            of tiles - laid side by side and wrapping as the row fills, the way SimpleArmory reads a
-           group; a section with no sources of its own (the tail of what SimpleArmory has not filed
-           yet) is one unnamed wall that fills the width. The row is a block of the run in the first
-           case and the wall itself in the second, so both are drawn from this one piece of markup.
-           The few items Wowhead has no page for are plain spans, so a tile is one node, one image. -->
-      <div v-if="revealed.has(index)" class="mt-4" :class="{ 'hoa-subgroups-container': section.subgroups }">
-        <div
-          v-for="row in rowsOf(section)"
-          :key="row.id"
-          :class="section.subgroups ? 'hoa-subgroup' : 'hoa-tiles'"
-        >
+           group, and the run is the row of this template. The few items Wowhead has no page for are
+           plain spans, so a tile is one node, one image. -->
+      <div v-if="revealed.has(index)" class="hoa-subgroups-container mt-4">
+        <div v-for="row in rowsOf(section)" :key="row.id" class="hoa-subgroup">
           <h4 v-if="row.label" class="hoa-subgroup-title">
             <span class="hoa-tag">{{ row.label }}</span>
           </h4>

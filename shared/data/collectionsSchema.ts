@@ -5,8 +5,9 @@
  * Every shelf is SimpleArmory's: a group at the top (an expansion, an event, a continent), a source
  * under it ("Raid Drop", "Vendor", "Zul'Aman"), and the items under that, exactly as the files they
  * publish name them. A section therefore carries `subgroups`, one per source, and the heading above
- * each is a plain string, taken from that tree and translated here. A group with no sources of its
- * own - the tail of what SimpleArmory has not filed yet - lists its items directly instead.
+ * each is a plain string, taken from that tree and translated here. A bucket the site has not finished
+ * filing - it names one "Undiscovered" - is left out of the atlas altogether rather than drawn as a
+ * heading that says nothing about where its items come from.
  *
  * A heading is resolved to the language of the page before it leaves the server, so the grid draws
  * it like any other string and no shelf needs a message key that a new expansion would not have.
@@ -39,7 +40,6 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   'World Events': 'Игровые события',
   Promotion: 'Промоакции',
   Other: 'Прочее',
-  'New / Uncategorized': 'Новое',
   // Sources.
   Achievement: 'Достижения',
   Quest: 'Задания',
@@ -349,8 +349,6 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   // The decorations' own vocabulary: the housing side of the game, and the sources a decoration is
   // bought or earned through.
   General: 'Общее',
-  Undiscovered: 'Не обнаружено',
-  'Undiscovered Sources': 'Неизвестные источники',
   Neighbourhoods: 'Районы',
   'Neighbourhood Vendor': 'Продавец в районе',
   'Holiday Vendor': 'Праздничный продавец',
@@ -393,8 +391,8 @@ export interface CollectionItem {
    * The `type`/`id` a Wowhead tooltip answers to, written down when the atlas was built from the ids
    * SimpleArmory carries: a mount's item or the spell that summons it, a pet's creature (a battle pet
    * is a Wowhead NPC, not the `pet=` hunter-pet family it used to be), a toy's item. `null` for a row
-   * that has no such id - one SimpleArmory has not filed - which the grid draws as a plain tile
-   * rather than a link to nowhere.
+   * that has no such id - a file that names none - which the grid draws as a plain tile rather than a
+   * link to nowhere.
    */
   wow: { type: 'item' | 'spell' | 'npc'; id: number } | null
 }
@@ -412,9 +410,9 @@ export interface CollectionSubgroup {
 }
 
 /**
- * One section of a shelf: the items and the count the heading is measured by. A section cut into
- * sources carries them as `subgroups` and leaves `items` empty; the tail of what SimpleArmory has not
- * filed has no sources to name and lists its items directly - so the one grid draws both shapes.
+ * One section of a shelf: the sources it is cut into and the count the heading above them is measured
+ * by. The sources are already dropped off it when they came out empty, so a section always has at
+ * least the one the grid draws.
  */
 export interface CollectionSection {
   id: string
@@ -424,10 +422,8 @@ export interface CollectionSection {
   total: number
   /** The share of the section the character holds, rounded to a whole percent. */
   percent: number
-  /** The items drawn as one wall of tiles, which only a section with no sources of its own uses. */
-  items: CollectionItem[]
   /** The source rows drawn under the heading, one block of tiles each. */
-  subgroups?: CollectionSubgroup[]
+  subgroups: CollectionSubgroup[]
 }
 
 /** A whole shelf, ready to draw: the sections and the running total they add up to. */

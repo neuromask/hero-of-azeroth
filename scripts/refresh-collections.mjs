@@ -12,26 +12,28 @@
  * source or an item that has appeared since the last one is simply in the atlas the next time round.
  * An item carries four things, which is what a tile and a tooltip need: its id, its name in both
  * languages, the icon NAME SimpleArmory writes down for it (`inv_dwarvenmechboss_bronze`) and the
- * Wowhead address the ids it already carries name. The icon name is what a ZamImg address is built
- * from - the same name the game's own 2D sprite is filed under - and a Blizzard icon URL cannot
- * stand in for it, because ZamImg serves sprites by name and rejects the numeric file id Blizzard
- * hands out in its place.
+ * Wowhead address the ids it already carries name - plus, for the few hundred items only one faction
+ * can hold, the `side` the file marks them with (`'A'`, `'H'`), which is what keeps the other side's
+ * items off a character's shelf. An item the file marks as not released yet is not stored - a
+ * collector can neither go and get it nor plan for it - while one it marks as no longer obtainable is
+ * stored: a character may still hold it, and this shelf is the only place that says so. The icon name
+ * is what a ZamImg address is built from - the same name the game's own 2D sprite is filed under - and
+ * a Blizzard icon URL cannot stand in for it, because ZamImg serves sprites by name and rejects the
+ * numeric file id Blizzard hands out in its place.
  *
- * Blizzard is read once for a shelf, and not for an icon: its static index names every mount, pet and
- * toy in both languages (SimpleArmory carries English only), and the difference between that index
- * and SimpleArmory's files - a mount shipped before a fan site filed it - is put in the tree's last
- * group rather than lost. What a character holds is read per request, by the server, and matched
- * against the ids stored here.
+ * Blizzard is read once for a shelf, and not for an icon: its static index names every mount, pet, toy
+ * and decoration in both languages (SimpleArmory carries English only), which is what a shelf falls
+ * back to where a file carries one language or none. What a character holds is read per request, by
+ * the server, and matched against the ids stored here.
  *
  * `--only=mounts` (a comma list) rebuilds just those shelves and keeps the rest of the atlas on disk,
  * which is enough when only one source has moved.
  *
- * Usage: npm run refresh:collections [region] [concurrency] [--only=<kinds>]   (default region: eu)
+ * Usage: npm run refresh:collections [region] [--only=<kinds>]   (default region: eu)
  */
 import fs from 'node:fs'
 
 const REGION = (process.argv.slice(2).find((a) => !a.startsWith('--') && !/^\d+$/.test(a)) || 'eu').toLowerCase()
-const CONCURRENCY = Number(process.argv.find((a) => /^\d+$/.test(a)) || 8)
 /**
  * `--only=mounts` (a comma list) rebuilds just those shelves and keeps the rest of the atlas on
  * disk, so a change to the mounts tree does not mean reading every pet and toy again.
@@ -96,20 +98,6 @@ async function api(url, attempt = 0) {
   }
 }
 
-/** Runs `worker` over `items`, `CONCURRENCY` at a time, keeping the answers in order. */
-async function pool(items, worker) {
-  const out = new Array(items.length)
-  let next = 0
-  const run = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await worker(items[i], i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, run))
-  return out
-}
-
 /**
  * Reads one URL as text, waiting and retrying on a stumble, and never from a cache: every run reads
  * the files as they stand, so the Trading Post rotation that moved this week - or the decoration a
@@ -127,50 +115,6 @@ async function fetchText(url, attempt = 0) {
     await sleep(600 * 2 ** attempt)
     return fetchText(url, attempt + 1)
   }
-}
-
-/** The JSON of a Wowhead tooltip, or `null` when Wowhead does not carry it. */
-async function wowheadJson(url, attempt = 0) {
-  try {
-    const response = await fetch(url, { headers: FETCH_HEADERS })
-    if (response.status === 403 || response.status === 404) return null
-    if (!response.ok) throw new Error(`${response.status}`)
-    return await response.json()
-  } catch {
-    if (attempt >= 3) return null
-    await sleep(600 * 2 ** attempt)
-    return wowheadJson(url, attempt + 1)
-  }
-}
-
-/**
- * What Wowhead answers for a mount: the item that teaches it, or - for the mounts taught by a spell
- * rather than an item - that spell. Wowhead has no mount tooltip, so `/mount/{id}` is a redirect,
- * and the page it lands on is what its widget draws. Only a mount SimpleArmory has not filed is
- * asked this: every mount the files carry names its own item or spell already.
- */
-async function wowheadMountRef(id, attempt = 0) {
-  try {
-    const response = await fetch(`https://www.wowhead.com/mount/${id}`, { redirect: 'manual', headers: FETCH_HEADERS })
-    if (response.status === 403) return null
-    const location = response.headers.get('location') || ''
-    const item = /\/item=(\d+)/.exec(location)?.[1]
-    if (item) return { t: 'item', id: Number(item) }
-    const spell = /\/spell=(\d+)/.exec(location)?.[1]
-    if (spell) return { t: 'spell', id: Number(spell) }
-    return null
-  } catch {
-    if (attempt >= 3) return null
-    await sleep(400 * (attempt + 1))
-    return wowheadMountRef(id, attempt + 1)
-  }
-}
-
-/** The icon name Wowhead draws for one of its entities - the item behind a mount, or a spell. */
-async function wowheadIcon(type, id) {
-  const tooltip = await wowheadJson(`https://nether.wowhead.com/tooltip/${type}/${id}`)
-  const name = String(tooltip?.icon || '').toLowerCase()
-  return ICON_NAME.test(name) ? name : ''
 }
 
 /** A stable id for a heading: its SimpleArmory name, lower-cased and narrowed to word characters. */
@@ -205,7 +149,7 @@ function newTree() {
       const id = slug(name)
       let found = sections.get(id)
       if (!found) {
-        found = { id, en: name, subs: [], items: [] }
+        found = { id, en: name, subs: [] }
         sections.set(id, found)
         groups.push(found)
       }
@@ -215,7 +159,7 @@ function newTree() {
     /**
      * The source `name` names inside `section`, made if that section has not got one yet. A source
      * the file leaves nameless keeps its empty name, and its id is empty with it: the grid draws such
-     * a block with no heading, which is what a group's own tiles read like.
+     * a block with no heading above it, which is what the continents' catch-all sources read like.
      */
     source(section, name) {
       const key = `${section.id}\u0000${slug(name)}`
@@ -230,16 +174,12 @@ function newTree() {
 
     /**
      * The tree as it is to be stored. A source with nothing filed under it is dropped, and so is a
-     * group left with neither a source nor an item of its own - a file may name a heading it has
-     * nothing in, which is not something to draw an empty row for. `items` is only written where a
-     * group has items of its own, which the unfiled tail does.
+     * group left with no source at all - a file may name a heading it has nothing in, which is not
+     * something to draw an empty row for.
      */
     finish() {
-      for (const group of groups) {
-        group.subs = group.subs.filter((sub) => sub.items.length)
-        if (!group.items.length) delete group.items
-      }
-      return groups.filter((group) => group.subs.length || group.items)
+      for (const group of groups) group.subs = group.subs.filter((sub) => sub.items.length)
+      return groups.filter((group) => group.subs.length)
     }
   }
 }
@@ -260,6 +200,16 @@ const WOWHEAD_REF = {
   toys: (item) => (item.itemId ? { t: 'item', id: Number(item.itemId) } : null),
   decors: (item) => (item.itemId ? { t: 'item', id: Number(item.itemId) } : null)
 }
+
+/**
+ * The groups SimpleArmory has not finished filing, left out of a shelf. Their decor file carries one:
+ * `Undiscovered`, two hundred and twenty-five decorations whose source the site has not traced yet,
+ * filed under a single heading that says "somewhere, we do not know". A shelf that draws them under
+ * that heading says less than one that does not draw them at all - and they join the tree, under
+ * their real source, on the day SimpleArmory files them. It is matched by name, so a bucket the site
+ * renames or does away with simply stops matching.
+ */
+const DROPPED_GROUPS = new Set(['Undiscovered'])
 
 /**
  * What a group the file leaves nameless is called. SimpleArmory's pets file opens with the bucket
@@ -325,53 +275,40 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
 
   for (const file of files) {
     for (const group of await readGroups(file)) {
+      if (DROPPED_GROUPS.has(group.name)) continue
       const section = tree.section(group.name || NAMELESS_GROUP[kind])
       for (const cat of group.subcats || []) {
         const source = tree.source(section, cat.name)
         for (const item of cat.items || []) {
           if (filed.has(item.ID)) continue
           filed.add(item.ID)
+          // An item SimpleArmory marks as not released yet is not something a collector can go and get
+          // or plan for, so it is left out of the atlas - and the next run of this script brings it in
+          // when the mark is lifted. It is that mark alone that keeps an item out: an item marked as
+          // no longer obtainable is kept, because it may be one a character already owns, and a shelf
+          // that hid it would quietly drop it from that character's own count.
+          if (item.notReleased) continue
           const named = names.get(item.ID)
-          source.items.push({
+          const row = {
             id: item.ID,
             en: named?.en || item.name || '',
             ru: named?.ru || item.name || '',
             icon: iconName(item.icon),
             wow: WOWHEAD_REF[kind](item)
-          })
+          }
+          // An item only one faction can hold is marked with that faction - `'A'` for the Alliance,
+          // `'H'` for the Horde - and an item both can hold carries no mark at all, so the field is
+          // left off rather than written empty. Whose shelf it lands on is decided when the shelf is
+          // read, not here.
+          if (item.side === 'A' || item.side === 'H') row.side = item.side
+          source.items.push(row)
           written++
         }
       }
     }
   }
 
-  return { groups: tree.finish(), filed, written, index }
-}
-
-/**
- * The tail group: what Blizzard publishes and SimpleArmory has not filed yet, which is what a patch
- * looks like before the fan sites catch up. Its names are Blizzard's, and a mount is asked of
- * Wowhead as well, because its id is the one address Wowhead answers a page for - so a mount nobody
- * has filed still gets a tile and a tooltip. A pet or a toy has no such address in Blizzard's index
- * alone, so its square waits for SimpleArmory as a question mark.
- */
-async function unfiledTail(kind, index, filed) {
-  const rows = index.filter((entry) => !filed.has(entry.id) && (entry.name?.en_US || entry.name?.ru_RU))
-  if (!rows.length) return null
-
-  const items = await pool(rows, async (entry) => {
-    const wow = kind === 'mounts' ? await wowheadMountRef(entry.id) : null
-    const icon = wow ? await wowheadIcon(wow.t, wow.id) : ''
-    return {
-      id: entry.id,
-      en: entry.name?.en_US || '',
-      ru: entry.name?.ru_RU || '',
-      icon,
-      wow
-    }
-  })
-  items.sort((a, b) => a.id - b.id)
-  return { id: 'uncategorized', en: 'New / Uncategorized', subs: [], items }
+  return { groups: tree.finish(), written }
 }
 
 const data = {
@@ -385,17 +322,11 @@ const data = {
 for (const shelf of SHELVES) {
   if (!builds(shelf.kind)) continue
 
-  const { groups, filed, written, index } = await buildShelf(shelf)
-  const tail = await unfiledTail(shelf.kind, index, filed)
-  if (tail) {
-    groups.push(tail)
-    console.log(`${shelf.kind}: ${tail.items.length} not filed at SimpleArmory, under ${tail.en}`)
-  }
+  const { groups, written } = await buildShelf(shelf)
   data.shelves[shelf.kind] = groups
   console.log(
-    `${shelf.kind}: ${written + (tail ? tail.items.length : 0)} written, ${groups.length} groups ` +
-      `(${groups.reduce((n, group) => n + group.subs.length, 0)} sources, ` +
-      `${groups.filter((group) => !group.subs.length).length} drawn flat)`
+    `${shelf.kind}: ${written} written, ${groups.length} groups ` +
+      `(${groups.reduce((n, group) => n + group.subs.length, 0)} sources)`
   )
 }
 
