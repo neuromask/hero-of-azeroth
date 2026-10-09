@@ -839,8 +839,7 @@ onBeforeUnmount(() => {
            the Refresh button above it are never rebuilt by a switch between the two. -->
       <NuxtPage />
 
-      <footer class="relative z-20 container mx-auto px-4 pb-2 flex flex-col items-center gap-1.5 text-xs text-gray-500">
-        <AppIcon name="hoa-logotype" alt="HeroOfAzeroth" class="h-7 w-auto" />
+      <footer class="relative z-20 container mx-auto px-4 pb-2 text-xs">
         <SiteFooter />
       </footer>
 

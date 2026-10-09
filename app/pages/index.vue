@@ -632,11 +632,13 @@ onBeforeUnmount(() => {
       </form>
     </div>
 
-    <!-- The brand line under the box, drawn by the same component the character page's footer
-         carries, so the two pages sign off identically. The column above centres the box and the
-         line as one block, so the box keeps its place while the line stays the same. -->
-    <footer class="relative z-10 mt-4 text-xs text-gray-500">
-      <SiteFooter />
+    <!-- The sign-off, drawn by the same component every page carries, so the two pages sign off
+         identically. The column above centres the box and the line as one block, so the box keeps its
+         place while the line stays the same. It is asked for the compact form: the card above opens
+         with the wordmark, and this page brings its own `mt-4` rather than the component's 36px, so
+         the gap under the card stays what it always was. -->
+    <footer class="relative z-10 mt-4 text-xs">
+      <SiteFooter :standalone="false" />
     </footer>
 
     <!-- Back to the top of the page, and the support plate - the two corners the site keeps a

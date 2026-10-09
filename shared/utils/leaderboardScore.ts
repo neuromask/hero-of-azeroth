@@ -7,8 +7,8 @@
  * (see `server/utils/leaderboardStorage.ts`), and read back as a plain column afterwards.
  *
  * The weights are the ones the site ranks collections by, and they are multipliers rather than a
- * statement of "importance": a mount is worth twenty-five achievement points, a toy fifteen, a piece
- * of decor ten and a pet five. Only what a character has *collected* is weighed - mounts, pets, toys,
+ * statement of "importance": a mount is worth twenty-five achievement points, a toy fifteen, and a
+ * piece of decor or a pet five. Only what a character has *collected* is weighed - mounts, pets, toys,
  * decor and the achievement points behind them - so a Mythic+ rating or an item level, earned by
  * playing or simply worn, never decides where a collector stands. The figures in the comments are what
  * a fully collected character of the current expansion brings, which is what a later category
@@ -24,8 +24,8 @@ export const SCORE_WEIGHTS = {
   mounts: 25,
   /** ~950 toys. */
   toys: 15,
-  /** ~1480 decor pieces. */
-  decor: 10,
+  /** ~1480 decor pieces, which is why this weight sits with the pets rather than above them. */
+  decor: 5,
   /** ~1500 pets, counted by species. */
   pets: 5
 } as const
@@ -39,7 +39,7 @@ export const SCORE_WEIGHTS = {
  * re-derives every rating once when it does not match - which is what makes a weight a one-line edit
  * that reaches the whole table, rather than only the characters looked up afterwards.
  */
-export const SCORE_VERSION = 2
+export const SCORE_VERSION = 3
 
 /**
  * The part of a stored record the rating is computed from: the five categories it weighs.

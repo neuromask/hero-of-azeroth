@@ -48,17 +48,23 @@ const { realmLabel } = useRealmNames()
  *
  * A chip is a column, and a column is one of the figures the endpoint already knows how to order by,
  * so the three cannot drift apart: the chips, the table's own headers and the sort the API accepts
- * are the same list of names. The names in between are the site's own, so a reader who has met a
- * "mount lord" in the table knows which column the chip turns on.
+ * are the same list of names, read in the same order - the row above the table lists the figures the
+ * table draws. The overall chip opens the row because it is the state the others leave behind, and
+ * the two figures a collector does not gather by name (`M+`, `ilvl`) close it.
+ *
+ * A chip wears the site's own name for the figure it turns on - a "mount lord" where the column says
+ * "mounts" - so a reader who has met one in the table knows which chip to reach for. The site has a
+ * name of its own for four of them and borrows the column's for the rest, which is why the labels
+ * come from two places: `lbPreset*` for the named ones, the collections' own keys for the plain ones.
  */
 const COLUMN_CHIPS: { key: LeaderboardSort; icon: string; label: string; literal?: boolean }[] = [
   { key: 'total', icon: 'emblem', label: 'lbPresetTotal' },
+  { key: 'achievements', icon: 'achievments', label: 'lbPresetAchievements' },
   { key: 'mounts', icon: 'mounts', label: 'lbPresetMounts' },
-  { key: 'pets', icon: 'pets', label: 'pets' },
   { key: 'toys', icon: 'toys', label: 'toys' },
+  { key: 'pets', icon: 'pets', label: 'pets' },
   { key: 'decor', icon: 'decor', label: 'lbPresetDecor' },
   { key: 'mplus', icon: 'key', label: 'lbPresetMplus' },
-  { key: 'achievements', icon: 'achievments', label: 'lbPresetAchievements' },
   { key: 'ilvl', icon: 'item-level', label: 'ilvl', literal: true }
 ]
 
@@ -74,8 +80,8 @@ function isShown(key: LeaderboardSort): boolean {
 }
 
 /**
- * The legend of the overall score: the five figures it is made of, in the order the rating weighs
- * them, each with the multiplier it carries.
+ * The legend of the overall score: the five figures it is made of, in the order the table draws them,
+ * each with the multiplier it carries.
  *
  * The numbers are read off `SCORE_WEIGHTS` rather than written out here, so the panel a reader opens
  * and the formula the server computes with cannot drift apart: this is the same table, drawn.
@@ -84,8 +90,8 @@ const SCORE_LEGEND = [
   { key: 'achievements', icon: 'achievments', label: 'achievements', weight: SCORE_WEIGHTS.achievements },
   { key: 'mounts', icon: 'mounts', label: 'mounts', weight: SCORE_WEIGHTS.mounts },
   { key: 'toys', icon: 'toys', label: 'toys', weight: SCORE_WEIGHTS.toys },
-  { key: 'decor', icon: 'decor', label: 'decor', weight: SCORE_WEIGHTS.decor },
-  { key: 'pets', icon: 'pets', label: 'pets', weight: SCORE_WEIGHTS.pets }
+  { key: 'pets', icon: 'pets', label: 'pets', weight: SCORE_WEIGHTS.pets },
+  { key: 'decor', icon: 'decor', label: 'decor', weight: SCORE_WEIGHTS.decor }
 ] as const
 
 /**

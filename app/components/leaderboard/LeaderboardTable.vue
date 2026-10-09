@@ -97,11 +97,11 @@ const COLUMNS: {
   /** Set for the labels that are the game's own words and are never translated. */
   literal?: boolean
 }[] = [
-  { key: 'mounts', label: 'mounts', field: 'mounts' },
-  { key: 'pets', label: 'pets', field: 'pets' },
-  { key: 'toys', label: 'toys', field: 'toys' },
-  { key: 'decor', label: 'decor', field: 'decor' },
   { key: 'achievements', label: 'achievements', field: 'achievements' },
+  { key: 'mounts', label: 'mounts', field: 'mounts' },
+  { key: 'toys', label: 'toys', field: 'toys' },
+  { key: 'pets', label: 'pets', field: 'pets' },
+  { key: 'decor', label: 'decor', field: 'decor' },
   { key: 'mplus', label: 'M+', field: 'mPlusScore', literal: true },
   { key: 'ilvl', label: 'ilvl', field: 'ilvl', literal: true }
 ]
