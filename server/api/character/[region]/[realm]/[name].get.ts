@@ -27,52 +27,24 @@ export default defineEventHandler(async (event) => {
       async () => {
         const profile = await getCharacter(realm, name, region, locale)
 
-        // A lookup that came back with a character is the one moment the site learns a page
-        // exists, so it is written down for the sitemap as the fresh copy is fetched (see
-        // `server/utils/characterIndex.ts`). What the profile says about the character rides along:
-        // the map a browser paints is a page about who has been looked up, and what they were.
-        await rememberCharacter({
-          region,
-          realm,
-          name,
-          displayName: profile.name,
-          level: profile.level,
-          classId: profile.classId,
-          ilvl: profile.ilvl,
-          mPlusScore: profile.mPlusScore,
-          mounts: profile.stats.mounts.count
-        })
+        // A lookup that came back with a character is the one moment the site learns a page exists,
+        // so it is written down for the sitemap as the fresh copy is fetched - and what the profile
+        // says about the character is written into the hall of fame at the same time, in one place
+        // and by the same rule (`server/utils/profileFeed.ts`).
+        await feedProfile({ region, realm, name, profile })
 
         return profile
       },
       force
     )
 
-    // The leaderboard is fed on *every* request, not only on a fresh lookup, and that is the whole
-    // point of this call standing outside the cache above. A profile lives there for two hours, so a
-    // character opened twice in an afternoon is one Blizzard lookup and two table updates - and that
-    // second update is what fills in a record the sitemap's thinner index could only write half of
-    // (`server/utils/leaderboardStorage.ts`). The write is skipped when the record already says
-    // everything this profile does, so a reader who opens a page the table already knows costs the
-    // disk nothing at all.
-    await upsertPlayer({
-      region,
-      realm,
-      realmName: character.realm,
-      name,
-      displayName: character.name,
-      avatar: character.avatarUrl,
-      classId: character.classId,
-      faction: character.faction,
-      level: character.level,
-      ilvl: character.ilvl,
-      mPlusScore: character.mPlusScore,
-      mounts: character.stats.mounts.count,
-      pets: character.stats.pets.count,
-      toys: character.stats.toys.count,
-      decor: character.stats.decor.count,
-      achievements: character.ap
-    })
+    // And the same feed stands here as well, on *every* request rather than only on a fresh lookup,
+    // which is the whole point of it standing outside the cache above: a profile lives there for two
+    // hours, so a character opened twice in an afternoon is one Blizzard lookup and two table
+    // updates - and that second update is what fills in a record the sitemap's thinner index could
+    // only write half of. Both writes are skipped when the record already says everything this
+    // profile does, so a reader who opens a page the table already knows costs the disk nothing.
+    await feedProfile({ region, realm, name, profile: character })
 
     return character
   } catch (err: any) {

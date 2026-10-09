@@ -1,4 +1,5 @@
 import { Resvg } from '@resvg/resvg-js'
+import type { ResvgRenderOptions } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
 import { mPlusQualityHex, wowQualityHex } from '#shared/utils/wow-quality'
 // The class colours are shared with the page and the search history, so a card, a page and a
@@ -8,7 +9,8 @@ import type { CharacterData, CharacterStat } from './blizzard'
 import { pngAlphaBandBounds, pngAlphaBounds } from './png'
 import type { PngBand, PngBounds } from './png'
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const CARD_WIDTH = 1200
 const CARD_HEIGHT = 630
@@ -151,22 +153,78 @@ function fitText(
  *
  * `public/` is where they live because it is the one directory a deployment always has:
  * `npm run deploy` uploads `.output` alone and Nitro copies `public/` into it, so the folder sits
- * beside `server/index.mjs` whether the server runs from the checkout or from a build. The
- * directory is looked for under the working directory and the two levels above it, which is what
- * covers a server started from the deploy root, from the checkout, or from inside `.output`.
+ * beside `server/index.mjs` whether the server runs from the checkout or from a build.
+ *
+ * Where that folder *is* is asked in two ways, because a running server has two answers to "where am
+ * I" and only one of them is always right. The entry the host started it with comes first - resolved
+ * from the runtime URL Nitro installs for its own bundled assets, see `runningFrom` - which is the
+ * answer that survives a process begun from a home directory, from a service manager's own working
+ * directory, or from `/`. That is the failure this list exists for: measured from the working
+ * directory alone, a server on such a host finds no faces, and every card is rasterised in the
+ * machine's fonts instead - the card that "loses its font on production" and keeps it everywhere
+ * else. The working directory and its two parents are asked second, which is what a checkout answers
+ * with, where this file is read from the sources rather than from a bundle.
  */
 const FONT_DIR = 'public/fonts/gilroy'
 const FONT_FILES = ['Gilroy-Regular.ttf', 'Gilroy-SemiBold.ttf', 'Gilroy-Bold.ttf', 'Gilroy-ExtraBold.ttf']
 
-function loadFontFiles(): string[] {
-  for (const root of [process.cwd(), join(process.cwd(), '..'), join(process.cwd(), '..', '..')]) {
-    const dir = join(root, FONT_DIR)
-    if (!existsSync(join(dir, FONT_FILES[0]!))) continue
+/**
+ * The directory the server is running from, for a module that has no honest way of asking.
+ *
+ * `import.meta.url` is not an answer here: a build is a bundle, and Nitro rewrites that expression to
+ * a URL of its own doing (`file:///_entry.js`, read out of a server that refused to start) which names
+ * no directory - and which `fileURLToPath` rejects outright on Windows, where `/` is not a path. What
+ * the runtime does carry is the entry Nitro was started with, installed as `globalThis._importMeta_.url`
+ * for the bundled assets its own reader loads, and that entry is the real file the host ran. So a
+ * server begun as `node …/server/index.mjs` - from any working directory at all - answers with the
+ * directory that holds `server/` and the `public/` beside it.
+ */
+function runningFrom(): string {
+  const injected = (globalThis as { _importMeta_?: { url?: string } })._importMeta_?.url
 
-    return FONT_FILES.map((file) => join(dir, file)).filter((file) => existsSync(file))
+  try {
+    return dirname(fileURLToPath(injected || import.meta.url))
+  } catch {
+    // A URL this runtime will not turn into a path is still no reason to give up: the working
+    // directory is asked next, and it is the right answer wherever the server really stands in it.
+    return process.cwd()
+  }
+}
+
+/** The directories a `public/fonts/gilroy` may be found under, the likeliest first. */
+function fontRoots(): string[] {
+  const roots: string[] = []
+
+  // From the running entry outwards: six levels is more than a bundle nesting takes and stops well
+  // short of the root, where the walk ends by itself anyway.
+  let dir = runningFrom()
+  for (let level = 0; level < 6; level++) {
+    roots.push(dir)
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
   }
 
-  // No faces found, so the rasteriser is left with the machine's own fonts and every `<text>`
+  roots.push(process.cwd(), join(process.cwd(), '..'), join(process.cwd(), '..', '..'))
+  return roots
+}
+
+function loadFontFiles(): string[] {
+  // A card set in the machine's fonts is worth more than a server that will not start: this runs as
+  // the module is read, so anything thrown here would take every route down with it, the ones that
+  // have nothing to do with a card included.
+  try {
+    for (const root of fontRoots()) {
+      const dir = join(root, FONT_DIR)
+      if (!existsSync(join(dir, FONT_FILES[0]!))) continue
+
+      return FONT_FILES.map((file) => join(dir, file)).filter((file) => existsSync(file))
+    }
+  } catch (error) {
+    console.warn('[card] the Gilroy faces could not be looked up:', error)
+  }
+
+  // Nothing found, so the rasteriser is left with the machine's own fonts and every `<text>`
   // falls back to the system family named in `FONT_FAMILY`.
   return []
 }
@@ -177,15 +235,30 @@ function loadFontFiles(): string[] {
  * ink, and the card is written out as a picture. Gilroy is named as the default family and handed
  * over as the files it is drawn from, so a card is set in the typeface its page is; the machine's
  * fonts stay loaded underneath it as the fallback for whatever the family has not got.
+ *
+ * It is built on first use rather than as the module is read, and that is not only to keep four fonts
+ * off the import path. The URL Nitro carries for its own bundled assets is written into each chunk as
+ * the placeholder `file:///_entry.js` and is only *replaced* by the file the host actually started
+ * when that entry's own body runs - which is after the chunks it imports have been read (imports are
+ * evaluated first). Asked at module scope, the walk below reads the placeholder, finds no directory
+ * and sets every card in the machine's fonts; asked from inside a request it reads the real entry,
+ * and the `server/` it sits in is beside the `public/` this is looking for. There is no request before
+ * the entry has finished, because the port is opened at the end of that same body.
  */
-const RESVG_OPTIONS = {
-  font: { loadSystemFonts: true, defaultFontFamily: 'Gilroy', fontFiles: loadFontFiles() },
-  fitTo: { mode: 'width' as const, value: CARD_WIDTH }
+let resvgOptions: ResvgRenderOptions | undefined
+
+function rasterOptions(): ResvgRenderOptions {
+  resvgOptions ??= {
+    font: { loadSystemFonts: true, defaultFontFamily: 'Gilroy', fontFiles: loadFontFiles() },
+    fitTo: { mode: 'width' as const, value: CARD_WIDTH }
+  }
+
+  return resvgOptions
 }
 
 /** Rasterises a document to pixels, the way the card is rasterised. */
 function rasterise(svg: string) {
-  return new Resvg(svg, RESVG_OPTIONS).render()
+  return new Resvg(svg, rasterOptions()).render()
 }
 
 /**

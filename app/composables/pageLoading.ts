@@ -53,6 +53,20 @@ export interface PageLoading {
    * leaving the wheel up for the page that follows it.
    */
   follow(reason: string, busy: Ref<boolean>): void
+  /**
+   * Says that the navigation is over, for a page whose own read has answered with nothing to show - a
+   * character that is not there, an API that failed.
+   *
+   * The one wait the site does not own is the navigation's: Nuxt reports its beginning and its end itself
+   * (see `providePageLoading`), and its end does not come for a page whose read answered with an error.
+   * The address has changed and the page is on screen, so the wheel has no reason left to be up - and it
+   * stayed up over that page's own line until the wait was abandoned, half a minute later. The page that
+   * got the answer is the one that knows, so it is the page that says so.
+   *
+   * Ending a navigation that is not running is harmless, which is why this needs no guard: a page read on
+   * the server, or a page opened straight onto the error state, calls it with nothing to end.
+   */
+  arrive(): void
 }
 
 /** The key the wait is provided and injected under. A symbol, so nothing can collide with it. */
@@ -87,7 +101,9 @@ export function providePageLoading(): void {
   // and once the page behind it has resolved its own data - which is what makes a route change a wait
   // without a single page knowing about it. The navigation is a boolean rather than a counted wait
   // because it is not the site's to balance: the router reports it, and reporting it twice (a route
-  // that redirects) must not leave the wheel up for a wait nobody is holding.
+  // that redirects) must not leave the wheel up for a wait nobody is holding. The end of it, though, is
+  // not always reported: a page whose own read answers with an error never gets an end, and a page that
+  // knows that is the one that says so (`arrive`, which the character page calls on exactly that answer).
   const nuxtApp = useNuxtApp()
   nuxtApp.hook('page:loading:start', () => {
     navigating.value = true
@@ -140,6 +156,9 @@ export function providePageLoading(): void {
         { immediate: true }
       )
       onScopeDispose(release)
+    },
+    arrive() {
+      navigating.value = false
     }
   })
 }

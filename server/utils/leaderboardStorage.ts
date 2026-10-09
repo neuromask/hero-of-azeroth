@@ -280,11 +280,15 @@ async function readFromDisk(): Promise<LeaderboardFile> {
  * records.
  *
  * The index holds the characters the site has rendered, which is the same population this table is
- * about, and it knows most of what a record needs - the level, the class, the item level, the
- * Mythic+ rating and the mounts. It never kept a faction, a pet count, toys, decor or achievement
- * points, so those arrive as zero and fill in the next time that character is looked up. The point
- * is that `/leaderboard` opens on the day it ships with the site's own history in it rather than
- * with an empty table, and it costs one file read on the first request after a deploy.
+ * about, and it keeps what a profile said about each of them - the portrait, the side it plays for,
+ * the level, the class, the item level, the Mythic+ rating and everything gathered - so a row
+ * backfilled from it is a whole row rather than half of one. A record written before a field was
+ * kept carries none of it, which is what the optional fields of that record are for: such a row
+ * prints a dash where the figure is unknown, and it is filled in the next time that character is fed
+ * into the table at all - by a character page being read, or by a card being drawn
+ * (`server/utils/profileFeed.ts`). The point of the whole function is that `/leaderboard` opens on
+ * the day it ships with the site's own history in it rather than with an empty table, and it costs
+ * one file read on the first request after a deploy.
  */
 async function backfillFromIndex(): Promise<LeaderboardPlayer[]> {
   const index = await readCharacterIndex().catch(() => [])
@@ -298,11 +302,17 @@ async function backfillFromIndex(): Promise<LeaderboardPlayer[]> {
           realm: entry.realm,
           name: entry.name,
           displayName: entry.displayName,
+          avatar: entry.avatar,
+          faction: entry.faction,
           classId: entry.classId,
           level: entry.level,
           ilvl: entry.ilvl,
           mPlusScore: entry.mPlusScore,
-          mounts: entry.mounts
+          mounts: entry.mounts,
+          pets: entry.pets,
+          toys: entry.toys,
+          decor: entry.decor,
+          achievements: entry.achievements
         },
         entry.firstSeenAt || entry.updatedAt || today()
       )

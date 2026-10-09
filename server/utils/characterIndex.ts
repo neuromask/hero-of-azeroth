@@ -28,19 +28,30 @@ export interface IndexedCharacter {
   /** The name as the game spells it, which the address cannot carry - an address is lowercased. */
   displayName?: string
   /**
-   * What the profile said the day the character was seen: its level, the class Blizzard ids it by,
-   * the item level it was wearing, its Mythic+ rating and the mounts it had gathered.
+   * What the profile said the day the character was seen: its portrait, the side it plays for, its
+   * level, the class Blizzard ids it by, the item level it was wearing, its Mythic+ rating and what
+   * it had gathered.
    *
    * None of it is a page - the map is built from the addresses - but it is what makes the map worth
    * opening for a reader: the file a browser paints is a page about the characters the site has been
-   * asked about, and what they were when they were asked for. A record written before this was kept
-   * simply carries none of it, and every field is optional for exactly that reason.
+   * asked about, and what they were when they were asked for. It is the same list the hall of fame's
+   * table is filled from when it has no file of its own (`backfillFromIndex` in
+   * `./leaderboardStorage`), which is the other reason it is kept whole: a record that carries only
+   * half of what a row prints writes a table of rows without a portrait and without a faction, and a
+   * backfilled row is only ever completed by looking that character up again. A record written before
+   * a field was kept simply carries none of it, and every field is optional for exactly that reason.
    */
+  avatar?: string
+  faction?: string
   level?: number
   classId?: number
   ilvl?: number
   mPlusScore?: number
   mounts?: number
+  pets?: number
+  toys?: number
+  decor?: number
+  achievements?: number
 }
 
 /** The key the whole list is stored under, which is also the file's name on disk. */
@@ -84,11 +95,17 @@ export function rememberCharacter(character: {
   realm: string
   name: string
   displayName?: string
+  avatar?: string
+  faction?: string
   level?: number
   classId?: number
   ilvl?: number
   mPlusScore?: number
   mounts?: number
+  pets?: number
+  toys?: number
+  decor?: number
+  achievements?: number
 }): Promise<void> {
   writes = writes.then(async () => {
     try {
@@ -110,11 +127,17 @@ export function rememberCharacter(character: {
         // first day is the one thing no later lookup can tell, and it is kept for good.
         firstSeenAt: previous?.firstSeenAt || today(),
         displayName: character.displayName || previous?.displayName,
+        avatar: character.avatar || previous?.avatar,
+        faction: character.faction || previous?.faction,
         level: character.level ?? previous?.level,
         classId: character.classId ?? previous?.classId,
         ilvl: character.ilvl ?? previous?.ilvl,
         mPlusScore: character.mPlusScore ?? previous?.mPlusScore,
-        mounts: character.mounts ?? previous?.mounts
+        mounts: character.mounts ?? previous?.mounts,
+        pets: character.pets ?? previous?.pets,
+        toys: character.toys ?? previous?.toys,
+        decor: character.decor ?? previous?.decor,
+        achievements: character.achievements ?? previous?.achievements
       }
 
       const rest = index.filter((entry) => identity(entry) !== key)

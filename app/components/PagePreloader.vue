@@ -24,21 +24,26 @@
  *
  * It is the site's liquid glass in the cut a control wears (`.hoa-liquid-glass`, the material the tabs
  * and the buttons are made of) rather than the wider pane a menu hangs in (`.hoa-pop`): a wait is one
- * small thing standing on the page for a moment, and nothing is ever opened out of it, so it wears the
- * frost itself and needs none of the layering a pane that drops a pane is rearranged with (see
- * `hoa-pop-layered` in `main.css`). The scrim under it is deliberately left a plain tint of the page's
- * own dark (`bg-wow-dark/75`) with no frost of its own: a `backdrop-filter` there would make the scrim
- * the *backdrop* of the card, and the card's frost could then only sample the scrim - the same double
- * blur that leaves a control inside a frosted block reading washed. The card takes no pointer at all,
- * so every click of the wait lands on the scrim, nothing behind the pane is reached through it, and the
- * glass never lights up under a hand that is only passing over the screen (the material's `hover:`).
+ * small thing standing on the page for a moment, and it is drawn as the panes of the site are rather
+ * than as an element of one. The glass itself is a layer of the card, not a filter on it
+ * (`hoa-liquid-glass-layered`): the card stands on the scrim below, which is a surface of its own laid
+ * over the page, and a `backdrop-filter` on the card would make the card the backdrop of everything
+ * inside it - the site's own glass is worn this way everywhere a pane or a control may follow, and the
+ * wait is no exception. The scrim under it keeps a plain tint of the page's own dark (`bg-wow-dark/75`)
+ * with no frost of its own: a `backdrop-filter` there would make the scrim the *backdrop* of the card,
+ * and the card's frost could then only sample the scrim - the same double blur that leaves a control
+ * inside a frosted block reading washed. The card takes no pointer at all, so every click of the wait
+ * lands on the scrim, nothing behind the pane is reached through it, and the glass never lights up
+ * under a hand that is only passing over the screen (the material's `hover:`).
  *
- * The site's own mark stands above the wheel - the emblem the header is led by (`hoa-emblem`), not the
- * wordmark, which belongs to the card a character is shared as. It is the one thing a reader who has
- * just clicked a row wants to be told while nothing has arrived yet: that they are still on this site
- * and not on a page that has failed to load. It is the artwork itself and is decoration here, so it is
- * drawn quietly (`AppIcon` hides it from a screen reader, which is the wheel's `label` to say), and it
- * is left still while the ring turns, because the only motion in the pane is the wheel's.
+ * The site's own name stands at the foot of the card, under the line the wheel reads by - the wordmark
+ * the footer and the front page are led by (`hoa-logotype`), drawn quietly a size under the heading of
+ * a pane. It is the one thing a reader who has just clicked a row wants to be told while nothing has
+ * arrived yet: whose page they are still on, and that it has not failed to load. The mark that leads
+ * the header is deliberately not the one here - the emblem reads as a place in the bar where a reader
+ * returns to, and the wordmark is the site *named*, which is what a wait has to say. It is content, not
+ * decoration, so it is given its `alt` (`AppIcon` announces it rather than hiding it), and it is left
+ * still while the ring turns, because the only motion in the pane is the wheel's.
  */
 const { waiting } = usePageLoading()
 
@@ -98,16 +103,18 @@ onBeforeUnmount(() => {
     :aria-hidden="!shown"
     data-hoa-preloader
   >
-    <!-- The card is the site's own glass with the site's own mark on it (see above), and it is
+    <!-- The card is the site's own glass with the site's own name on it (see above), and it is
          `pointer-events-none` on purpose: the scrim is what a stray click reaches, which is what keeps
          a second navigation from starting behind the pane, and the material's `hover:` never fires on a
-         surface nobody can point at. -->
+         surface nobody can point at. `relative` with a `z-index` is what holds the layer the glass is
+         drawn by under the card's content (`hoa-liquid-glass-layered`). The wordmark is the last thing
+         in it - the foot of the card, under the line the wheel is read by. -->
     <div
       v-if="shown"
-      class="hoa-liquid-glass flex flex-col items-center gap-5 rounded-2xl border-wow-gold/25 px-8 py-7 pointer-events-none"
+      class="hoa-liquid-glass hoa-liquid-glass-layered relative z-0 flex flex-col items-center gap-5 rounded-2xl border-wow-gold/25 px-8 py-7 pointer-events-none"
     >
-      <AppIcon name="hoa-emblem" class="h-12 w-12" />
       <LoadingWheel :label="$t('loading')" />
+      <AppIcon name="hoa-logotype" alt="HeroOfAzeroth" class="h-6 w-auto" />
     </div>
   </div>
 </template>

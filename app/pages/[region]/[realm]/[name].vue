@@ -2,7 +2,7 @@
 // The class colour a name is printed in comes from the shared table the card draws from, so the
 // page and its card agree (see `#shared/utils/wow-class`). A class shows up in the header, and the
 // header is the shell's - the views below it never print one.
-import { resolveClass } from '#shared/utils/wow-class'
+import { resolveClass, classColorHex } from '#shared/utils/wow-class'
 // The profile the whole subtree is a view of. The shell fetches it once and hands it to whichever
 // view the address names, so a switch between the views is a swap rather than a second read of
 // Blizzard - and the endpoint keeps it for two hours in any case (see `server/api/character`).
@@ -58,7 +58,25 @@ const { data: character, pending, error } = await useFetch<CharacterData>(
 // read again whenever the address names another character, and a shell that is *reused* for that
 // keeps this flag - the navigation that brought the reader here is long over by then, which is
 // exactly the case a wheel bound to the navigation alone would miss (see `usePageLoading`).
-usePageLoading().follow('character:profile', pending)
+const loading = usePageLoading()
+loading.follow('character:profile', pending)
+
+/**
+ * And the read that comes back with nothing ends the wait the *navigation* raised as well.
+ *
+ * Nuxt reports the end of a navigation on its own, but not for a page whose read answered with an error -
+ * a character that is not there, an API that failed. The address has changed and this page is on screen
+ * saying so, while the site is still holding the wheel up over that line: it reads as a site working on
+ * something it has already answered, and it goes on reading that way until the wait is abandoned, half a
+ * minute later (see `arrive` in `usePageLoading`). The page that got the answer is the one that knows, so
+ * it is the page that says the navigation is over - in both shapes the answer comes in. A read that
+ * settles while this page is being set up is the one a step to another character makes, and the `immediate`
+ * call is the shape a *shared link* lands in: the server has already answered "not found" by the time the
+ * browser draws the page, which is exactly the same page and the same line to the reader.
+ */
+watch([pending, character], ([reading, loaded]) => {
+  if (!reading && !loaded) loading.arrive()
+}, { immediate: true })
 
 /**
  * A page that rendered a character is the proof a search was successful, and that is the moment
@@ -295,6 +313,27 @@ const metaParts = computed<MetaPart[]>(() => {
     }
   ].filter((part) => part.text)
 })
+/**
+ * The portrait in the head of the bar, where the site's brand mark stands on every other page.
+ *
+ * On a character's own page the character is the subject, and the square at the top left of a page
+ * is the one place a reader looks first - so it shows what Blizzard serves for the character rather
+ * than the emblem of the site. It is drawn exactly the way the chip in a bar draws a portrait
+ * (`app/components/MyProfile.vue`): the class's own colour frames it, and behind a character the
+ * media call had no picture for stands a monogram in that colour, so the plate is never a broken
+ * image. It stays the link home, because that is what a mark at the top left of a page is to a
+ * reader.
+ */
+const portraitHex = computed(() => classColorHex(character.value || {}))
+const portraitInitial = computed(() => (character.value?.name || name).charAt(0).toUpperCase())
+
+/** A portrait that failed to load, which the monogram then stands in for. */
+const portraitBroken = ref(false)
+watch(character, () => {
+  portraitBroken.value = false
+})
+
+
 
 const shareTitle = computed(() => (character.value?.title ? `${character.value.name} ${character.value.title}` : (character.value?.name || name)))
 const shareText = computed(() => `${shareTitle.value} — ${descriptor.value}`)
@@ -634,15 +673,25 @@ onBeforeUnmount(() => {
              leave the tray blurring nothing but the bar it hangs in. -->
         <div class="hoa-panel hoa-panel-layered relative z-30 rounded-t-none border-t-0 shadow-none px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
-            <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a gold
-                 plate with the emblem cut from it, so it keeps its own frame and stays sharp at any
-                 size. -->
+            <!-- The character's own portrait, in the place the site's brand mark holds on every other
+                 page (see `portraitHex` above): the square at the top left is where a reader looks
+                 first, and on a page about one character it is the character that answers. It is
+                 framed and backed the way a portrait in a bar's chip is, and it is still the way
+                 home. -->
             <NuxtLink
               :to="localeUrl('/')"
               aria-label="HeroOfAzeroth"
-              class="block h-20 w-20 shrink-0 transition-transform hover:scale-105"
+              class="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border transition-transform hover:scale-105"
+              :style="{ borderColor: `${portraitHex}66`, backgroundColor: `${portraitHex}1f` }"
             >
-              <AppIcon name="hoa-emblem" class="h-full w-full" />
+              <span class="text-2xl font-extrabold" :style="{ color: portraitHex }">{{ portraitInitial }}</span>
+              <img
+                v-if="character.avatarUrl && !portraitBroken"
+                :src="character.avatarUrl"
+                :alt="character.name"
+                class="absolute inset-0 h-full w-full object-cover"
+                @error="portraitBroken = true"
+              />
             </NuxtLink>
 
             <div>
@@ -842,6 +891,12 @@ onBeforeUnmount(() => {
             >
               {{ $t('lbNav') }}
             </NuxtLink>
+            <!-- And the way to somebody who is not this character: the very button the hall of fame
+                 carries in its own row, dropping the same two fields (`CharacterSearchDialog`), so a
+                 reader who has just looked one character up can look the next one up without going
+                 back to the front door first. It stands after the tabs, exactly where it stands in
+                 that row, and before the languages that end every row on the site. -->
+            <CharacterSearchDialog />
             <!-- The languages sit at the far end of the row the tabs are on: a reader looks for the
                  switch where the navigation is, and the pair travels with the header as it is pinned
                  to the top of the window. -->

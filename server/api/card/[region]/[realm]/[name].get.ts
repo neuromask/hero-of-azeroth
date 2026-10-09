@@ -30,6 +30,16 @@ export default defineEventHandler(async (event) => {
     `${region}:${locale}:${realm}:${name}`,
     async () => {
       const character = await getCharacter(realm, name, region, locale)
+
+      // The card is drawn from a profile, and reading a profile is what the site learns a character
+      // from - so a card is fed into the sitemap's index and into the hall of fame's table the same
+      // way a character page is (`server/utils/profileFeed.ts`). It is the feed the card used to be
+      // missing: a row backfilled from the index - which keeps no portrait and no faction - stayed
+      // half-empty for a character whose card had been drawn a hundred times, because the only reader
+      // that filled it in was the character page itself. The two writes are skipped when a record
+      // already says everything this profile does, so drawing a card the table knows costs no disk.
+      await feedProfile({ region, realm, name, profile: character })
+
       return renderCharacterCard(character, locale)
     },
     force

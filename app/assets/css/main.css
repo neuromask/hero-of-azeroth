@@ -173,6 +173,31 @@
     @apply border-white/20 bg-white/[0.1] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),0_6px_18px_rgba(0,0,0,0.3)] hover:border-white/35 hover:bg-white/[0.16];
   }
 
+  /* The same glass drawn by a layer of the surface instead of by the surface: the rearrangement the two
+     other materials of the site are already written twice in (`.hoa-panel-layered`, `.hoa-pop-layered`),
+     made here for the one surface of the site that is itself laid on another one. A `backdrop-filter`
+     makes a surface a backdrop root, and everything drawn inside it afterwards can only sample the
+     surface: a pane opened out of it, a control of the site's own glass, a second sheet. The layer keeps
+     that door open - the surface becomes a plain box and its glass is one sheet of its own, laid behind
+     everything the surface shows. It is worn by the wait every page is read through
+     (`app/components/PagePreloader.vue`), a card standing on the scrim that dims the page, and it is worn
+     there as the arrangement the rest of the site's panes are drawn with rather than as a promise about
+     what that card carries today. Nothing else about the surface moves: the tint, the hairline, the lit
+     edges and the drop are still its own, the layer is clipped to its corners, and the blur is written
+     out rather than taken from the surface because it belongs to the layer now - it is the surface's own,
+     and `xl` is 24px. As with the block that holds a pane, the surface has to be a layer of its own for
+     the sheet to sit under its content (`relative` with a `z-index`). */
+  .hoa-liquid-glass-layered {
+    backdrop-filter: none;
+  }
+
+  .hoa-liquid-glass-layered::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0 -z-10;
+    border-radius: inherit;
+    backdrop-filter: blur(24px);
+  }
+
   /* The chosen tab, warmed with the brand gold the rest of the site accents with. */
   .hoa-tab-active {
     @apply border-wow-gold/60 bg-wow-gold/10 text-wow-goldLight shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_0_18px_rgba(248,183,0,0.25)];
