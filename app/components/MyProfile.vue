@@ -16,9 +16,25 @@
  *
  * The history lives in the browser, so it is read once the component is mounted, exactly as the front
  * page reads it: the server renders the "not signed in" state and the chip fills in a moment later.
+ *
+ * That empty state is a call to look somebody up, which is the chip's own job on a page that has no
+ * search of its own - and it stands down (`signIn`) on a page whose row already carries the search
+ * (`app/pages/leaderboard.vue`), so the same act is never offered twice in one bar.
  */
 import { useSearchHistory } from '~/composables/searchHistory'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
+
+withDefaults(
+  defineProps<{
+    /**
+     * Whether the chip offers the way in while this browser has nobody, which is the link to the
+     * search. A page that offers the search itself asks for the chip alone: nothing is drawn until
+     * there is somebody to draw.
+     */
+    signIn?: boolean
+  }>(),
+  { signIn: true }
+)
 
 const { t, locale } = useI18n()
 const localeUrl = useLocaleUrl()
@@ -91,9 +107,10 @@ onMounted(load)
     </NuxtLink>
   </div>
 
-  <!-- Nobody yet: the chip becomes the way in rather than an empty plate. -->
+  <!-- Nobody yet: the chip becomes the way in rather than an empty plate - unless the page brings the
+       search itself, in which case there is nothing for the chip to say. -->
   <NuxtLink
-    v-else
+    v-else-if="signIn"
     :to="localeUrl('/')"
     class="hoa-tab hoa-liquid-glass w-full justify-center text-xs lg:w-auto"
     :title="t('profileSignIn')"

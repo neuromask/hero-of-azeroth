@@ -149,7 +149,7 @@ flowchart LR
 | `app/pages/leaderboard.vue` | The hall of fame |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
 | `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
@@ -204,9 +204,13 @@ several at once — and a `?` beside them opens the legend of the score, whose m
 the formula itself so the panel cannot promise something the server does not compute. The realm names
 come from the site's realm list rather than from whichever language the record happened to be written
 in, and an item level is printed only for a character at the current level cap, a figure that says
-nothing among characters still climbing. The header carries the site's own sign-in state in place of an
-account: the character this browser opened last (`app/components/MyProfile.vue`), read from the same
-history the search field suggests from.
+nothing among characters still climbing. The row under the page's name also carries the one thing this
+page cannot do for itself - add somebody who is not in the table yet: the button that closes that row
+opens the front page's own two fields as a plate (`app/components/CharacterSearchDialog.vue`), because
+looking a character up is what reads their profile and writes their row. And the bar itself carries the
+site's own sign-in state in place of an account: the character this browser opened last
+(`app/components/MyProfile.vue`), read from the same history the search field suggests from - the chip
+alone, since the way to get one is the row's button.
 
 ## 🎯 Collections: where the numbers come from
 

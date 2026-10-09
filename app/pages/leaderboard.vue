@@ -125,10 +125,13 @@ onMounted(loadHistory)
          pair ending the row, exactly where it sits on every other page
          (`app/components/SiteHeader.vue`). -->
     <SiteHeader :title="t('lbTitle')" :meta="meta">
-      <!-- The signed-in chip: the character this browser looked at last, standing on the right of the
-           bar where an account would sit on a site that had accounts. -->
+      <!-- What the bar carries on the right: the signed-in chip - the character this browser looked at
+           last, standing where an account would sit on a site that had accounts. It is asked for the
+           chip alone (`:sign-in="false"`), because the row below already carries the search that the
+           chip's empty state would otherwise offer: with nobody known yet, the right side of this bar
+           is deliberately empty and the row's button is the only way in. -->
       <template #actions>
-        <MyProfile />
+        <MyProfile :sign-in="false" />
       </template>
 
       <!-- The character's own views, pointing at the character this reader came from. The menu of
@@ -147,6 +150,12 @@ onMounted(loadHistory)
         class="hoa-tab hoa-liquid-glass hoa-tab-active"
         aria-current="page"
       >{{ t('lbNav') }}</NuxtLink>
+
+      <!-- And the way to add somebody who is not in the table yet: the front page's own two fields,
+           opened as a plate. It closes this row rather than standing beside the identity chip,
+           because the row is where a page's controls live - and while this browser knows nobody yet,
+           it is the only control in the bar at all. -->
+      <CharacterSearchDialog />
     </SiteHeader>
 
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
