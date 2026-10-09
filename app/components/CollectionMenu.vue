@@ -87,9 +87,12 @@ watch(
 
     <!-- Shut, the panel is invisible but still in the document: the three shelves are addresses a
          crawler should find, and they are read from the markup rather than from a script. It paints
-         above the fade the navigation lays over the row below, which is what `z-50` is for. -->
+         above the fade the navigation lays over the row below, which is what `z-50` is for. The
+         tray is a dark pane and draws no blur of its own: it opens inside a page's bar, where a
+         `backdrop-filter` could only sample the bar's own glass, and where Chromium smears a blurred
+         copy of it over the bottom of the bar (`app/assets/css/main.css`). -->
     <div
-      class="absolute left-0 top-full z-50 mt-2 w-52 rounded-2xl border border-white/15 bg-wow-dark/95 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150 transition-opacity duration-150"
+      class="absolute left-0 top-full z-50 mt-2 w-52 rounded-2xl border border-white/15 bg-wow-dark/95 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.6)] transition-opacity duration-150"
       :class="open ? 'opacity-100' : 'invisible opacity-0'"
       role="menu"
     >

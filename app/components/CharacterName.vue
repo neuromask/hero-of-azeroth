@@ -31,9 +31,13 @@ const hex = computed(() => classColorHex({ classId: props.classId, class: props.
 </script>
 
 <template>
+  <!-- The plate the badge is drawn in carries no blur of its own: it is worn inside a page's own
+       glass (the character bar), where a `backdrop-filter` could only sample that glass - already
+       blurred and nearly flat - and where Chromium smears a blurred copy of the bar's content over
+       its bottom edge (`app/assets/css/main.css`). -->
   <span
     v-if="variant === 'badge'"
-    class="inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-slate-950/40 text-xs font-semibold backdrop-blur-sm"
+    class="inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-slate-950/40 text-xs font-semibold"
     :style="{ color: hex }"
   >
     <slot>{{ name }}</slot>

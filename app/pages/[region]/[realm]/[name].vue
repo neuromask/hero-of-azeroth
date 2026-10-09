@@ -256,8 +256,9 @@ const metaParts = computed<MetaPart[]>(() => {
   const c = character.value
   if (!c) return []
 
-  // Общий стиль для янтарных баблов
-  const amberBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-amber-950/20 text-xs font-medium text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)] backdrop-blur-sm'
+  // Общий стиль для янтарных баблов. Блюра своего у них нет: они надеты на стекло самой шапки
+  // (`app/assets/css/main.css` объясняет, почему внутри панели его быть не должно).
+  const amberBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-amber-950/20 text-xs font-medium text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
 
   return [
     // 1. Уровень
@@ -612,8 +613,11 @@ onBeforeUnmount(() => {
            (below), pinned together to the top of the window, so a visitor who has scrolled into the
            feed still has the character, the tabs and the Refresh button in view. The bar sits above
            the views (`z-40`) so they pass behind it, and the panel keeps only its bottom corners
-           rounded because the bar stands flush against the top edge. -->
-      <header class="sticky top-0 z-40 container mx-auto px-4">
+           rounded because the bar stands flush against the top edge. It wears `hoa-bar`, which marks
+           the glass inside it as pinned - the panel and the tabs are where Chromium can leave a
+           stale, unblurred strip of the page showing - and the hint that answers it lives in
+           `app/assets/css/main.css`. -->
+      <header class="hoa-bar sticky top-0 z-40 container mx-auto px-4">
         <!-- The panel is a layer of its own above the navigation row below it (`z-30` against the
              row's `auto`), because the share tray opens downwards out of this panel and into that
              row: the tray lives inside the panel's own stacking context - the frosted background it
@@ -661,12 +665,15 @@ onBeforeUnmount(() => {
                button has taken the place the summary figures held, and their amber frame with it -
                the one warm accent the header has - with a glow that answers the pointer. The share
                tray is the same control, so it travels with the button and opens downwards, the
-               header standing at the top of the page. -->
+               header standing at the top of the page. None of the three draws a blur of its own:
+               they are worn on the bar's own glass, and a `backdrop-filter` inside it could only
+               sample that glass - it is also the arrangement Chromium smears over the bottom of the
+               bar (`app/assets/css/main.css`). -->
           <div class="flex w-full items-stretch gap-3 lg:w-auto">
             <button
               type="button"
               :disabled="!canRefresh"
-              class="flex shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-sm transition-all duration-300 hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:py-3.5 sm:text-lg"
+              class="flex shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300 hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:py-3.5 sm:text-lg"
               :title="$t('refreshProfile')"
               :aria-label="$t('refreshProfile')"
               @click="refreshProfile"
@@ -676,7 +683,7 @@ onBeforeUnmount(() => {
             </button>
 
             <div ref="actionsEl" class="relative flex-1 lg:flex-none">
-              <div class="flex w-full items-stretch overflow-hidden rounded-xl border border-amber-500/60 bg-amber-950/30 backdrop-blur-sm shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/90 hover:bg-amber-900/40 hover:shadow-[0_0_28px_rgba(245,158,11,0.5)]">
+              <div class="flex w-full items-stretch overflow-hidden rounded-xl border border-amber-500/60 bg-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/90 hover:bg-amber-900/40 hover:shadow-[0_0_28px_rgba(245,158,11,0.5)]">
               <button
                 type="button"
                 :disabled="downloading"
@@ -712,7 +719,7 @@ onBeforeUnmount(() => {
 
             <div
               v-if="menuOpen"
-              class="absolute top-full left-1/2 z-50 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-wow-dark/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150 lg:left-auto lg:right-0 lg:translate-x-0"
+              class="absolute top-full left-1/2 z-50 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-wow-dark/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)] lg:left-auto lg:right-0 lg:translate-x-0"
               role="menu"
             >
               <p class="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('shareCard') }}</p>

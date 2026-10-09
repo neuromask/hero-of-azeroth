@@ -73,10 +73,12 @@ onMounted(load)
 </script>
 
 <template>
-  <!-- The signed-in state: the portrait, who it is, and the way to their page. -->
+  <!-- The signed-in state: the portrait, who it is, and the way to their page. It draws no blur of
+       its own - it stands on the bar's own glass, and a `backdrop-filter` there could only sample
+       that glass (`app/assets/css/main.css`). -->
   <div
     v-if="current"
-    class="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-2 backdrop-blur-sm lg:w-auto"
+    class="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-2 lg:w-auto"
   >
     <span
       class="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl border"

@@ -15,6 +15,9 @@
  * The bar is pinned to the top of the window (`sticky`), above the page (`z-40`), and its panel
  * keeps only its bottom corners rounded because it stands flush against the top edge - all of it
  * copied from the character shell on purpose, so the two headers are the same object to the eye.
+ * It wears `hoa-bar`, which is what marks the glass inside it as pinned: the panel and the tabs are
+ * the surfaces Chromium can leave showing a stale, unblurred strip of the page behind them, and the
+ * hint a pinned surface needs is applied by `.hoa-bar` in `app/assets/css/main.css`.
  */
 defineProps<{
   /** The page's name, printed where a character page prints the character's. */
@@ -29,7 +32,7 @@ const localeUrl = useLocaleUrl()
 </script>
 
 <template>
-  <header class="sticky top-0 z-40 container mx-auto px-4">
+  <header class="hoa-bar sticky top-0 z-40 container mx-auto px-4">
     <div
       class="hoa-panel relative z-30 flex flex-col items-start justify-between gap-4 rounded-t-none border-t-0 px-4 py-1.5 shadow-none sm:px-6 sm:py-3.5 lg:flex-row lg:items-center"
     >
