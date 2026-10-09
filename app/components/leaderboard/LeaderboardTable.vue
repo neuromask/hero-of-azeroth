@@ -16,7 +16,7 @@
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
 import { factionById } from '#shared/utils/wow-faction'
-import { CURRENT_MAX_LEVEL } from '#shared/data/leaderboardSchema'
+import { isAtItemLevelCap } from '#shared/data/leaderboardSchema'
 import type { LeaderboardPlayer, LeaderboardSort } from '#shared/data/leaderboardSchema'
 
 const props = defineProps<{
@@ -123,15 +123,41 @@ const visible = computed(() =>
 const showsScore = computed(() => props.columns.includes('total'))
 
 /**
+ * How the panel's width is shared out between the columns.
+ *
+ * The table is laid out fixed rather than by content, because the content would decide it otherwise:
+ * the widest thing in a row is the name column - a name, a realm, a class and a level - so a table
+ * left to size itself hands it every spare pixel and pushes the figures aside, each one no wider than
+ * its own heading, with the reader who came to compare them reading across a wall of empty table. So
+ * every figure is given a share of the panel instead, capped where a column of three or four digits
+ * stops needing to be wider, and the name column takes whatever is left over - which is what makes a
+ * row of seven readable as seven columns and still leaves the name room beside them.
+ *
+ * The rank and the overall rating are measured rather than shared, since neither a rank nor a rating
+ * grows. The figures can never claim more than seven shares, so the columns add up to less than the
+ * panel at any width above the table's own minimum and the name column absorbs the difference.
+ */
+const RANK_WIDTH = 3.5
+const SCORE_WIDTH = 6
+/** The most of the panel a figure column takes, and the least the name column may be left with. */
+const FIGURE_SHARE_MAX = 15
+const NAME_SHARE_FLOOR = 33
+
+const figureWidth = computed(() => {
+  const share = Math.min(FIGURE_SHARE_MAX, (100 - NAME_SHARE_FLOOR) / Math.max(1, visible.value.length))
+  return `${share}%`
+})
+
+/**
  * The figure a column prints for a player.
  *
- * An item level is the one column with a rule of its own: it only means something among characters
- * who have finished the climb, so a character below the cap prints a dash rather than a number that
- * cannot be read beside the others (see `CURRENT_MAX_LEVEL`). Every other column prints what it
- * holds, and an unknown figure prints as a dash in any case.
+ * An item level is the one column with a rule of its own - it only reads beside the others among
+ * characters who have finished the climb (see `isAtItemLevelCap`) - so a character who has not
+ * prints a dash rather than a number that cannot be compared with the rest of its column. Every
+ * other column prints what it holds, and an unknown figure prints as a dash in any case.
  */
 function cell(player: LeaderboardPlayer, column: { key: LeaderboardSort; field: keyof LeaderboardPlayer }): string {
-  if (column.key === 'ilvl' && player.level < CURRENT_MAX_LEVEL) return '—'
+  if (column.key === 'ilvl' && !isAtItemLevelCap(player.level)) return '—'
   return format(player[column.field] as number)
 }
 
@@ -163,15 +189,26 @@ function open(player: LeaderboardPlayer) {
     </p>
 
     <div v-else class="overflow-x-auto">
-      <table class="w-full min-w-[54rem] border-collapse text-sm">
+      <table class="w-full min-w-[60rem] table-fixed border-collapse text-sm">
+        <!-- The width of every column, decided once here rather than by what each row happens to
+             hold, so the figures are spread across the panel while the rows still line up down the
+             table. The name column is the one left without a width, and in a fixed layout that is
+             the column that takes whatever the measured and shared ones do not. -->
+        <colgroup>
+          <col :style="{ width: `${RANK_WIDTH}rem` }" />
+          <col />
+          <col v-for="column in visible" :key="column.key" :style="{ width: figureWidth }" />
+          <col v-if="showsScore" :style="{ width: `${SCORE_WIDTH}rem` }" />
+        </colgroup>
+
         <thead>
           <tr class="border-b border-white/10 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-            <th class="w-14 px-3 py-2.5 text-left" scope="col">#</th>
+            <th class="px-3 py-2.5 text-left" scope="col">#</th>
             <th class="px-3 py-2.5 text-left" scope="col">{{ t('lbColPlayer') }}</th>
             <th
               v-for="column in visible"
               :key="column.key"
-              class="w-20 px-2 py-2.5 text-right"
+              class="px-2 py-2.5 text-right"
               scope="col"
             >
               <button
@@ -191,7 +228,7 @@ function open(player: LeaderboardPlayer) {
                 ><path d="M5 8L1 3h8z" /></svg>
               </button>
             </th>
-            <th v-if="showsScore" class="w-24 px-3 py-2.5 text-right" scope="col">
+            <th v-if="showsScore" class="px-3 py-2.5 text-right" scope="col">
               <button
                 type="button"
                 class="inline-flex items-center gap-1 transition-colors"

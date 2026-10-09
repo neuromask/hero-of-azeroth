@@ -62,6 +62,21 @@ export const LEADERBOARD_SORTS: readonly LeaderboardSort[] = [
 export const CURRENT_MAX_LEVEL = 90
 
 /**
+ * Whether a character's item level may be read beside the others': the rule above, written once.
+ *
+ * Both ends of the wire need the same answer to that question. The table prints an item level for a
+ * character at the cap and a dash for everybody else, and the ordering puts the characters whose
+ * item level it prints first, because a figure a row does not show cannot be the thing that decides
+ * where the row goes. Asked in one place, the two can never drift apart - a number cannot disappear
+ * from a row while its place in the table stays, or the other way round. A level the record does not
+ * carry is not a level at the cap: the dash is the honest answer, and the tail of the table is where
+ * such a row belongs.
+ */
+export function isAtItemLevelCap(level?: number): boolean {
+  return typeof level === 'number' && level >= CURRENT_MAX_LEVEL
+}
+
+/**
  * One player, as the leaderboard stores and serves them.
  *
  * The record is keyed by the three address segments - region, realm, name - because that triple

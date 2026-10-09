@@ -40,7 +40,7 @@ import type {
   LeaderboardSort,
   LeaderboardStats
 } from '#shared/data/leaderboardSchema'
-import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
+import { LEADERBOARD_SORTS, isAtItemLevelCap } from '#shared/data/leaderboardSchema'
 
 /**
  * Where the table is kept: the folder the Nitro storage mount for the character index writes into
@@ -502,11 +502,31 @@ function sortValue(player: LeaderboardPlayer, sort: LeaderboardSort): number {
  * pet count of 0 for records backfilled from the index. Falling back to the rating and then to the
  * name keeps every row in a place a reader can find twice, rather than leaving the order to the
  * sort's own whim.
+ *
+ * Item level is the one figure with a rule in front of it. A character who has not finished the
+ * climb has an item level stored and nothing shown for it (see `isAtItemLevelCap`), so it is the one
+ * figure that may order only the rows it is printed on: the characters the table prints it for are
+ * ranked first and by it, and everybody else follows them, in the order their own rows do show - the
+ * rating, then the name. Sorting those rows by a number no reader can see is what puts a dash at the
+ * top of an item-level column, which is what a table sorted wrong looks like.
  */
 function compare(a: LeaderboardPlayer, b: LeaderboardPlayer, sort: LeaderboardSort): number {
+  if (sort === 'ilvl') {
+    const aCapped = isAtItemLevelCap(a.level)
+    const bCapped = isAtItemLevelCap(b.level)
+
+    if (aCapped !== bCapped) return aCapped ? -1 : 1
+    if (!aCapped) return byRating(a, b)
+  }
+
   const primary = sortValue(b, sort) - sortValue(a, sort)
   if (primary) return primary
 
+  return byRating(a, b)
+}
+
+/** The order of two characters whose figures tie: the overall rating, then the name. */
+function byRating(a: LeaderboardPlayer, b: LeaderboardPlayer): number {
   const secondary = b.score - a.score
   if (secondary) return secondary
 
