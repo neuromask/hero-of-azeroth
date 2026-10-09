@@ -125,6 +125,12 @@ onMounted(loadHistory)
          pair ending the row, exactly where it sits on every other page
          (`app/components/SiteHeader.vue`). -->
     <SiteHeader :title="t('lbTitle')" :meta="meta">
+      <!-- The signed-in chip: the character this browser looked at last, standing on the right of the
+           bar where an account would sit on a site that had accounts. -->
+      <template #actions>
+        <MyProfile />
+      </template>
+
       <!-- The character's own views, pointing at the character this reader came from. The menu of
            shelves is the very component the character page's row carries, so the dropdown, its
            entries and their addresses are the ones a reader has already met. -->
@@ -144,9 +150,7 @@ onMounted(loadHistory)
     </SiteHeader>
 
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
-      <p class="max-w-3xl text-sm text-gray-400">{{ t('lbLead') }}</p>
-
-      <LeaderboardStats class="mt-4" :stats="stats" :pending="pending" />
+      <LeaderboardStats :stats="stats" :pending="pending" />
 
       <LeaderboardFilters
         class="mt-3"

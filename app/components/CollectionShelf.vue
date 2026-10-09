@@ -3,8 +3,8 @@
 import type { CollectionKind } from '#shared/data/collectionsSchema'
 
 /**
- * One shelf of a character's collections - mounts, pets or toys - with its heading, its two switches
- * and its grid.
+ * One shelf of a character's collections - mounts, pets or toys - with its heading, its switches and
+ * its grid.
  *
  * The three shelves share this view because they are the same page with a different list behind it:
  * the heading, the running total and the grid are identical, and only the endpoint's `kind` changes.
@@ -12,19 +12,24 @@ import type { CollectionKind } from '#shared/data/collectionsSchema'
  * menu on the character's own navigation above, so the page carries no second navigation bar of its
  * own.
  *
- * The two switches are SimpleArmory's own pair and sit under the bar they change: one draws the items
- * the game has done away with, the other the ones it has not shipped yet (see `useCollectionView`).
- * Each is drawn as a switch with a knob rather than as a lit chip, so whether it is on is read at a
- * glance, and the note beside them folds out the three reasons this shelf reads lower than the game's
- * own counter - it is a button with an arrow, because the area it opens is below it.
+ * The switches sit under the bar they change: the collected items first, which is where a shelf opens,
+ * then SimpleArmory's own pair - the items the game has done away with and the ones it has not shipped
+ * yet (see `useCollectionView`). Each is drawn as a switch with a knob rather than as a lit chip, so
+ * whether it is on is read at a glance, and the note beside them folds out the three reasons this shelf
+ * reads lower than the game's own counter - it is a button with an arrow, because the area it opens is
+ * below it.
  */
 const props = defineProps<{ kind: CollectionKind }>()
 
 const view = useCollectionView()
 const legendOpen = ref(false)
 
-/** The two switches, in the order they are drawn: what the game retired, then what it has not shipped. */
+/**
+ * The three switches, in the order they are drawn. The collected items come first because that is the
+ * one a collector reaches for most: turning it off leaves the shelf as a list of what is still missing.
+ */
 const SWITCHES = [
+  { key: 'collected', label: 'collectionsShowCollected' },
   { key: 'unobtainable', label: 'collectionsShowUnobtainable' },
   { key: 'upcoming', label: 'collectionsShowUpcoming' }
 ] as const

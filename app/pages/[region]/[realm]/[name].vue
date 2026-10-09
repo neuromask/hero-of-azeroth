@@ -74,7 +74,10 @@ watch(character, (loaded) => {
     // The class rides along so the front page can tint the remembered name with it; the id is the
     // same in either language, which is what the row is coloured by.
     classId: loaded.classId,
-    class: resolveClass(loaded)?.slug
+    class: resolveClass(loaded)?.slug,
+    // And the portrait, so the chip in a header can show who this browser is signed in as without
+    // asking Blizzard for the character a second time (`app/components/MyProfile.vue`).
+    avatar: loaded.avatarUrl
   })
 }, { immediate: true })
 

@@ -28,7 +28,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 // The formula, which is shared with nothing on the client but belongs to neither layer alone.
-import { calculatePlayerScore, totalCollectables } from '#shared/utils/leaderboardScore'
+import { calculatePlayerScore, totalCollectables, SCORE_VERSION } from '#shared/utils/leaderboardScore'
 // The index the sitemap is built from: the same characters, and what the backfill starts from.
 import { readCharacterIndex } from './characterIndex'
 import type {
@@ -95,6 +95,13 @@ export interface PlayerProfileInput {
 /** The document as it is stored on disk. */
 interface LeaderboardFile {
   version: number
+  /**
+   * The weights the ratings in this file were computed with (see `SCORE_VERSION`). A file written by
+   * a build with other multipliers is re-derived once, on the first read after that build starts -
+   * which is what keeps a weight a one-line edit that reaches the whole table rather than only the
+   * characters looked up afterwards.
+   */
+  scoreVersion?: number
   /** The day the file was last written, `YYYY-MM-DD`, which the page prints as its freshness. */
   updatedAt: string
   players: LeaderboardPlayer[]
@@ -237,7 +244,7 @@ let statsMemo: LeaderboardStats | null = null
 
 /** A table with nothing in it, which is what an unreadable or missing file reads as. */
 function emptyFile(): LeaderboardFile {
-  return { version: SCHEMA_VERSION, updatedAt: '', players: [] }
+  return { version: SCHEMA_VERSION, scoreVersion: SCORE_VERSION, updatedAt: '', players: [] }
 }
 
 /**
@@ -255,6 +262,9 @@ async function readFromDisk(): Promise<LeaderboardFile> {
 
     return {
       version: parsed.version || SCHEMA_VERSION,
+      // A file written before the stamp existed counts as older than any formula, so its ratings are
+      // re-derived once rather than trusted (see `SCORE_VERSION`).
+      scoreVersion: typeof parsed.scoreVersion === 'number' ? parsed.scoreVersion : 0,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
       players: parsed.players.filter(isPlayerLike)
     }
@@ -305,11 +315,34 @@ async function readTable(): Promise<LeaderboardFile> {
   loading = (async () => {
     const file = await readFromDisk()
 
+    // A file whose ratings were computed with other weights is re-derived before it is served, so the
+    // table can never show a score the formula in `#shared/utils/leaderboardScore` would not produce.
+    // It is the only pass in this module that touches every record at once, and it happens once per
+    // weight change rather than once per request.
+    if (file.players.length && file.scoreVersion !== SCORE_VERSION) {
+      const rescored: LeaderboardFile = {
+        version: SCHEMA_VERSION,
+        scoreVersion: SCORE_VERSION,
+        updatedAt: file.updatedAt || today(),
+        players: file.players.map((player) => ({ ...player, score: calculatePlayerScore(player) }))
+      }
+
+      await writeTable(rescored).catch(() => undefined)
+      snapshot = rescored
+      loading = null
+      return rescored
+    }
+
     if (!file.players.length) {
       const players = await backfillFromIndex()
       if (players.length) {
         // Written straight away, so the backfill happens once rather than on every cold start.
-        const filled: LeaderboardFile = { version: SCHEMA_VERSION, updatedAt: today(), players }
+        const filled: LeaderboardFile = {
+          version: SCHEMA_VERSION,
+          scoreVersion: SCORE_VERSION,
+          updatedAt: today(),
+          players
+        }
         await writeTable(filled).catch(() => undefined)
         snapshot = filled
         loading = null
@@ -409,7 +442,12 @@ export function upsertPlayer(profile: PlayerProfileInput): Promise<void> {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, PLAYER_LIMIT)
 
-      const next: LeaderboardFile = { version: SCHEMA_VERSION, updatedAt: today(), players }
+      const next: LeaderboardFile = {
+        version: SCHEMA_VERSION,
+        scoreVersion: SCORE_VERSION,
+        updatedAt: today(),
+        players
+      }
 
       // The snapshot is replaced before the file is written, so the readers that arrive while the
       // disk is being written see the new table rather than the old one.

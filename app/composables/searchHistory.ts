@@ -31,6 +31,13 @@ export interface SearchHistoryEntry {
    */
   classId?: number
   class?: string
+  /**
+   * Blizzard's square portrait of the character, kept so the site can show who this browser is
+   * "signed in" as without asking Blizzard for it again (`app/components/MyProfile.vue`). Optional,
+   * because a row written before it was kept - and a character the media call had no picture for -
+   * falls back to a monogram in the class colour.
+   */
+  avatar?: string
 }
 
 /** Where the list is kept, and how many characters it holds. */
@@ -53,6 +60,7 @@ function toEntry(value: unknown): SearchHistoryEntry | null {
 
   const classId = typeof entry.classId === 'number' && entry.classId > 0 ? entry.classId : undefined
   const classSlug = typeof entry.class === 'string' && entry.class ? entry.class : undefined
+  const avatar = typeof entry.avatar === 'string' && entry.avatar ? entry.avatar : undefined
 
   return {
     name: entry.name,
@@ -60,7 +68,8 @@ function toEntry(value: unknown): SearchHistoryEntry | null {
     region,
     realmName: typeof entry.realmName === 'string' && entry.realmName ? entry.realmName : entry.realm,
     classId,
-    class: classSlug
+    class: classSlug,
+    avatar
   }
 }
 

@@ -9,6 +9,8 @@ const props = defineProps<{ page: CollectionPage }>()
 
 const { locale } = useI18n()
 const { refreshLinks } = useWowheadPower()
+// The shelf's switches, of which one - the collected items - is drawn here rather than asked for.
+const view = useCollectionView()
 
 /** WoW's own question-mark icon, which a tile whose sprite failed to load is replaced with. */
 const ICON_FALLBACK = 'https://wow.zamimg.com/images/wow/icons/medium/inv_misc_questionmark.jpg'
@@ -184,13 +186,22 @@ interface GridRow {
 /**
  * The rows a section is built from: one per source, each a name over its own block of tiles - the
  * source headings of the SimpleArmory tree, laid side by side under the group's own heading.
+ *
+ * With the collected switch off, the tiles the character already holds are left out and a source with
+ * nothing left to gather goes with them, so the shelf reads as what is still missing. It is a filter
+ * over what is drawn rather than a different request: the response says which items are held, item by
+ * item, and the heading above still counts the shelf as a whole.
  */
 function rowsOf(section: CollectionSection): GridRow[] {
-  return section.subgroups.map((subgroup) => ({
-    id: subgroup.id,
-    label: subgroup.label,
-    items: subgroup.items
-  }))
+  // `view` is a ref: this is a script, not a template, so the switch is read through `value` - a bare
+  // `view.collected` would be `undefined` and the shelf would always look as if the switch were off.
+  return section.subgroups
+    .map((subgroup) => ({
+      id: subgroup.id,
+      label: subgroup.label,
+      items: view.value.collected ? subgroup.items : subgroup.items.filter((item) => !item.collected)
+    }))
+    .filter((row) => row.items.length > 0)
 }
 
 /** How many tiles one line of a shelf holds, near enough: 38px squares with 6px between them. */
