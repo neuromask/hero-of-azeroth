@@ -101,11 +101,15 @@ onBeforeUnmount(() => {
     <div class="fixed inset-0 bg-wow-dark/45"></div>
     <div class="fixed inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(8,10,15,0.65)_100%)]"></div>
 
-    <!-- The form is the same liquid glass as the boxes on the character page, and the two fields
-         in it are the same component the hall of fame opens from its own row
+    <!-- The form is the same glass as the boxes on the character page (`.hoa-panel`), lifted off the
+         page because this one stands on artwork (`.hoa-panel-float`), and the two fields in it are the
+         same component the hall of fame opens from its own row
          (`app/components/CharacterSearchForm.vue`): the site has one search, and everywhere it is
-         offered it is the same fields, the same suggestions and the same progress. -->
-    <div class="relative z-20 max-w-md w-full rounded-2xl border border-white/10 bg-white/[0.06] p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl backdrop-saturate-150">
+         offered it is the same fields, the same suggestions and the same progress. Its frost is drawn
+         by a layer of the card rather than by the card (`hoa-panel-layered`), so the two panes the
+         fields drop - the realms, and the characters this browser looked at - are not cut off from the
+         artwork and blur it the way every other menu on the site blurs the page. -->
+    <div class="hoa-panel hoa-panel-layered hoa-panel-float relative z-20 max-w-md w-full p-8">
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
           <!-- The wordmark carries the brand, so the heading is the artwork: it is

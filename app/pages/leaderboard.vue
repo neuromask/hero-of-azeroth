@@ -194,9 +194,9 @@ onMounted(loadHistory)
       >{{ t('lbNav') }}</NuxtLink>
 
       <!-- And the way to add somebody who is not in the table yet: the front page's own two fields,
-           opened as a plate. It closes this row rather than standing beside the identity chip,
-           because the row is where a page's controls live - and while this browser knows nobody yet,
-           it is the only control in the bar at all. -->
+           dropped as a sheet under this row when the button is pressed. It closes this row rather than
+           standing beside the identity chip, because the row is where a page's controls live - and
+           while this browser knows nobody yet, it is the only control in the bar at all. -->
       <CharacterSearchDialog />
     </SiteHeader>
 

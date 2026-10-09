@@ -184,10 +184,12 @@ function clear() {
 </script>
 
 <template>
-  <!-- `relative z-20` is what keeps the realm menu over the table below it: the panel is a stacking
-       context of its own (the frosted background is one), so a `z-50` on the menu inside it only
-       counts within the panel - the panel itself has to be lifted. -->
-  <div class="hoa-panel relative z-20 space-y-3 p-3 sm:p-4">
+  <!-- `relative z-20` is what keeps the realm menu over the table below it: the panel is a layer of its
+       own, so a `z-50` on the menu inside it only counts within the panel - the panel itself has to be
+       lifted. The panel's frost is drawn by a layer rather than by the panel (`hoa-panel-layered`), so
+       the two panes it opens - the realm menu and the legend of the score - are not cut off from the
+       page behind them and blur what they hang over. -->
+  <div class="hoa-panel hoa-panel-layered relative z-20 space-y-3 p-3 sm:p-4">
     <!-- The columns, and the search box that narrows whatever they show. A chip is a switch rather
          than a tab: several can be on at once, each one keeps its column in the table and takes it
          away again, which is what lets a reader put two figures side by side and drop the rest. -->
@@ -284,13 +286,15 @@ function clear() {
         </button>
 
         <!-- Shut, the panel is invisible rather than absent, so the realms it offers are in the markup
-             a crawler reads. It paints above the table below it, which is what `z-50` is for. -->
+             a crawler reads. What it is drawn as - the glass, the deep shadow under it and the layer
+             that keeps it over the table below - is the site's menu pane (`.hoa-pop`), and the band
+             its heading stays at the top in is that pane's own (`.hoa-pop-title`). -->
         <div
-          class="absolute left-0 top-full z-50 mt-2 max-h-72 w-64 overflow-y-auto rounded-xl border border-white/10 bg-black/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150 transition-opacity duration-150"
+          class="hoa-pop absolute left-0 top-full mt-2 max-h-72 w-64 overflow-y-auto transition-opacity duration-150"
           :class="realmOpen ? 'opacity-100' : 'invisible opacity-0'"
           role="menu"
         >
-          <p class="sticky top-0 border-b border-white/5 bg-black/70 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 backdrop-blur-xl">
+          <p class="hoa-pop-title">
             {{ t('realm') }}
           </p>
 
@@ -326,8 +330,9 @@ function clear() {
 
       <!-- The legend of the score, at the far end of the row: a question mark that opens the five
            multipliers the overall column is made of, so a reader who wonders where a number comes
-           from has the answer one click away. The multipliers are read off the formula itself, so
-           the panel can never promise something the server does not compute. -->
+           from has the answer one click away - in the same pane every menu on the site opens
+           (`.hoa-pop`). The multipliers are read off the formula itself, so the panel can never
+           promise something the server does not compute. -->
       <div ref="legendRoot" class="relative ml-auto">
         <button
           type="button"
@@ -340,7 +345,7 @@ function clear() {
         >?</button>
 
         <div
-          class="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-white/10 bg-black/75 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150 transition-opacity duration-150"
+          class="hoa-pop absolute right-0 top-full mt-2 w-72 p-3 transition-opacity duration-150"
           :class="legendOpen ? 'opacity-100' : 'invisible opacity-0'"
           role="dialog"
           :aria-label="t('lbLegendTitle')"

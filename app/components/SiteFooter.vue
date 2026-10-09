@@ -14,14 +14,13 @@
  * opens with the mark - passes `:standalone="false"`: the compact form drops the wordmark and the room
  * above the block, so the same page never says it twice and the card's own margin decides the gap.
  *
- * The line itself is a pill of the site's dark glass, the material the quick anchors are cut from
- * (`.hoa-anchors`), rather than loose grey text on the page. Every page stands on artwork, and grey
- * letters over a painting are the quietest thing on the screen and the hardest to read; the scrim
- * under them is what makes the sign-off legible. It is a thin scrim and grey letters, though - the
- * point is to be read, not to be the loudest block on the page - so the pill is a good deal more
- * transparent than the panes the content stands in. It is the only surface in the footer, so it is
- * written here rather than added to the `hoa-*` recipes - those are materials more than one block
- * wears.
+ * The line itself is a pill of the site's glass, the frosted pane every block of a page is cut from
+ * (`.hoa-panel`), rather than loose grey text on the page. Every page stands on artwork, and grey
+ * letters over a painting are the quietest thing on the screen and the hardest to read; the sheet
+ * under them is what makes the sign-off legible, and wearing the material the page's own blocks wear is
+ * what keeps the foot of a page part of it. The words stay grey and small, though - the point is to be
+ * read, not to be the loudest block on the page - so the pill takes the material and adds nothing but
+ * its own shape: the hairline's width, the curve at the corners and the room the line needs.
  *
  * The links are the site's three faces: the address it is served on and the repository it is built in
  * open in the tab the reader is already in, and the credit opens the author's Telegram in a new one,
@@ -62,13 +61,16 @@ const QUIET = 'text-gray-500'
          a size read off the mark it used to be is easier to keep in step than a fresh number. -->
     <AppIcon v-if="standalone" name="hoa-logotype" alt="HeroOfAzeroth" class="h-[2.45rem] w-auto" />
 
-    <!-- The pill: the dark glass of the quick anchors, so the line is read against a scrim instead of
-         against the artwork. The scrim is kept thin (`/40`) and the letters are grey rather than white:
-         the sign-off should be legible over a painting, not the loudest thing on the page. `flex-wrap`
-         because the line is longer than a phone is wide - the parts wrap and stay centred, and the pill
-         grows a second row rather than pushing the page sideways, which `rounded-full` still holds (the
-         curve is clamped by the height, so it stays a pill). -->
-    <span class="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 rounded-full border border-white/10 bg-wow-dark/40 px-4 py-2 text-gray-400 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_10px_30px_rgba(0,0,0,0.35)]">
+    <!-- The pill: the site's frosted pane (`hoa-panel`), so the line is read against a sheet instead of
+         against the artwork - the same block the plates above the foot are cut from. The letters stay
+         grey and small: the sign-off should be legible over a painting, not the loudest thing on the
+         page. What the pill brings of its own is its shape - `border` for the hairline the material only
+         colours, `rounded-full` at the corners - and `flex-wrap`, because the line is longer than a
+         phone is wide: the parts wrap and stay centred, and the pill grows a second row rather than
+         pushing the page sideways (the curve is clamped by the height, so it stays a pill). -->
+    <span
+      class="hoa-panel hoa-panel-interactive border flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 rounded-full px-4 py-2 text-gray-400"
+    >
       <a :href="SITE" :class="LINK">heroofazeroth.com</a>
       <span :class="QUIET" aria-hidden="true">&middot;</span>
       <a :href="REPOSITORY" :class="LINK" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub</a>

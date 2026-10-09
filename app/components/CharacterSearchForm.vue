@@ -449,16 +449,16 @@ onBeforeUnmount(() => {
         @mousedown.prevent
         @click="clearName"
       >&#10005;</button>
-      <!-- The characters searched before, a row each. The list is the same glass as the realm
-           dropdown, and a row is shaped the same way - the name, then ` · ` and the realm in
-           the smaller grey type - so the two lists read as one control. It opens on focus or
-           on typing when there is something to show, a row fills the name and the realm both,
-           and the cross on the right drops one character without picking it. -->
+      <!-- The characters searched before, a row each. The list is the same pane the realm field
+           drops below it (`hoa-pop`), and a row is shaped the same way - the name, then ` · ` and the
+           realm in the smaller grey type - so the two lists read as one control. It opens on focus or
+           on typing when there is something to show, a row fills the name and the realm both, and the
+           cross on the right drops one character without picking it. -->
       <div
         v-if="nameOpen && historyMatches.length"
-        class="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
+        class="hoa-pop absolute mt-1 w-full max-h-72 overflow-y-auto"
       >
-        <p class="sticky top-0 bg-black/70 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-white/5 backdrop-blur-xl">
+        <p class="hoa-pop-title">
           {{ $t('searchHistory') }}
         </p>
         <div
@@ -530,15 +530,17 @@ onBeforeUnmount(() => {
             : 'border-rose-400/40 bg-rose-400/10 text-rose-300'"
         >{{ regionBadge }}</span>
 
+        <!-- The realms, in the pane every menu on the site is drawn in (`hoa-pop`): the same glass
+             the hall of fame's realm menu and the history list above this field wear. -->
         <div
           v-if="open"
-          class="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-2xl backdrop-saturate-150"
+          class="hoa-pop absolute mt-1 w-full max-h-72 overflow-y-auto"
         >
           <p v-if="realmsPending && !realms.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('loading') }}</p>
           <p v-else-if="!matches.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('noRealms') }}</p>
           <template v-else>
             <div v-for="section in sections" :key="section.key">
-              <p class="sticky top-0 bg-black/70 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-white/5 backdrop-blur-xl">
+              <p class="hoa-pop-title">
                 {{ section.label }}
               </p>
               <button

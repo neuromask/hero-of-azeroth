@@ -54,6 +54,12 @@ const { data: character, pending, error } = await useFetch<CharacterData>(
   () => `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}`
 )
 
+// The read of a profile is a wait of the site's, so it is registered rather than drawn: the shell is
+// read again whenever the address names another character, and a shell that is *reused* for that
+// keeps this flag - the navigation that brought the reader here is long over by then, which is
+// exactly the case a wheel bound to the navigation alone would miss (see `usePageLoading`).
+usePageLoading().follow('character:profile', pending)
+
 /**
  * A page that rendered a character is the proof a search was successful, and that is the moment
  * worth keeping: the name, the realm and the region go into the search history the front page
@@ -590,9 +596,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="relative min-h-screen bg-wow-dark text-white flex flex-col justify-between selection:bg-wow-gold selection:text-black">
-    <div v-if="pending" class="flex-1 flex items-center justify-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-4 border-wow-gold border-t-transparent"></div>
-    </div>
+    <!-- The wait for the profile is the site-wide preloader's to draw (see `PagePreloader.vue`): the
+         page keeps the room the profile will take, and the wheel over it is the root's own, so this
+         read looks like every other wait on the site. -->
+    <div v-if="pending" class="flex-1" />
 
     <div v-else-if="error || !character" class="flex-1 flex flex-col items-center justify-center p-4">
       <p class="text-red-400 text-lg font-semibold mb-4">{{ $t('notFound') }}</p>
@@ -620,10 +627,12 @@ onBeforeUnmount(() => {
       <header class="hoa-bar sticky top-0 z-40 container mx-auto px-4">
         <!-- The panel is a layer of its own above the navigation row below it (`z-30` against the
              row's `auto`), because the share tray opens downwards out of this panel and into that
-             row: the tray lives inside the panel's own stacking context - the frosted background it
-             sits on is what makes one - so a layer here is what keeps the tray over the fade the
-             navigation lays down, rather than under it. -->
-        <div class="hoa-panel relative z-30 rounded-t-none border-t-0 shadow-none px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+             row: the tray lives inside the panel's own stacking context, so a layer here is what keeps
+             the tray over the fade the navigation lays down, rather than under it. The panel's frost is
+             drawn by a layer of the panel instead of by the panel itself (`hoa-panel-layered`), so the
+             tray is not cut off from the page behind the bar: a `backdrop-filter` on the panel would
+             leave the tray blurring nothing but the bar it hangs in. -->
+        <div class="hoa-panel hoa-panel-layered relative z-30 rounded-t-none border-t-0 shadow-none px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
             <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a gold
                  plate with the emblem cut from it, so it keeps its own frame and stays sharp at any
@@ -665,10 +674,13 @@ onBeforeUnmount(() => {
                button has taken the place the summary figures held, and their amber frame with it -
                the one warm accent the header has - with a glow that answers the pointer. The share
                tray is the same control, so it travels with the button and opens downwards, the
-               header standing at the top of the page. None of the three draws a blur of its own:
-               they are worn on the bar's own glass, and a `backdrop-filter` inside it could only
-               sample that glass - it is also the arrangement Chromium smears over the bottom of the
-               bar (`app/assets/css/main.css`). -->
+               header standing at the top of the page, and it is the site's menu pane (`.hoa-pop`),
+               like the collections menu in the row below it. It is the same pane there as everywhere
+               else: the panel it opens out of wears no filter of its own (`hoa-panel-layered`), so the
+               tray blurs the page it hangs over instead of sampling the bar, which is also the
+               arrangement Chromium smears over the bottom edge of a frosted bar. The pane and the
+               reason it can be one pane everywhere are written in `app/assets/css/main.css`, beside
+               the class. -->
           <div class="flex w-full items-stretch gap-3 lg:w-auto">
             <button
               type="button"
@@ -719,7 +731,7 @@ onBeforeUnmount(() => {
 
             <div
               v-if="menuOpen"
-              class="absolute top-full left-1/2 z-50 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border border-white/15 bg-wow-dark/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.6)] lg:left-auto lg:right-0 lg:translate-x-0"
+              class="hoa-pop absolute top-full left-1/2 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 lg:left-auto lg:right-0 lg:translate-x-0"
               role="menu"
             >
               <p class="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('shareCard') }}</p>

@@ -17,6 +17,105 @@
     @apply transition-colors hover:border-wow-gold/60 hover:bg-white/[0.09];
   }
 
+  /* The frame lifted off the page: the one block a page cuts that is not *in* the page but standing
+     over it - the card the front page's search hangs in, with the artwork it stands on showing
+     through. It is written after `.hoa-panel` and is worn with it: the same glass, a size larger at
+     the corners and left saturated, because what is behind it is a picture, and dropped further - the
+     deeper shadow below is the whole difference between a pane that is part of a page and a pane that
+     is above one. */
+  .hoa-panel-float {
+    @apply rounded-2xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_18px_50px_rgba(0,0,0,0.5)];
+  }
+
+  /* A pane that hangs over the page: the menu a control opens, the picker a field drops, the legend a
+     figure is read off, the search a reader is sent to - everywhere something is drawn above what the
+     page is already showing. It is the site's liquid glass - the material the navigation and the tabs
+     are cut from (`.hoa-liquid-glass`) - drawn as a pane instead of as a control: what is behind it is
+     blurred and left saturated rather than shown through, a brighter hairline draws its rim, and the
+     lit line inset along its top with the faint answer along its bottom are the edges a glass surface
+     has. Two things differ, and both are what a pane is rather than what the material is. The tint is
+     the page's own colour instead of a button's white, and it is kept light - a fifth of the way into
+     the dark - because the frost is what a pane is made of: the tint only gathers whatever stands
+     behind the pane - a table of figures, the golden button of a form - into one surface, and the blur
+     and the lit rim are what tell a reader that this is a sheet laid over the page and not the page.
+     A `backdrop-filter` on a block makes a backdrop root, though, so a pane opened from inside one can
+     only sample the block it hangs in, which is why the blocks that hold a pane are built the way
+     `.hoa-panel-layered` describes. The corners are a size larger and the drop is deeper,
+     since a pane stands higher off the page than a control in a bar. One class, so every menu on the
+     site is the same pane and a change to it reaches all of them at once; the layer in it is part of
+     what it is, since a pane that hangs over the page is drawn over whatever it was opened from. */
+  .hoa-pop {
+    @apply z-50 rounded-2xl border border-white/20 bg-wow-dark/20 backdrop-blur-2xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),0_18px_50px_rgba(0,0,0,0.5)];
+    /* A long pane - the realm list, the characters this browser looked at before - is scrolled without
+       a bar of its own, the way the rail of quick anchors is (`.hoa-anchors`): the rows are wheeled,
+       dragged and tapped, and a bar down the inside edge takes a strip of the pane that the band a
+       section is read by cannot reach. A heading that stops short of the pane it belongs to reads as a
+       heading that has come loose. */
+    scrollbar-width: none;
+  }
+
+  .hoa-pop::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* The glass of a pane that drops panes of its own, drawn by a layer of it instead of by the pane
+     itself: the same rearrangement `.hoa-panel-layered` makes of a block, made here for a second
+     reason that turns out to be the first one again. A `backdrop-filter` makes the pane a backdrop
+     root, so the lists hanging out of it - the realms under a field, the characters this browser looked
+     at before - could only sample the pane, which is the very glass they are opened onto the page for.
+     With the frost on a layer behind the content the pane is a plain box and the lists keep the page as
+     their backdrop: whichever of them is open is drawn over the page it was opened from, blurred and
+     left saturated, the way every other pane on the site is. Nothing else about the pane moves - the
+     tint, the hairline, the lit edges and the drop are still its own, and the layer is clipped to its
+     corners. The blur is written out here rather than taken from the pane because it belongs to the
+     layer now, and it is the pane's own: `2xl` is 40px. */
+  .hoa-pop-layered {
+    backdrop-filter: none;
+  }
+
+  .hoa-pop-layered::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0 -z-10;
+    border-radius: inherit;
+    backdrop-filter: blur(40px) saturate(150%);
+  }
+
+  /* The glass of a block a pane is opened from, drawn by a layer inside it instead of by the block
+     itself: the block carries the recipe named here, and the frost is that block's own `::before`, the
+     same sheet it would wear, laid behind everything the block shows. It is a rearrangement of one
+     material, not a second one, and it is written once because the reason for it is one reason. A
+     `backdrop-filter` makes the block a backdrop root, and a pane opened from inside that root cannot
+     blur the page: it can only sample what the block itself is made of, which Chromium paints as a
+     stretched copy of the block smeared over its own bottom edge - the stale strip of page a pinned bar
+     used to leave under it. With the frost on a layer behind the content, the block is a plain box with
+     no filter of its own, and a pane hanging out of it keeps the page as its backdrop. Nothing else
+     about the block moves: the tint, the hairline, the lit top edge and the drop are still its own, and
+     the layer is clipped to its corners. The block has to be a layer of its own for the sheet to sit
+     under its content (`relative` with a `z-index`), which every panel that holds a pane already is. */
+  .hoa-panel-layered {
+    backdrop-filter: none;
+  }
+
+  .hoa-panel-layered::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0 -z-10;
+    border-radius: inherit;
+    backdrop-filter: blur(24px) saturate(150%);
+  }
+
+  /* The band a long menu is cut into sections with: the heading that stays at the top of the pane while
+     the rows scroll under it, and the fill that keeps a row on its way out from being read under it. It
+     is a tint of the page's own colour rather than a second serving of the pane's glass, and the reason
+     is what a filter inside a filter is. The pane is already frosted, which makes it a backdrop root, so
+     a band with a `backdrop-filter` of its own could only sample the pane - which Chromium paints as a
+     stretched copy of it - and the band came out washed, its fill wandering instead of reading as a
+     band across the pane. What hides a row here is the fill, not the frost, so it wears the dark the
+     quick anchors are read against (`.hoa-anchors`, `/85`) and nothing else. Which is why it is written
+     here, beside the pane, and not in each of the menus that have sections. */
+  .hoa-pop-title {
+    @apply sticky top-0 z-10 border-b border-white/10 bg-wow-dark/85 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500;
+  }
+
   /* A tab of a page's own navigation: quiet until it is the one being read. */
   .hoa-tab {
     @apply inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-white sm:text-base;

@@ -33,8 +33,16 @@ const localeUrl = useLocaleUrl()
 
 <template>
   <header class="hoa-bar sticky top-0 z-40 container mx-auto px-4">
+    <!-- The bar's own frost is drawn by a layer of it (`hoa-panel-layered`), because the identity chip
+         stands in the bar and the way to the profile in that chip is a button of the site's glass - and
+         every way to the character's own pages is one. A `backdrop-filter` on the bar would make the bar
+         the backdrop of those buttons, and a control can only read the block it stands in as a washed
+         copy of it, which is what made them read lighter than the page they were over. With the frost on
+         a layer the bar is a plain box and the chip's buttons keep the page as their backdrop, exactly
+         as the tabs of the row below do. Nothing else about the bar moves: its tint, its hairline and
+         its drop are still its own. -->
     <div
-      class="hoa-panel relative z-30 flex flex-col items-start justify-between gap-4 rounded-t-none border-t-0 px-4 py-1.5 shadow-none sm:px-6 sm:py-3.5 lg:flex-row lg:items-center"
+      class="hoa-panel hoa-panel-layered relative z-30 flex flex-col items-start justify-between gap-4 rounded-t-none border-t-0 px-4 py-1.5 shadow-none sm:px-6 sm:py-3.5 lg:flex-row lg:items-center"
     >
       <div class="flex items-center gap-4 sm:gap-6">
         <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a gold plate

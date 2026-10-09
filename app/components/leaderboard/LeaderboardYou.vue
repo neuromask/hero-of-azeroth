@@ -133,10 +133,15 @@ function format(value: number): string {
 
 <template>
   <!-- The plate stands on the page's own glass, warmed with the brand gold: it is the one block on
-       the page that is about the reader, and the gold is what the site says that with. -->
+       the page that is about the reader, and the gold is what the site says that with. Its frost is
+       drawn by a layer of it (`hoa-panel-layered`, with a layer of its own for that `-z-10` to sit
+       under), because the way to the reader's row is a button of the site's glass and a filter on the
+       plate would leave that button sampling the plate - a control can only read a block it stands in
+       as a washed copy of it. In a plain box the button keeps the page as its backdrop and reads as the
+       tabs above the plate do. -->
   <div
     v-if="shows"
-    class="hoa-panel flex flex-wrap items-center gap-x-6 gap-y-3 border-wow-gold/25 p-3 sm:p-3.5"
+    class="hoa-panel hoa-panel-layered relative z-0 flex flex-wrap items-center gap-x-6 gap-y-3 border-wow-gold/25 p-3 sm:p-3.5"
   >
     <!-- The reader's own row, drawn as the table draws one: the portrait in the class colour, the
          name in it, the side beside the name, and the realm, class and level under it. -->

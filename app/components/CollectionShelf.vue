@@ -42,13 +42,18 @@ const LEGEND = [
 ] as const
 
 const { data, pending, error, refresh } = await useCollection(() => props.kind, view)
+
+// A shelf is read again when its kind changes and when a switch is flipped, and neither of those is a
+// navigation: the page stays where it stands, so nothing but this would say the site is working. The
+// wait is the site-wide preloader's to draw, and the view keeps the room the shelf will take.
+usePageLoading().follow('character:collections', pending)
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <div v-if="pending" class="flex items-center justify-center py-20">
-      <div class="h-12 w-12 animate-spin rounded-full border-4 border-wow-gold border-t-transparent" />
-    </div>
+    <!-- The wait itself is the site-wide preloader's to draw (see `PagePreloader.vue`); keeping the
+         room of the grid here is what stops the page jumping while the shelf is read. -->
+    <div v-if="pending" class="py-20" />
 
     <div v-else-if="error" class="mx-auto max-w-3xl py-16 text-center">
       <p class="mb-4 text-lg font-semibold text-red-400">{{ $t('collectionsError') }}</p>
