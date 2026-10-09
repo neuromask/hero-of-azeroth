@@ -56,9 +56,13 @@ const { realmLabel } = useRealmNames()
  * "mounts" - so a reader who has met one in the table knows which chip to reach for. The site has a
  * name of its own for four of them and borrows the column's for the rest, which is why the labels
  * come from two places: `lbPreset*` for the named ones, the collections' own keys for the plain ones.
+ *
+ * The overall chip wears the trophy rather than the site's emblem: the emblem is the brand in the
+ * bar above, while the overall score is the prize this page hands out, and a chip is a mark for a
+ * figure rather than a second logo.
  */
 const COLUMN_CHIPS: { key: LeaderboardSort; icon: string; label: string; literal?: boolean }[] = [
-  { key: 'total', icon: 'emblem', label: 'lbPresetTotal' },
+  { key: 'total', icon: 'trophy', label: 'lbPresetTotal' },
   { key: 'achievements', icon: 'achievments', label: 'lbPresetAchievements' },
   { key: 'mounts', icon: 'mounts', label: 'lbPresetMounts' },
   { key: 'toys', icon: 'toys', label: 'toys' },

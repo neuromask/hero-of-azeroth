@@ -12,6 +12,10 @@
  * a table that has just been backfilled from the sitemap's index: it knows who has been looked up
  * and what their mounts are, but not their decor, and "master architect, 0 pieces" would be a
  * claim the data does not support.
+ *
+ * Each plate opens with the glyph it is known by, twice the size of the words beside it: the mark
+ * on a plate is what a reader picks it out by from across the row, and the five are read as five
+ * marks before any of them is read as words.
  */
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
@@ -81,7 +85,7 @@ const cards = computed<Card[]>(() => {
   return [
     {
       key: 'players',
-      icon: 'emblem',
+      icon: 'user',
       label: t('lbStatPlayers'),
       value: stats ? format(stats.players) : DASH,
       hint: stats
@@ -144,11 +148,15 @@ const cards = computed<Card[]>(() => {
       class="hoa-panel flex min-w-0 flex-col p-3.5 sm:p-4"
       :class="card.href ? 'hoa-panel-interactive' : ''"
     >
-      <p class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-        <AppIcon v-if="card.icon" :name="card.icon" class="h-[1.1em] w-[1.1em]" />
+      <!-- The plate's title row: the glyph the plate is known by, then the words. The glyph is twice
+           the size of the label it stands before, so the row is a mark and a name rather than a name
+           with something in front of it - and `items-center` with `leading-none` on the row is what
+           keeps the words on the glyph's own centre line however tall the glyph gets. -->
+      <p class="flex items-center gap-2 text-[11px] font-bold uppercase leading-none tracking-wider text-gray-400">
+        <AppIcon v-if="card.icon" :name="card.icon" class="h-[2.2em] w-[2.2em]" />
         <span
           v-else
-          class="inline-block h-[0.85em] w-[0.85em] shrink-0 rounded-full"
+          class="inline-block h-[1.7em] w-[1.7em] shrink-0 rounded-full"
           :style="{ backgroundColor: card.dotHex || 'rgba(255,255,255,0.25)' }"
           aria-hidden="true"
         ></span>
