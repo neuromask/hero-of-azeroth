@@ -44,8 +44,16 @@ export interface SearchHistoryEntry {
 export const SEARCH_HISTORY_KEY = 'hoa_search_history'
 export const SEARCH_HISTORY_LIMIT = 10
 
-/** The identity an entry is unique on: the pair read as one string. */
-export function searchHistoryKey(entry: SearchHistoryEntry): string {
+/**
+ * The identity a character is unique on, as one string: its three address segments, lowercased.
+ *
+ * The list below is deduplicated by it, and the hall of fame marks the reader's own row with it. The
+ * two are answers about one character written by two different layers - an entry is written from the
+ * profile the browser read, a row is written by the table's own storage - so the case a name happens
+ * to be spelled in can differ between them, and lowercasing here is what lets the two be compared at
+ * all rather than only matching when they were written the same way.
+ */
+export function searchHistoryKey(entry: { region: string; realm: string; name: string }): string {
   return `${entry.region}:${entry.realm}:${entry.name.toLowerCase()}`
 }
 

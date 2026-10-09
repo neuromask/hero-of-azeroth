@@ -12,7 +12,13 @@
  * kilobytes), kept with the record when the profile was read. A record that has none - one backfilled
  * from the sitemap's index, which never kept a URL - or one whose picture fails to load draws a
  * monogram in the class colour instead, so a row is never a broken image.
+ *
+ * One of the rows can be the reader's own - the character this browser is signed in as (see
+ * `useSearchHistory`) - and the table marks such a row rather than moving it: the order is the
+ * endpoint's to decide, and a table that pulled a row to the top because it happened to be the
+ * reader's would no longer be the table it was handed.
  */
+import { searchHistoryKey } from '~/composables/searchHistory'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
 import { factionById } from '#shared/utils/wow-faction'
@@ -29,6 +35,12 @@ const props = defineProps<{
   offset?: number
   /** True while a fresh answer is on its way, which dims the table rather than emptying it. */
   pending?: boolean
+  /**
+   * The character this browser is signed in as, written as `searchHistoryKey` writes it, whose row is
+   * marked as the reader's own. Absent for a reader who has looked nobody up, and absent from a page
+   * whose rows are not that character's - the mark is a mark on a row, never a claim about the table.
+   */
+  highlight?: string
 }>()
 
 const emit = defineEmits<{ (event: 'update:sort', value: LeaderboardSort): void }>()
@@ -65,9 +77,15 @@ function profileUrl(player: LeaderboardPlayer): string {
   return localeUrl(`/${regionPath(player.region)}/${player.realm}/${player.name}`)
 }
 
-/** The identity a row is keyed by, and the key a broken avatar is remembered under. */
-function rowKey(player: LeaderboardPlayer): string {
-  return `${player.region}:${player.realm}:${player.name}`
+/**
+ * Whether a row is the reader's own: the character this browser is signed in as.
+ *
+ * The identity is the one the search history is kept under, which is what makes the two the same
+ * character rather than two spellings of one - the browser wrote its key down from the profile it
+ * read, the table built the row from the record the site stored, and a key is what says they agree.
+ */
+function isMe(player: LeaderboardPlayer): boolean {
+  return !!props.highlight && props.highlight === searchHistoryKey(player)
 }
 
 /**
@@ -250,14 +268,23 @@ function open(player: LeaderboardPlayer) {
         </thead>
 
         <tbody>
+          <!-- A row that is the reader's own is marked as such, and the mark rides on the row: a bar of
+               the brand gold down its edge, the glass warmed with it, and the badge that says whose row
+               it is. Nothing about the order changes - a row is where the table put it. -->
           <tr
             v-for="(player, index) in players"
-            :key="rowKey(player)"
-            class="cursor-pointer border-b border-white/5 transition-colors last:border-b-0 hover:bg-white/[0.05]"
+            :key="searchHistoryKey(player)"
+            :data-you="isMe(player) ? 'true' : undefined"
+            class="cursor-pointer border-b border-white/5 transition-colors last:border-b-0"
+            :class="isMe(player) ? 'bg-wow-gold/[0.08] hover:bg-wow-gold/15' : 'hover:bg-white/[0.05]'"
             @click="open(player)"
           >
-            <!-- The rank: the first three of the whole table wear a medal and its glow. -->
-            <td class="px-3 py-2.5 align-middle">
+            <!-- The rank: the first three of the whole table wear a medal and its glow, and the
+                 reader's own row wears the gold bar that marks it from across the table. -->
+            <td
+              class="px-3 py-2.5 align-middle"
+              :class="isMe(player) ? 'border-l-2 border-wow-gold' : ''"
+            >
               <span
                 class="inline-grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold tabular-nums"
                 :style="medalOf(index)
@@ -284,13 +311,13 @@ function open(player: LeaderboardPlayer) {
                     {{ initial(player) }}
                   </span>
                   <img
-                    v-if="player.avatar && !missing[rowKey(player)]"
+                    v-if="player.avatar && !missing[searchHistoryKey(player)]"
                     :src="player.avatar"
                     :alt="player.displayName"
                     loading="lazy"
                     decoding="async"
                     class="absolute inset-0 h-full w-full object-cover"
-                    @error="missing[rowKey(player)] = true"
+                    @error="missing[searchHistoryKey(player)] = true"
                   />
                 </span>
 
@@ -302,6 +329,12 @@ function open(player: LeaderboardPlayer) {
                       :style="{ color: classHex(player.classId) }"
                       @click.stop
                     >{{ player.displayName }}</NuxtLink>
+
+                    <!-- The reader's own row says so, in the same gold the bar down its edge is. -->
+                    <span
+                      v-if="isMe(player)"
+                      class="inline-flex shrink-0 items-center rounded border border-wow-gold/60 bg-wow-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-wow-goldLight"
+                    >{{ t('lbYouBadge') }}</span>
 
                     <span
                       v-if="factionById(player.faction)"

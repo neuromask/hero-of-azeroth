@@ -197,6 +197,25 @@ export interface LeaderboardPage {
 }
 
 /**
+ * Where one character stands in the hall of fame: their own row, the place it holds and the
+ * population it holds it among.
+ *
+ * A place is a place in the *overall* table - every character, ordered by the overall rating, with no
+ * filter in front of it - because that is the table the page opens on and the only one a place can
+ * mean without saying whose filters it was read under. It is a number rather than a page, because how
+ * many rows a page holds is the reader's to ask for; the page turns the number into a page itself
+ * (see `revealRank` in `app/composables/leaderboardView.ts`).
+ */
+export interface LeaderboardStanding {
+  /** The character's row, exactly as the table draws it. */
+  player: LeaderboardPlayer
+  /** Their place in the overall table, one-based. */
+  rank: number
+  /** How many characters they are ranked among, which is what makes `#128 of 1 240` read. */
+  total: number
+}
+
+/**
  * What a caller may ask for. Every field is optional: an empty query is the first page of the
  * overall table, which is what the page's own address says before a filter is touched.
  */

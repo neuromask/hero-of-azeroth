@@ -148,7 +148,9 @@ export function useLeaderboardView() {
     filters.page = Math.min(Math.max(1, next), last)
   }
 
-  /** Drops every filter back to the overall table, which is what a reader starts from. */
+  /**
+   * Drops every filter back to the overall table, which is what a reader starts from.
+   */
   function reset() {
     filters.sort = 'total'
     filters.faction = 'all'
@@ -157,6 +159,22 @@ export function useLeaderboardView() {
     filters.page = 1
     search.value = ''
     query.value = ''
+  }
+
+  /**
+   * Hands the table the place a reader holds, which is what the reader's own row needs.
+   *
+   * A place is the one number a reader has that the table can be asked for: it is where the overall
+   * table puts them, and turning it into a page is arithmetic that belongs here rather than to a page,
+   * because how many rows a page holds is decided here (`LEADERBOARD_PER_PAGE`). Every filter goes on
+   * the way: a place is a place in the overall table, and a faction or a search left in front of it
+   * would land the reader on a page that cannot hold their row. The page number is set rather than
+   * clamped, because `setPage` clamps against the answer being replaced - which is the filtered one,
+   * and the one that has nothing to do with where this place falls.
+   */
+  function revealRank(rank: number) {
+    reset()
+    filters.page = Math.max(1, Math.ceil(rank / LEADERBOARD_PER_PAGE))
   }
 
   return {
@@ -176,6 +194,7 @@ export function useLeaderboardView() {
     setRealm,
     setClass,
     setPage,
+    revealRank,
     reset
   }
 }

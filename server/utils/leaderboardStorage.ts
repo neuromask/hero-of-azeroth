@@ -1,8 +1,9 @@
 /**
  * The repository the leaderboard is read and written through.
  *
- * Everything the table needs is behind the three functions this module exports - `getLeaderboard`,
- * `upsertPlayer` and `getGlobalStats` - and that is the whole contract. The endpoint that serves
+ * Everything the table needs is behind the four functions this module exports - `getLeaderboard`,
+ * `getLeaderboardStanding`, `upsertPlayer` and `getGlobalStats` - and that is the whole contract. The
+ * endpoint that serves
  * `/api/leaderboard` and the components that draw it know a query and a payload, never a file, a
  * key or a driver, which is what makes the storage itself a private detail: swapping the JSON file
  * below for SQLite (`better-sqlite3`, `db0`) is a rewrite of this one file and a change to nothing
@@ -38,6 +39,7 @@ import type {
   LeaderboardPlayer,
   LeaderboardQuery,
   LeaderboardSort,
+  LeaderboardStanding,
   LeaderboardStats
 } from '#shared/data/leaderboardSchema'
 import { LEADERBOARD_SORTS, isAtItemLevelCap } from '#shared/data/leaderboardSchema'
@@ -581,6 +583,38 @@ export async function getLeaderboard(query: LeaderboardQuery = {}): Promise<Lead
     sort,
     stats: await getGlobalStats(),
     updatedAt: file.updatedAt
+  }
+}
+
+/**
+ * Where one character stands in the overall table: their row, their place, and the population that
+ * place is a place in.
+ *
+ * The order is the one the page opens on, taken from the same comparator the page's own table is
+ * sorted with, so a place can never be a place in an order the reader cannot also see. Nothing is
+ * filtered: a place is a fact about the table, not about what the reader last asked it for.
+ *
+ * A character the table does not know is answered with nothing at all rather than with a place at the
+ * end of the table. There is nothing to say about a row that is not there, and a place would say
+ * something the data does not: the page draws no plate, and the same question answers differently the
+ * moment that character is looked up.
+ */
+export async function getLeaderboardStanding(
+  character: Pick<LeaderboardPlayer, 'region' | 'realm' | 'name'>
+): Promise<LeaderboardStanding | null> {
+  const file = await readTable()
+  const key = identity(character)
+
+  const player = file.players.find((entry) => identity(entry) === key)
+  if (!player) return null
+
+  // `sort` copies, so the snapshot's own array is left in the order the writes put it in.
+  const ranked = file.players.slice().sort((a, b) => compare(a, b, 'total'))
+
+  return {
+    player,
+    rank: ranked.findIndex((entry) => identity(entry) === key) + 1,
+    total: ranked.length
   }
 }
 

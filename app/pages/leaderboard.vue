@@ -16,8 +16,9 @@
 definePageMeta({ alias: '/ru/leaderboard' })
 
 // The characters this browser has looked up, which is where the row's three character views find the
-// character they belong to (see the composable for the shape and the limit).
-import { useSearchHistory } from '~/composables/searchHistory'
+// character they belong to (see the composable for the shape and the limit). The key it keeps them
+// under is also what marks the reader's own row in the table below.
+import { useSearchHistory, searchHistoryKey } from '~/composables/searchHistory'
 
 // The picture the page stands on: the hall of fame's own artwork (`app/assets/img`), which is part
 // of the build, so it costs no network request at all.
@@ -37,6 +38,7 @@ const {
   pending,
   error,
   refresh,
+  revealRank,
   setSort,
   setFaction,
   setRealm,
@@ -91,6 +93,46 @@ const meta = computed(() => {
 const { history, load: loadHistory } = useSearchHistory()
 
 const current = computed(() => history.value[0] || null)
+
+/** The identity of that character in the table, which is what one of its rows is marked by. */
+const meKey = computed(() => (current.value ? searchHistoryKey(current.value) : ''))
+
+/**
+ * How the reader's own row is reached from the plate above the filters.
+ *
+ * The plate knows the place the reader holds, and a place is the one thing about a row that the table
+ * can be asked for. Turning it into a page is the page's own step (`revealRank`), and then the row has
+ * to be *seen*: it is drawn one request later, so the scroll to it waits for the answer rather than
+ * looking for a row that is not on the screen yet. The row marks itself (`data-you`) for that scroll,
+ * which is what keeps a row's address inside the table where rows are drawn.
+ */
+const scrollToMe = ref(false)
+
+/** Brings the marked row into the middle of the window. The sticky header is why it is the middle. */
+function scrollToRow() {
+  nextTick(() => document.querySelector('[data-you="true"]')?.scrollIntoView({ block: 'center' }))
+}
+
+/** Answers the plate's button: the reader's place, turned into the page that holds their row. */
+function revealRow(rank: number) {
+  // A row already drawn is a scroll rather than a request: the reader is looking at the table they
+  // asked for, and reordering it would move the very row they just found.
+  if (meKey.value && rows.value.some((player) => searchHistoryKey(player) === meKey.value)) {
+    scrollToRow()
+    return
+  }
+
+  revealRank(rank)
+  scrollToMe.value = true
+}
+
+// The page the reader asked for arrives a moment after the request: `pending` falling is what says it
+// is drawn, and the scroll happens once per button, not once per page of the table.
+watch(pending, (busy) => {
+  if (busy || !scrollToMe.value) return
+  scrollToMe.value = false
+  scrollToRow()
+})
 
 /** The address of that character's own pages, or an empty string when there is no such character. */
 const characterPath = computed(() => {
@@ -161,6 +203,11 @@ onMounted(loadHistory)
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
       <LeaderboardStats :stats="stats" :pending="pending" />
 
+      <!-- The reader's own place, which is the page's own fact rather than the table's: it is read
+           before a filter is touched, and it does not move when one is. A browser that has looked
+           nobody up draws no plate at all - there is nobody to place. -->
+      <LeaderboardYou v-if="current" class="mt-3" :character="current" @reveal="revealRow" />
+
       <LeaderboardFilters
         class="mt-3"
         :faction="filters.faction"
@@ -188,6 +235,7 @@ onMounted(loadHistory)
         :columns="columns"
         :offset="offset"
         :pending="pending"
+        :highlight="meKey"
         @update:sort="setSort"
       />
 
