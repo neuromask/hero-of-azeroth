@@ -127,8 +127,8 @@ const tileColumns = computed<StatTile[][]>(() => {
             <span class="text-2xl sm:text-3xl font-extrabold whitespace-nowrap text-right" :class="tile.color">{{ tile.display }}</span>
             <!-- Under the first row: whose numbers the tile shows, and how much of everything there
                  is to collect they cover. -->
-            <span class="truncate text-[12px] uppercase px-10 font-semibold text-gray-400">{{ tile.note }}</span>
-            <span class="whitespace-nowrap text-right text-[12px] font-semibold text-gray-400 tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
+            <span class="truncate text-[12px] uppercase px-10 font-normal text-gray-400">{{ tile.note }}</span>
+            <span class="whitespace-nowrap text-right text-[12px] font-normal text-gray-400 tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
           </div>
           <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/5">
             <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" :style="{ width: tile.percent + '%' }"></div>
@@ -149,16 +149,16 @@ const tileColumns = computed<StatTile[][]>(() => {
          pointer, so the row reads as one more block of statistics. -->
     <div class="hoa-panel hoa-panel-interactive flex w-full items-center justify-between gap-3 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 lg:w-auto">
       <div class="text-center">
-        <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('itemLevel') }}</span>
-        <span class="text-2xl sm:text-3xl font-bold text-white inline-flex items-center justify-center gap-2">
+        <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('itemLevel') }}</span>
+        <span class="text-2xl sm:text-3xl font-extrabold text-white inline-flex items-center justify-center gap-2">
           <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
           {{ character?.ilvl }}
         </span>
       </div>
       <div class="h-8 w-[1px] bg-white/15"></div>
       <div class="text-center">
-        <span class="text-xs text-gray-200 uppercase tracking-wider block font-bold">{{ $t('mPlus') }}</span>
-        <span class="text-2xl sm:text-3xl font-bold inline-flex items-center justify-center gap-2" :class="mPlusColor">
+        <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('mPlus') }}</span>
+        <span class="text-2xl sm:text-3xl font-extrabold inline-flex items-center justify-center gap-2" :class="mPlusColor">
           <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
           {{ character?.mPlusScore }}
         </span>

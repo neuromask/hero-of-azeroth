@@ -97,7 +97,7 @@ onMounted(load)
     </span>
 
     <div class="min-w-0">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-gray-500">{{ t('profileSignedIn') }}</p>
+      <p class="text-[10px] font-normal uppercase tracking-wider text-gray-500">{{ t('profileSignedIn') }}</p>
       <p class="truncate text-sm font-bold leading-tight" :style="{ color: hex }">{{ current.name }}</p>
       <p class="truncate text-xs text-gray-400">
         {{ current.realmName }}<span v-if="className"> · {{ className }}</span>

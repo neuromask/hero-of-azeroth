@@ -100,7 +100,7 @@ watch(
         v-for="shelf in COLLECTION_KINDS"
         :key="shelf"
         :to="localeUrl(`${props.path}/${shelf}`)"
-        class="flex items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+        class="flex items-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors"
         :class="onShelf(shelf) ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
         :aria-current="onShelf(shelf) ? 'page' : undefined"
         role="menuitem"

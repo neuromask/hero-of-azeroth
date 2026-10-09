@@ -220,7 +220,7 @@ function open(player: LeaderboardPlayer) {
         </colgroup>
 
         <thead>
-          <tr class="border-b border-white/10 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+          <tr class="border-b border-white/10 text-[14spx] font-semibold uppercase tracking-wider text-gray-400">
             <th class="px-3 py-2.5 text-left" scope="col">#</th>
             <th class="px-3 py-2.5 text-left" scope="col">{{ t('lbColPlayer') }}</th>
             <th
@@ -333,12 +333,12 @@ function open(player: LeaderboardPlayer) {
                     <!-- The reader's own row says so, in the same gold the bar down its edge is. -->
                     <span
                       v-if="isMe(player)"
-                      class="inline-flex shrink-0 items-center rounded border border-wow-gold/60 bg-wow-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-wow-goldLight"
+                      class="inline-flex shrink-0 items-center rounded border border-wow-gold/60 bg-wow-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-wow-goldLight"
                     >{{ t('lbYouBadge') }}</span>
 
                     <span
                       v-if="factionById(player.faction)"
-                      class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none"
+                      class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none"
                       :style="{
                         borderColor: `${factionById(player.faction)?.hex}55`,
                         color: factionById(player.faction)?.hex
@@ -375,7 +375,7 @@ function open(player: LeaderboardPlayer) {
                  asked for - the one figure with a header of its own outside the list above. -->
             <td
               v-if="showsScore"
-              class="px-3 py-2.5 text-right font-bold tabular-nums text-wow-gold"
+              class="px-3 py-2.5 text-right font-extrabold tabular-nums text-wow-gold"
             >{{ format(player.score) }}</td>
           </tr>
         </tbody>

@@ -524,7 +524,7 @@ onBeforeUnmount(() => {
         >&#10005;</button>
         <span
           v-if="regionBadge"
-          class="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded border"
+          class="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border"
           :class="resolvedRealm?.region === 'eu'
             ? 'border-sky-400/40 bg-sky-400/10 text-sky-300'
             : 'border-rose-400/40 bg-rose-400/10 text-rose-300'"
@@ -565,7 +565,7 @@ onBeforeUnmount(() => {
 
     <button
       type="submit"
-      class="w-full mt-2 bg-gradient-to-r from-amber-600 to-wow-gold text-black font-extrabold py-3 rounded-lg hover:brightness-110 transition-all shadow-lg uppercase text-sm tracking-wider disabled:cursor-wait disabled:brightness-95"
+      class="w-full mt-2 bg-gradient-to-r from-amber-600 to-wow-gold text-black font-semibold py-3 rounded-lg hover:brightness-110 transition-all shadow-lg uppercase text-sm tracking-wider disabled:cursor-wait disabled:brightness-95"
       :disabled="searching"
     >
       <!-- While the character page is fetching from Blizzard, the button becomes the wait:

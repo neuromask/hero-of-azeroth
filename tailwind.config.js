@@ -8,6 +8,17 @@ module.exports = {
   ],
   theme: {
     extend: {
+      /**
+       * Gilroy is the typeface the site is set in (`@font-face` in
+       * `app/assets/css/main.css`). Naming it as `sans` is what makes it the whole
+       * site's default: Tailwind's preflight puts `fontFamily.sans` on `html`, so
+       * every block inherits it, and `font-sans` names it wherever it is asked for
+       * explicitly. The generic families after it are the fallback a browser paints
+       * with while the `.woff2` files are still on their way.
+       */
+      fontFamily: {
+        sans: ['Gilroy', 'system-ui', 'sans-serif']
+      },
       colors: {
         wow: {
           dark: '#080a0f',

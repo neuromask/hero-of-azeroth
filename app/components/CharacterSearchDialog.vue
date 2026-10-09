@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
       >
         <div class="mb-3 flex items-start justify-between gap-4">
           <div>
-            <h2 class="text-base font-extrabold text-white">{{ t('findCharacter') }}</h2>
+            <h2 class="text-base font-bold text-white">{{ t('findCharacter') }}</h2>
             <p class="mt-0.5 text-xs leading-relaxed text-gray-400">{{ t('findCharacterHint') }}</p>
           </div>
 

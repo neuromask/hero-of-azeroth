@@ -21,6 +21,24 @@
  * The pane is not skip-able by a click, and that is the point of it: while the site is between two
  * pages, a second click on a tab or a row would start a second navigation, and the reader would
  * arrive somewhere they did not ask for.
+ *
+ * It is the site's liquid glass in the cut a control wears (`.hoa-liquid-glass`, the material the tabs
+ * and the buttons are made of) rather than the wider pane a menu hangs in (`.hoa-pop`): a wait is one
+ * small thing standing on the page for a moment, and nothing is ever opened out of it, so it wears the
+ * frost itself and needs none of the layering a pane that drops a pane is rearranged with (see
+ * `hoa-pop-layered` in `main.css`). The scrim under it is deliberately left a plain tint of the page's
+ * own dark (`bg-wow-dark/75`) with no frost of its own: a `backdrop-filter` there would make the scrim
+ * the *backdrop* of the card, and the card's frost could then only sample the scrim - the same double
+ * blur that leaves a control inside a frosted block reading washed. The card takes no pointer at all,
+ * so every click of the wait lands on the scrim, nothing behind the pane is reached through it, and the
+ * glass never lights up under a hand that is only passing over the screen (the material's `hover:`).
+ *
+ * The site's own mark stands above the wheel - the emblem the header is led by (`hoa-emblem`), not the
+ * wordmark, which belongs to the card a character is shared as. It is the one thing a reader who has
+ * just clicked a row wants to be told while nothing has arrived yet: that they are still on this site
+ * and not on a page that has failed to load. It is the artwork itself and is decoration here, so it is
+ * drawn quietly (`AppIcon` hides it from a screen reader, which is the wheel's `label` to say), and it
+ * is left still while the ring turns, because the only motion in the pane is the wheel's.
  */
 const { waiting } = usePageLoading()
 
@@ -80,7 +98,15 @@ onBeforeUnmount(() => {
     :aria-hidden="!shown"
     data-hoa-preloader
   >
-    <div v-if="shown" class="hoa-panel border-wow-gold/25 px-7 py-6">
+    <!-- The card is the site's own glass with the site's own mark on it (see above), and it is
+         `pointer-events-none` on purpose: the scrim is what a stray click reaches, which is what keeps
+         a second navigation from starting behind the pane, and the material's `hover:` never fires on a
+         surface nobody can point at. -->
+    <div
+      v-if="shown"
+      class="hoa-liquid-glass flex flex-col items-center gap-5 rounded-2xl border-wow-gold/25 px-8 py-7 pointer-events-none"
+    >
+      <AppIcon name="hoa-emblem" class="h-12 w-12" />
       <LoadingWheel :label="$t('loading')" />
     </div>
   </div>

@@ -34,7 +34,7 @@ const NAMES: Record<AppLocale, string> = { en: 'English', ru: 'Русский' }
       :hreflang="code"
       :title="NAMES[code]"
       :aria-current="code === locale ? 'true' : undefined"
-      class="inline-flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs font-bold leading-none transition-all"
+      class="inline-flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs font-semibold leading-none transition-all"
       :class="code === locale ? 'border-wow-gold bg-wow-gold/10' : 'border-white/10 bg-black/40 opacity-60 hover:opacity-100'"
     >{{ code.toUpperCase() }}</a>
   </div>

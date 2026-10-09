@@ -264,13 +264,13 @@ const metaParts = computed<MetaPart[]>(() => {
 
   // Общий стиль для янтарных баблов. Блюра своего у них нет: они надеты на стекло самой шапки
   // (`app/assets/css/main.css` объясняет, почему внутри панели его быть не должно).
-  const amberBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-amber-950/20 text-xs font-medium text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
+  const amberBadge = 'inline-flex items-center px-2.5 py-0.5 rounded-lg border border-amber-500/50 bg-amber-950/20 text-xs font-semibold text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
 
   return [
     // 1. Уровень
     {
       text: String(c.level),
-      className: `${amberBadge} font-semibold`
+      className: amberBadge
     },
     // 2. Раса
     {
@@ -603,7 +603,7 @@ onBeforeUnmount(() => {
 
     <div v-else-if="error || !character" class="flex-1 flex flex-col items-center justify-center p-4">
       <p class="text-red-400 text-lg font-semibold mb-4">{{ $t('notFound') }}</p>
-      <NuxtLink :to="localeUrl('/')" class="px-6 py-2 bg-wow-gold text-black font-bold rounded-lg hover:bg-wow-goldLight transition-colors">
+      <NuxtLink :to="localeUrl('/')" class="px-6 py-2 bg-wow-gold text-black font-semibold rounded-lg hover:bg-wow-goldLight transition-colors">
         {{ $t('backToSearch') }}
       </NuxtLink>
     </div>
@@ -650,7 +650,7 @@ onBeforeUnmount(() => {
                 <h1 class="text-2xl sm:text-4xl font-extrabold tracking-wide text-white drop-shadow">
                   {{ character.name }}
                 </h1>
-                <span v-if="character.title" class="text-wow-goldLight text-sm sm:text-base font-medium italic">
+                <span v-if="character.title" class="text-wow-goldLight text-sm sm:text-base font-normal italic">
                   {{ character.title }}
                 </span>
               </div>
@@ -734,13 +734,13 @@ onBeforeUnmount(() => {
               class="hoa-pop absolute top-full left-1/2 mt-3 w-[min(92vw,24rem)] -translate-x-1/2 lg:left-auto lg:right-0 lg:translate-x-0"
               role="menu"
             >
-              <p class="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('shareCard') }}</p>
+              <p class="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ $t('shareCard') }}</p>
 
               <button
                 type="button"
                 role="menuitem"
                 :disabled="sharing"
-                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-60"
+                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-normal text-gray-200 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-60"
                 @click="shareCardImage"
               >
                 <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-wow-gold/30 bg-wow-gold/10 text-[11px]">📤</span>
@@ -754,20 +754,20 @@ onBeforeUnmount(() => {
                   target="_blank"
                   rel="noopener noreferrer"
                   role="menuitem"
-                  class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                  class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-normal text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
                   @click="closeMenu"
                 >
-                  <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10px] font-extrabold" :class="network.tint">{{ network.badge }}</span>
+                  <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10px] font-semibold" :class="network.tint">{{ network.badge }}</span>
                   {{ network.label }}
                 </a>
               </div>
 
-              <p class="mt-1 border-t border-white/10 px-3 pt-2.5 pb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">{{ $t('sendLink') }}</p>
+              <p class="mt-1 border-t border-white/10 px-3 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ $t('sendLink') }}</p>
 
               <button
                 type="button"
                 role="menuitem"
-                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-normal text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
                 @click="copyLink()"
               >
                 <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10 text-[11px]">🔗</span>
@@ -777,7 +777,7 @@ onBeforeUnmount(() => {
               <a
                 :href="emailHref"
                 role="menuitem"
-                class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+                class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-normal text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
                 @click="closeMenu"
               >
                 <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10 text-[11px]">✉️</span>
@@ -852,7 +852,7 @@ onBeforeUnmount(() => {
 
       <!-- One toast for the shell, because the Refresh button that raises it lives here and both
            views offer a moment to read it. -->
-      <p v-if="toast" class="relative z-30 container mx-auto px-4 pt-3 text-xs font-medium text-wow-goldLight">{{ toast }}</p>
+      <p v-if="toast" class="relative z-30 container mx-auto px-4 pt-3 text-xs font-normal text-wow-goldLight">{{ toast }}</p>
 
       <!-- The view the address names. It is rendered inside the shell, so the header, the tabs and
            the Refresh button above it are never rebuilt by a switch between the two. -->

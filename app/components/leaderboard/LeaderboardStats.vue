@@ -152,7 +152,7 @@ const cards = computed<Card[]>(() => {
            the size of the label it stands before, so the row is a mark and a name rather than a name
            with something in front of it - and `items-center` with `leading-none` on the row is what
            keeps the words on the glyph's own centre line however tall the glyph gets. -->
-      <p class="flex items-center gap-2 text-[11px] font-bold uppercase leading-none tracking-wider text-gray-400">
+      <p class="flex items-center gap-2 text-[11px] font-semibold uppercase leading-none tracking-wider text-gray-400">
         <AppIcon v-if="card.icon" :name="card.icon" class="h-[2.2em] w-[2.2em]" />
         <span
           v-else

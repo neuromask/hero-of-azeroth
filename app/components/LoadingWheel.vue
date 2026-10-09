@@ -34,6 +34,6 @@ defineProps<{
       class="h-12 w-12 animate-spin rounded-full border-4 border-wow-gold border-t-transparent"
       aria-hidden="true"
     ></span>
-    <span v-if="label" class="text-sm font-medium text-gray-300">{{ label }}</span>
+    <span v-if="label" class="text-sm font-normal text-gray-300">{{ label }}</span>
   </span>
 </template>

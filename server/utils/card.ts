@@ -15,9 +15,12 @@ const CARD_HEIGHT = 630
 
 /**
  * The type the card is set in: what every `<text>` inherits, and what `measuredTextWidth`
- * renders its probe with, so a width measured there is the width the card draws.
+ * renders its probe with, so a width measured there is the width the card draws. Gilroy leads
+ * it - the faces themselves are registered with the rasteriser below - and the system faces
+ * after it are what a card falls back to if the font files are ever missing, so a deployment
+ * that lost them still draws a card rather than a blank one.
  */
-const FONT_FAMILY = 'Segoe UI, Arial, Helvetica, sans-serif'
+const FONT_FAMILY = 'Gilroy, Segoe UI, Arial, Helvetica, sans-serif'
 
 /**
  * Where the character is drawn: a waist-up portrait filling the right of the card.
@@ -137,12 +140,46 @@ function fitText(
 }
 
 /**
- * The renderer the card and its measurement probes are both drawn with: the machine's fonts,
- * at the card's own width. Rasterising a document is the whole of what the two share - a probe
- * is then read back for its ink, and the card is written out as a picture.
+ * Where the Gilroy faces the card is set in live, and which of them the rasteriser is handed.
+ *
+ * The browser is served the same family as `.woff2` (`public/fonts/gilroy`, declared in
+ * `app/assets/css/main.css`), but the rasteriser reads its fonts through the machine's own
+ * `fontdb`, which knows TrueType and OpenType and nothing at all about WOFF: a `.woff2` passed to
+ * `fontFiles` is one it silently draws no glyphs for. The `.ttf` beside each `.woff2` is what is
+ * registered here, and they are the four weights the card asks for - 400 and 600 in the small
+ * print and the plates, 700 for the names and the figures.
+ *
+ * `public/` is where they live because it is the one directory a deployment always has:
+ * `npm run deploy` uploads `.output` alone and Nitro copies `public/` into it, so the folder sits
+ * beside `server/index.mjs` whether the server runs from the checkout or from a build. The
+ * directory is looked for under the working directory and the two levels above it, which is what
+ * covers a server started from the deploy root, from the checkout, or from inside `.output`.
+ */
+const FONT_DIR = 'public/fonts/gilroy'
+const FONT_FILES = ['Gilroy-Regular.ttf', 'Gilroy-SemiBold.ttf', 'Gilroy-Bold.ttf', 'Gilroy-ExtraBold.ttf']
+
+function loadFontFiles(): string[] {
+  for (const root of [process.cwd(), join(process.cwd(), '..'), join(process.cwd(), '..', '..')]) {
+    const dir = join(root, FONT_DIR)
+    if (!existsSync(join(dir, FONT_FILES[0]!))) continue
+
+    return FONT_FILES.map((file) => join(dir, file)).filter((file) => existsSync(file))
+  }
+
+  // No faces found, so the rasteriser is left with the machine's own fonts and every `<text>`
+  // falls back to the system family named in `FONT_FAMILY`.
+  return []
+}
+
+/**
+ * The renderer the card and its measurement probes are both drawn with, at the card's own width.
+ * Rasterising a document is the whole of what the two share - a probe is then read back for its
+ * ink, and the card is written out as a picture. Gilroy is named as the default family and handed
+ * over as the files it is drawn from, so a card is set in the typeface its page is; the machine's
+ * fonts stay loaded underneath it as the fallback for whatever the family has not got.
  */
 const RESVG_OPTIONS = {
-  font: { loadSystemFonts: true, defaultFontFamily: 'Arial' },
+  font: { loadSystemFonts: true, defaultFontFamily: 'Gilroy', fontFiles: loadFontFiles() },
   fitTo: { mode: 'width' as const, value: CARD_WIDTH }
 }
 

@@ -172,7 +172,7 @@ function format(value: number): string {
 
           <span
             v-if="faction"
-            class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none"
+            class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none"
             :style="{ borderColor: `${faction?.hex}55`, color: faction?.hex }"
           >
             <span
@@ -196,18 +196,18 @@ function format(value: number): string {
          the pair, because it is the figure the plate is about and the rating is what earned it. -->
     <div class="ml-auto flex flex-wrap items-center gap-x-6 gap-y-2">
       <div>
-        <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('lbYouPlace') }}</p>
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ t('lbYouPlace') }}</p>
         <p class="text-2xl font-extrabold leading-tight tabular-nums text-wow-goldLight">
           <span v-if="known">{{ format(rank) }}</span>
           <span v-else>{{ DASH }}</span>
-          <span v-if="known" class="ml-1.5 text-xs font-semibold text-gray-400">
+          <span v-if="known" class="ml-1.5 text-sm font-normal text-gray-400">
             {{ t('lbYouOf', { total: format(total) }) }}
           </span>
         </p>
       </div>
 
       <div>
-        <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('lbColScore') }}</p>
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ t('lbColScore') }}</p>
         <p class="text-2xl font-extrabold leading-tight tabular-nums text-wow-goldLight">
           {{ known ? format(score) : DASH }}
         </p>

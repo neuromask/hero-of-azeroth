@@ -301,7 +301,7 @@ function clear() {
           <button
             type="button"
             role="menuitem"
-            class="flex w-full items-center px-4 py-2 text-left text-sm font-medium transition-colors"
+            class="flex w-full items-center px-4 py-2 text-left text-sm font-normal transition-colors"
             :class="!realm ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
             @click="pickRealm('')"
           >{{ t('lbAllRealms') }}</button>
@@ -311,7 +311,7 @@ function clear() {
             :key="`${option.region}:${option.realm}`"
             type="button"
             role="menuitem"
-            class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm font-medium transition-colors"
+            class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm font-normal transition-colors"
             :class="realm === option.realm ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
             @click="pickRealm(option.realm)"
           >
@@ -336,7 +336,7 @@ function clear() {
       <div ref="legendRoot" class="relative ml-auto">
         <button
           type="button"
-          class="hoa-liquid-glass grid h-8 w-8 place-items-center rounded-full border text-sm font-extrabold text-wow-goldLight"
+          class="hoa-liquid-glass grid h-8 w-8 place-items-center rounded-full border text-sm font-semibold text-wow-goldLight"
           aria-haspopup="dialog"
           :aria-expanded="legendOpen"
           :title="t('lbLegendTitle')"
@@ -350,7 +350,7 @@ function clear() {
           role="dialog"
           :aria-label="t('lbLegendTitle')"
         >
-          <p class="text-[11px] font-bold uppercase tracking-wider text-wow-goldLight">{{ t('lbLegendTitle') }}</p>
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-wow-goldLight">{{ t('lbLegendTitle') }}</p>
           <p class="mt-1 text-xs leading-relaxed text-gray-400">{{ t('lbLegendIntro') }}</p>
 
           <ul class="mt-3 space-y-1.5">

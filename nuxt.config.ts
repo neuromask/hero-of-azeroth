@@ -79,6 +79,14 @@ export default defineNuxtConfig({
         { name: 'format-detection', content: 'telephone=no' }
       ],
       link: [
+        // Gilroy, the site's typeface, is preloaded in the two weights a first paint is set
+        // in - the body copy and the headings - so the browser starts fetching them while the
+        // stylesheet is still being parsed. Without this the text paints in the fallback face
+        // and reflows into Gilroy a moment later, which is the flash and the shift preload
+        // exists to remove. `crossorigin` is not optional: a font is fetched as a CORS
+        // resource, and a preload opened without credentials is a second, discarded request.
+        { rel: 'preload', href: '/fonts/gilroy/Gilroy-Regular.woff2', as: 'font', type: 'font/woff2', crossorigin: 'anonymous' },
+        { rel: 'preload', href: '/fonts/gilroy/Gilroy-Bold.woff2', as: 'font', type: 'font/woff2', crossorigin: 'anonymous' },
         // The SVG is the icon a modern browser takes: it scales to any size and can answer a
         // dark-mode media query. The `.ico` beside it is the fallback for the ones that cannot.
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },

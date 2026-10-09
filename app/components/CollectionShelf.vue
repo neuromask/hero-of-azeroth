@@ -145,7 +145,7 @@ usePageLoading().follow('character:collections', pending)
             :key="point.title"
             class="rounded-xl border border-white/5 bg-black/25 p-3"
           >
-            <p class="text-xs font-bold uppercase tracking-wider text-wow-goldLight">
+            <p class="text-xs font-semibold uppercase tracking-wider text-wow-goldLight">
               {{ $t(point.title) }}
             </p>
             <p class="mt-1 text-xs leading-relaxed text-gray-400">{{ $t(point.text) }}</p>

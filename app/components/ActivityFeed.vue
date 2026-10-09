@@ -121,7 +121,7 @@ function accentOf(item: ActivityItem) {
          without pushing the timeline off the first screen. Both are the one list of buttons, laid
          out by breakpoint rather than written twice. -->
     <aside class="mb-5 lg:sticky lg:top-44 lg:mb-0">
-      <p class="mb-2 hidden text-xs font-bold uppercase tracking-wider text-gray-500 lg:block">
+      <p class="mb-2 hidden text-xs font-semibold uppercase tracking-wider text-gray-500 lg:block">
         {{ $t('activityFilterTitle') }}
       </p>
       <nav
@@ -140,7 +140,7 @@ function accentOf(item: ActivityItem) {
           <span aria-hidden="true">{{ filter.emoji }}</span>
           <span class="flex-1 text-left">{{ $t(filter.label) }}</span>
           <span
-            class="grid min-w-[1.5rem] place-items-center rounded-md border px-1 text-xs font-bold tabular-nums"
+            class="grid min-w-[1.5rem] place-items-center rounded-md border px-1 text-xs font-semibold tabular-nums"
             :class="active === filter.key
               ? 'border-wow-gold/40 bg-wow-gold/15 text-wow-goldLight'
               : 'border-white/15 bg-white/5 text-gray-300'"
@@ -226,7 +226,7 @@ function accentOf(item: ActivityItem) {
                 </h3>
                 <span
                   v-if="item.points"
-                  class="shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold tabular-nums"
+                  class="shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums"
                   :class="accentOf(item).badge"
                 >
                   +{{ item.points }}
@@ -241,12 +241,12 @@ function accentOf(item: ActivityItem) {
                 <span v-if="item.category" class="truncate hoa-tag">{{ item.category }}</span>
                 <!-- How long ago it happened, with the exact moment on hover. -->
                 <span
-                  class="group/date relative cursor-help font-medium text-gray-300"
+                  class="group/date relative cursor-help font-normal text-gray-300"
                   :title="formatAbsolute(item.completedAt)"
                 >
                   {{ formatRelative(item.completedAt) }}
                   <span
-                    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/15 bg-black/90 px-2.5 py-1 text-[11px] font-medium text-gray-200 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur group-hover/date:block"
+                    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/15 bg-black/90 px-2.5 py-1 text-[11px] font-normal text-gray-200 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur group-hover/date:block"
                   >
                     {{ formatAbsolute(item.completedAt) }}
                   </span>
