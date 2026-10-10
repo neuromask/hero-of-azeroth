@@ -146,6 +146,24 @@
     --hoa-ring: rgba(248, 183, 0, 0.6);
   }
 
+  /* A block the pointer answers with light rather than with movement - the card of one event in a feed
+     (`app/components/ActivityFeed.vue`). The lift these cards used to do is gone on purpose: a block
+     shifted by even a fraction of a pixel is rasterized again at a new subpixel offset, and the type
+     it carries is read as shimmering for as long as the transition runs, so a card that holds text
+     must not move at all. What answers the pointer instead is everything a rim and a drop can say:
+     the accent the card already wears comes up to full strength (`--hoa-ring-bright` is the same
+     colour as `--hoa-ring`, undiluted) and the drop underneath deepens. Both colours belong to the
+     accent, so a feat of strength still lights gold and a raid violet. */
+  .hoa-panel-feed {
+    --hoa-ring-bright: rgba(255, 255, 255, 0.25);
+    transition: box-shadow 200ms ease;
+  }
+
+  .hoa-panel-feed:hover {
+    --hoa-ring: var(--hoa-ring-bright);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  }
+
   .hoa-panel-interactive:hover::before {
     background-color: rgba(255, 255, 255, 0.09);
   }

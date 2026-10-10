@@ -73,19 +73,21 @@ const filtered = computed(() => props.items.filter((item) => activityInCategory(
  *
  * Three parts travel together - the frame of the card, the ring around the icon and the node
  * on the rail - so a feat of strength and a raid read as different kinds of event at a glance,
- * and everything else wears the brand gold an achievement is drawn in.
+ * and everything else wears the brand gold an achievement is drawn in. A frame carries two
+ * colours of one accent: the calm rim the card wears (`--hoa-ring`) and the undiluted one the
+ * pointer brings up (`--hoa-ring-bright`), which is what answers a hover instead of a lift.
  */
 const ACCENTS = {
   feat: {
     // A feat of strength is a proof rather than progress, so its card is warmed with gold.
-    card: '[--hoa-ring:rgba(245,158,11,0.4)] bg-gradient-to-br from-amber-500/[0.16] via-white/[0.04] to-fuchsia-500/[0.06]',
+    card: '[--hoa-ring:rgba(245,158,11,0.4)] [--hoa-ring-bright:rgba(245,158,11,0.9)] bg-gradient-to-br from-amber-500/[0.16] via-white/[0.04] to-fuchsia-500/[0.06]',
     frame: 'border-transparent shadow-[0_0_0_2px_rgba(245,158,11,0.8),0_0_14px_rgba(245,158,11,0.6)]',
     node: 'bg-amber-400 shadow-[0_0_14px_rgba(245,158,11,0.9)]',
     badge: 'border-transparent bg-amber-500/15 text-amber-200 shadow-[0_0_0_1px_rgba(245,158,11,0.5)]'
   },
   raid: {
     // A dungeon, a raid or a Mythic+ key wears the violet the game itself marks them with.
-    card: '[--hoa-ring:rgba(139,92,246,0.4)] bg-gradient-to-br from-violet-500/[0.16] via-white/[0.04] to-sky-500/[0.06]',
+    card: '[--hoa-ring:rgba(139,92,246,0.4)] [--hoa-ring-bright:rgba(139,92,246,0.9)] bg-gradient-to-br from-violet-500/[0.16] via-white/[0.04] to-sky-500/[0.06]',
     frame: 'border-transparent shadow-[0_0_0_2px_rgba(139,92,246,0.8),0_0_14px_rgba(139,92,246,0.6)]',
     node: 'bg-violet-400 shadow-[0_0_14px_rgba(139,92,246,0.9)]',
     badge: 'border-transparent bg-violet-500/15 text-violet-200 shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
@@ -179,8 +181,12 @@ function accentOf(item: ActivityItem) {
           aria-hidden="true"
         />
 
+        <!-- The card answers the pointer without moving (`hoa-panel-feed`): a block shifted by even a
+             fraction of a pixel re-rasterizes the type it carries, and the whole card is read as
+             shimmering while the transition runs - so the accent comes up to full strength and the drop
+             deepens instead, with the geometry left exactly where it was. -->
         <article
-          class="hoa-panel p-3.5 transition-transform duration-200 hover:-translate-y-0.5 sm:p-4"
+          class="hoa-panel hoa-panel-feed p-3.5 sm:p-4"
           :class="accentOf(item).card"
         >
           <div class="flex items-start gap-3.5">
