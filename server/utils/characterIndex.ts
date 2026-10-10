@@ -51,6 +51,7 @@ export interface IndexedCharacter {
   pets?: number
   toys?: number
   decor?: number
+  reputations?: number
   achievements?: number
 }
 
@@ -105,6 +106,7 @@ export function rememberCharacter(character: {
   pets?: number
   toys?: number
   decor?: number
+  reputations?: number
   achievements?: number
 }): Promise<void> {
   writes = writes.then(async () => {
@@ -137,6 +139,7 @@ export function rememberCharacter(character: {
         pets: character.pets ?? previous?.pets,
         toys: character.toys ?? previous?.toys,
         decor: character.decor ?? previous?.decor,
+        reputations: character.reputations ?? previous?.reputations,
         achievements: character.achievements ?? previous?.achievements
       }
 

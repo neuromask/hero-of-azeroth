@@ -175,6 +175,17 @@ export interface CharacterData {
    * say which of its numbers are the account's and which are still the character's own.
    */
   pooled?: boolean
+  /**
+   * The overall rating of the figures above (`server/utils/playerScore`), set where those figures are put
+   * together - which is one place, and on the server (`overlayPool` in `server/utils/accountPool`).
+   *
+   * A page prints this number; no page works one out. It used to, from its own list of the figures, and a
+   * list written by hand beside a formula is a list that loses a figure when the formula gains one - the
+   * score at the bottom of a character page read thousands of points below the very table it was taken
+   * from. Absent from the reading Blizzard itself was read into: the rating is the site's own idea of a
+   * player and is attached by the overlay, which every page and the card are served through.
+   */
+  score?: number
   stats: {
     mounts: CharacterStat
     pets: CharacterStat

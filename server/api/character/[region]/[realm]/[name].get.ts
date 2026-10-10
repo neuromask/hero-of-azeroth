@@ -21,38 +21,52 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
 
+  // The key this character's profile is cached under, kept so that the moment it was fetched can be read
+  // back out of the cache afterwards (`fetchedAt`): the site's own record of the character is weighed
+  // against that moment on the way out (`overlayPool`), and only the cache knows it.
+  const key = `${region}:${locale}:${realm}:${name}`
+
   try {
     const character = await profiles(
-      `${region}:${locale}:${realm}:${name}`,
+      key,
       async () => {
         const profile = await getCharacter(realm, name, region, locale)
 
-        // A lookup that came back with a character is the one moment the site learns a page exists,
-        // so it is written down for the sitemap as the fresh copy is fetched - and what the profile
-        // says about the character is written into the hall of fame at the same time, in one place
-        // and by the same rule (`server/utils/profileFeed.ts`).
-        await feedProfile({ region, realm, name, profile })
+        // A lookup that came back with a character is the one moment the site learns a page exists, so it
+        // is written down for the sitemap as the fresh copy is fetched - and what the profile says about
+        // the character is written into the hall of fame at the same time, in one place and by the same
+        // rule (`server/utils/profileFeed.ts`). `reading: true` is what also files this copy as the
+        // character's own for the day: the record every other page's figures are computed from. Only a
+        // lookup that really asked Blizzard files it, which is why the call out of the cache below does
+        // not.
+        await feedProfile({ region, realm, name, profile, reading: true })
 
         return profile
       },
       force
     )
 
-    // And the same feed stands here as well, on *every* request rather than only on a fresh lookup,
-    // which is the whole point of it standing outside the cache above: a profile lives there for two
-    // hours, so a character opened twice in an afternoon is one Blizzard lookup and two table
-    // updates - and that second update is what fills in a record the sitemap's thinner index could
-    // only write half of. Both writes are skipped when the record already says everything this
-    // profile does, so a reader who opens a page the table already knows costs the disk nothing.
-    // The collection figures are the account's, not this character's: a character whose account has
-    // synced is answered with the account's pool, while a stranger's lookup finds no pool and keeps
-    // Blizzard's own per-character numbers (`server/utils/accountPool`). It is applied before the
-    // feed below, so the row the site stores is the one a reader was shown.
-    overlayPool(character, region, realm, name)
+    // And the same feed stands here as well, on *every* request rather than only on a fresh lookup, which
+    // is the whole point of it standing outside the cache above: a profile lives there for two hours, so a
+    // character opened twice in an afternoon is one Blizzard lookup and two table updates - and that second
+    // update is what fills in a record the sitemap's thinner index could only write half of. Both writes
+    // are skipped when the record already says everything this profile does, so a reader who opens a page
+    // the table already knows costs the disk nothing.
+    //
+    // What is fed is the reading, not what the reader is shown: what the site stores of a character is what
+    // Blizzard said about them, and the account's own figures are laid over it on the way *out* instead
+    // (`server/utils/accountPool`), by the same rule every page of the site answers with. Feeding the copy
+    // would write a reader's view into the record the next reader's view is computed from.
+    //
+    // When Blizzard was actually asked for this profile: now, for a lookup just made, and up to two hours
+    // ago for an answer handed out of the cache. The site's own record of the character is weighed against
+    // it (`server/utils/accountPool`), so a page can never print an item level or a rating older than the
+    // figures the rest of the site already holds - and a refreshed page prints what it just fetched.
+    const readAt = profiles.fetchedAt(key) ?? nowSec()
 
     await feedProfile({ region, realm, name, profile: character })
 
-    return character
+    return overlayPool(character, region, realm, name, readAt)
   } catch (err: any) {
     if (err.statusCode) throw err
     throw createError({

@@ -66,6 +66,7 @@
   .hoa-glass,
   .hoa-panel,
   .hoa-liquid-glass,
+  .hoa-plate,
   .hoa-pop,
   .hoa-anchors,
   .hoa-tip {
@@ -76,6 +77,7 @@
   .hoa-glass::before,
   .hoa-panel::before,
   .hoa-liquid-glass::before,
+  .hoa-plate::before,
   .hoa-pop::before,
   .hoa-anchors::before,
   .hoa-tip::before {
@@ -374,41 +376,71 @@
      button's (`app/pages/[region]/[realm]/[name].vue`), which is what makes a control of this row
      read as the site's own rather than as a borrowed button.
 
+     The material under it is the site's liquid glass - the same recipe the tabs wear
+     (`.hoa-liquid-glass` above), poured into the geometry of a control that stands in a bar - and it
+     is a layer of the plate rather than the plate itself, for the reason written beside that class: a
+     control is where the pointer lands, and a `backdrop-filter` on the very element that answers the
+     pointer is what Chromium measures against the whole context the surface is drawn over. So the box
+     carries the geometry, the drop and the glow, and the layer carries the tint, the frost, the rim
+     and the lit top edge - and the pointer, when it arrives, moves only the box's glow and the
+     layer's flat tint.
+
      Only the colour differs between the plates, and the modifiers below are the whole of that
      difference. What is left in the class itself is the neutral glass: the way out wears it, and so
      does the language the reader is not reading. */
   .hoa-plate {
-    @apply inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-white/25 bg-white/10 px-3 text-xs font-bold text-white transition-all duration-300;
-    box-shadow: 0 0 15px rgba(255, 255, 255, 0.12);
+    --hoa-ring: rgba(255, 255, 255, 0.25);
+    --hoa-plate-tint: rgba(255, 255, 255, 0.1);
+    --hoa-plate-tint-hover: rgba(255, 255, 255, 0.2);
+    --hoa-plate-glow: rgba(255, 255, 255, 0.12);
+    --hoa-plate-glow-hover: rgba(255, 255, 255, 0.22);
+    @apply inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent px-3 text-xs font-bold text-white;
+    box-shadow: 0 0 15px var(--hoa-plate-glow), 0 6px 18px rgba(0, 0, 0, 0.3);
+    transition: box-shadow 300ms ease;
+  }
+
+  .hoa-plate::before {
+    background-color: var(--hoa-plate-tint);
+    backdrop-filter: blur(24px);
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    transition: background-color 150ms ease;
   }
 
   .hoa-plate:hover {
-    @apply border-white/45 bg-white/20;
-    box-shadow: 0 0 28px rgba(255, 255, 255, 0.22);
+    --hoa-ring: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 0 28px var(--hoa-plate-glow-hover), 0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+
+  .hoa-plate:hover::before {
+    background-color: var(--hoa-plate-tint-hover);
   }
 
   /* Battle.net's blue: the password is typed on Blizzard's page rather than on this one, so this is
      the one control of the row that wears the brand's colour instead of the site's. */
   .hoa-plate-bnet {
-    @apply border-[#00aeff]/60 bg-[#0074e0]/30;
-    box-shadow: 0 0 15px rgba(0, 174, 255, 0.25);
+    --hoa-ring: rgba(0, 174, 255, 0.6);
+    --hoa-plate-tint: rgba(0, 116, 224, 0.3);
+    --hoa-plate-tint-hover: rgba(0, 116, 224, 0.45);
+    --hoa-plate-glow: rgba(0, 174, 255, 0.25);
+    --hoa-plate-glow-hover: rgba(0, 174, 255, 0.5);
   }
 
   .hoa-plate-bnet:hover {
-    @apply border-[#4dc8ff]/90 bg-[#0074e0]/45;
-    box-shadow: 0 0 28px rgba(0, 174, 255, 0.5);
+    --hoa-ring: rgba(77, 200, 255, 0.9);
   }
 
   /* And the brand's gold: the language being read, which is the one plate of the row that marks where
      the reader already is rather than offering a way somewhere. */
   .hoa-plate-gold {
-    @apply border-wow-gold bg-wow-gold/10;
-    box-shadow: 0 0 15px rgba(248, 183, 0, 0.25);
+    --hoa-ring: rgba(248, 183, 0, 0.9);
+    --hoa-plate-tint: rgba(248, 183, 0, 0.1);
+    --hoa-plate-tint-hover: rgba(248, 183, 0, 0.2);
+    --hoa-plate-glow: rgba(248, 183, 0, 0.25);
+    --hoa-plate-glow-hover: rgba(248, 183, 0, 0.4);
   }
 
   .hoa-plate-gold:hover {
-    @apply border-wow-goldLight bg-wow-gold/20;
-    box-shadow: 0 0 28px rgba(248, 183, 0, 0.4);
+    --hoa-ring: rgba(255, 227, 149, 0.9);
   }
 
 

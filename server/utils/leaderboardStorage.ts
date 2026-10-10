@@ -28,8 +28,9 @@
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-// The formula, which is shared with nothing on the client but belongs to neither layer alone.
-import { calculatePlayerScore, totalCollectables, SCORE_VERSION } from '#shared/utils/leaderboardScore'
+// The formula, which lives on the server alone: the table's own column, the account's totals and every
+// page's rating are one number because they are one call (`server/utils/playerScore`).
+import { calculatePlayerScore, totalCollectables, SCORE_VERSION } from './playerScore'
 // The index the sitemap is built from: the same characters, and what the backfill starts from.
 import { readCharacterIndex } from './characterIndex'
 // The one rule the table learns from the site's accounts: a character an account kept to itself
@@ -37,7 +38,7 @@ import { readCharacterIndex } from './characterIndex'
 import { excludedLeaderboardKeys, exclusionsRevision, leaderboardKey } from './leaderboardExclusions'
 // The account behind a row, and the figures it holds: what makes the table print the account's
 // numbers for a signed-in player rather than one character's (see `withAccountTotals`).
-import { accountTotalsByCharacterKey } from './accountPool'
+import { accountTotalsByCharacterKey, bestFigures } from './accountPool'
 import type {
   LeaderboardFaction,
   LeaderboardLeader,
@@ -97,6 +98,8 @@ export interface PlayerProfileInput {
   pets?: number
   toys?: number
   decor?: number
+  /** Factions driven to the top of their own ladder, which is what the reputation column prints. */
+  reputations?: number
   achievements?: number
 }
 
@@ -189,6 +192,7 @@ function isSameRecord(a: LeaderboardPlayer, b: LeaderboardPlayer): boolean {
     a.pets === b.pets &&
     a.toys === b.toys &&
     a.decor === b.decor &&
+    a.reputations === b.reputations &&
     a.achievements === b.achievements &&
     a.score === b.score
   )
@@ -207,6 +211,7 @@ function toPlayer(input: PlayerProfileInput, firstSeenAt: string): LeaderboardPl
     pets: count(input.pets),
     toys: count(input.toys),
     decor: count(input.decor),
+    reputations: count(input.reputations),
     achievements: count(input.achievements),
     mPlusScore: count(input.mPlusScore),
     ilvl: count(input.ilvl),
@@ -320,7 +325,16 @@ async function readFromDisk(): Promise<LeaderboardFile> {
       // re-derived once rather than trusted (see `SCORE_VERSION`).
       scoreVersion: typeof parsed.scoreVersion === 'number' ? parsed.scoreVersion : 0,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
-      players: parsed.players.filter(isPlayerLike)
+      // A record written before a column existed carries no such key at all, and an absent figure is
+      // not the same thing as a nought once anything is done with it: `Math.max(undefined, n)` is
+      // `NaN`, so a row whose account synced would come back with a rating of `NaN` and sort to the
+      // end of the table. Filling the gap in as the record is read keeps every later pass - the
+      // order, the widgets, the account's own overlay - reading a plain number, which is what the
+      // type has always promised.
+      players: parsed.players.filter(isPlayerLike).map((player) => ({
+        ...player,
+        reputations: count(player.reputations)
+      }))
     }
   } catch {
     return emptyFile()
@@ -364,6 +378,7 @@ async function backfillFromIndex(): Promise<LeaderboardPlayer[]> {
           pets: entry.pets,
           toys: entry.toys,
           decor: entry.decor,
+          reputations: entry.reputations,
           achievements: entry.achievements
         },
         entry.firstSeenAt || entry.updatedAt || today()
@@ -380,7 +395,7 @@ async function readTable(): Promise<LeaderboardFile> {
     const file = await readFromDisk()
 
     // A file whose ratings were computed with other weights is re-derived before it is served, so the
-    // table can never show a score the formula in `#shared/utils/leaderboardScore` would not produce.
+    // table can never show a score the formula in `server/utils/playerScore` would not produce.
     // It is the only pass in this module that touches every record at once, and it happens once per
     // weight change rather than once per request.
     if (file.players.length && file.scoreVersion !== SCORE_VERSION) {
@@ -489,6 +504,7 @@ export function upsertPlayer(profile: PlayerProfileInput): Promise<void> {
           pets: profile.pets ?? previous?.pets,
           toys: profile.toys ?? previous?.toys,
           decor: profile.decor ?? previous?.decor,
+          reputations: profile.reputations ?? previous?.reputations,
           achievements: profile.achievements ?? previous?.achievements,
           displayName: profile.displayName || previous?.displayName,
           avatar: profile.avatar || previous?.avatar,
@@ -554,6 +570,8 @@ function sortValue(player: LeaderboardPlayer, sort: LeaderboardSort): number {
       return player.toys
     case 'decor':
       return player.decor
+    case 'reputations':
+      return player.reputations
     case 'mplus':
       return player.mPlusScore
     case 'achievements':
@@ -629,13 +647,20 @@ function withAccountTotals(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
     const account = accounts.get(leaderboardKey(player.region, player.realm, player.name))
     if (!account) return player
 
-    const figures = {
-      mounts: Math.max(player.mounts, account.mounts),
-      pets: Math.max(player.pets, account.pets),
-      toys: Math.max(player.toys, account.toys),
-      decor: Math.max(player.decor, account.decor),
-      achievements: Math.max(player.achievements, account.achievements)
-    }
+    // The site's one rule for the two readings of an account (`server/utils/accountPool`), which the
+    // character page and the account's own profile are merged with as well: a row and a page can only
+    // disagree if they are merged in two places.
+    const figures = bestFigures(
+      {
+        achievements: player.achievements,
+        mounts: player.mounts,
+        pets: player.pets,
+        toys: player.toys,
+        decor: player.decor,
+        reputations: player.reputations
+      },
+      account
+    )
 
     // A row the account has nothing to add to is handed back as it stands, so the common case - an
     // account whose row was already written from its own pool - allocates nothing.
@@ -650,13 +675,14 @@ function withAccountTotals(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
 /** Whether a row already prints these figures. */
 function isSameFigures(
   player: LeaderboardPlayer,
-  figures: Pick<LeaderboardPlayer, 'mounts' | 'pets' | 'toys' | 'decor' | 'achievements'>
+  figures: Pick<LeaderboardPlayer, 'mounts' | 'pets' | 'toys' | 'decor' | 'reputations' | 'achievements'>
 ): boolean {
   return (
     player.mounts === figures.mounts &&
     player.pets === figures.pets &&
     player.toys === figures.toys &&
     player.decor === figures.decor &&
+    player.reputations === figures.reputations &&
     player.achievements === figures.achievements
   )
 }
@@ -799,7 +825,7 @@ function computeStats(players: LeaderboardPlayer[]): LeaderboardStats {
   const classCounts = new Map<number, number>()
   const factionCounts = new Map<LeaderboardFaction, number>()
 
-  const totals = { mounts: 0, pets: 0, toys: 0, decor: 0, achievements: 0 }
+  const totals = { mounts: 0, pets: 0, toys: 0, decor: 0, reputations: 0, achievements: 0 }
   let collector: LeaderboardLeader | null = null
   let rating: LeaderboardLeader | null = null
   let architect: LeaderboardLeader | null = null
@@ -809,6 +835,7 @@ function computeStats(players: LeaderboardPlayer[]): LeaderboardStats {
     totals.pets += player.pets
     totals.toys += player.toys
     totals.decor += player.decor
+    totals.reputations += player.reputations
     totals.achievements += player.achievements
 
     const realmKey = `${player.region}:${player.realm}`

@@ -25,8 +25,8 @@ export type LeaderboardFaction = 'alliance' | 'horde' | 'neutral'
 /**
  * How the table can be ordered: one per preset the page offers.
  *
- * The first five are the page's own tabs; `pets` and `toys` are here because the table has a
- * column for each of them and a column a reader can see is a column a reader expects to sort by.
+ * The first five are the page's own tabs; `pets`, `toys` and `reputations` are here because the table
+ * has a column for each of them and a column a reader can see is a column a reader expects to sort by.
  */
 export type LeaderboardSort =
   | 'total'
@@ -36,6 +36,7 @@ export type LeaderboardSort =
   | 'achievements'
   | 'pets'
   | 'toys'
+  | 'reputations'
   | 'ilvl'
 
 /** Every sort the endpoint accepts, which is what a query string is checked against. */
@@ -47,6 +48,7 @@ export const LEADERBOARD_SORTS: readonly LeaderboardSort[] = [
   'achievements',
   'pets',
   'toys',
+  'reputations',
   'ilvl'
 ]
 
@@ -118,11 +120,18 @@ export interface LeaderboardPlayer {
   toys: number
   /** Decor collected. */
   decor: number
+  /**
+   * Factions driven to the top of their own ladder, which is what the reputation tile counts and what
+   * the table's own column prints. A character of one side can finish about 230 of them
+   * (`server/utils/reputation-totals.json`); a renown faction at its last level counts like a classic
+   * ladder at Exalted.
+   */
+  reputations: number
   /** Achievement points. */
   achievements: number
   /**
    * The overall rating the table is ordered by, computed once - when the profile was written -
-   * rather than on every read (see `#shared/utils/leaderboardScore`). Stored rather than derived
+   * rather than on every read (see `server/utils/playerScore`). Stored rather than derived
    * so that a change to the weights is a change to what a *later* lookup writes, and never
    * silently re-ranks a file of records behind the reader's back.
    */
@@ -166,7 +175,14 @@ export interface LeaderboardStats {
   /** The player with the most decor collected. */
   architect: LeaderboardLeader | null
   /** Everything gathered across the population, which the line under the widgets counts. */
-  totals: { mounts: number; pets: number; toys: number; decor: number; achievements: number }
+  totals: {
+    mounts: number
+    pets: number
+    toys: number
+    decor: number
+    reputations: number
+    achievements: number
+  }
   /**
    * The facets the filters are built from: what a reader can pick, and how many players each
    * choice would leave. Read off the same pass, so a filter can never offer an empty result.

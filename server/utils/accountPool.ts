@@ -20,28 +20,25 @@
  * with Blizzard's per-character numbers, which is the behaviour the site has always had.
  */
 import { nowSec } from './db'
+import { readCharacterReading } from './characterReading'
 import { ACCOUNT_COLLECTION_KINDS } from './bnetOAuth'
 import type { BlizzardRegion } from './params'
 import type { CharacterData } from './blizzard'
-// The overall rating, off the same formula the hall of fame ranks by - so the pool's own figure and
-// the table's column are one number.
-import { calculatePlayerScore } from '#shared/utils/leaderboardScore'
+// The overall rating, and the one place it is computed: the account's own figure, the table's column and
+// every page's tile are one number because they are one call (`server/utils/playerScore`).
+import { calculatePlayerScore, scoreFigures, type ScoreInput } from './playerScore'
 // The identity the hall of fame keys a row on, so the totals below are handed back under the key
 // the table itself looks a row up by.
 import { leaderboardKey } from './leaderboardExclusions'
 
 /** The kinds the pool counts, one per figure a tile prints. */
-export const POOL_KINDS = ['mounts', 'pets', 'toys', 'decor', 'reputations'] as const
+const POOL_KINDS = ['mounts', 'pets', 'toys', 'decor', 'reputations'] as const
 
-export type PoolKind = (typeof POOL_KINDS)[number]
+/** One of those kinds, which is also the name every reader of an account's figures knows it by. */
+type PoolKind = (typeof POOL_KINDS)[number]
 
 /** The account's own numbers, each one a count of unique ids. */
-export type AccountPool = Record<PoolKind, number>
-
-/** A pool that is empty is a pool this account has not filled yet, which reads as "not signed in". */
-export function poolIsEmpty(pool: AccountPool): boolean {
-  return POOL_KINDS.every((kind) => !pool[kind])
-}
+type AccountPool = Record<PoolKind, number>
 
 /** The ids one collection answer carried, each kind under its own spelling. */
 function idsOf(kind: (typeof ACCOUNT_COLLECTION_KINDS)[number], data: any): number[] {
@@ -134,23 +131,65 @@ export function syncPoolReputations(userId: number, factionIds: number[]): numbe
 }
 
 /** The account's own totals, as the profile, the card and the hall of fame read them. */
-export interface AccountTotals {
+/**
+ * The account's own totals: the six figures the site ranks by, plus the three facts about an account that
+ * are not collections of them.
+ *
+ * It extends `AccountFigures` rather than listing the six again, so a figure added to the rating is a
+ * figure of an account's totals by construction - and the table, the profile page and a character page
+ * cannot be reading three different sets of the same account.
+ */
+export interface AccountTotals extends AccountFigures {
   ilvl: number | null
   mplus: number | null
-  achievements: number
-  mounts: number
-  pets: number
-  toys: number
-  decor: number
-  reputations: number
-  /** The overall rating the hall of fame ranks by, read off the account's own collections. */
+  /** The overall rating the hall of fame ranks by, read off the six figures above. */
   score: number
   /** The kinds the pool answered, which is what marks a figure as the account's own. */
   accountWide: PoolKind[]
 }
 
+/**
+ * The six figures a character prints, whoever they turn out to belong to.
+ *
+ * An alias rather than a second interface on purpose: these are the very figures the rating is computed
+ * from (`ScoreInput`), and a copy of the six written out beside them would be a second list to keep in
+ * step - which is how a score once came to be computed from a list that had lost a figure. The name is
+ * here because a reader of an account's figures thinks of figures, not of a formula's inputs.
+ */
+export type AccountFigures = ScoreInput
+
+/**
+ * The best of two readings of the same account: the higher of each figure, never the lower.
+ *
+ * The rule the whole site turns on, written once. Every figure has two possible sources - the reading
+ * the site just took, which is per character and may be newer than anything stored, and the account's own
+ * totals, which are the union of the account's characters and are what a collector is compared by - and
+ * the answer has to be the same one wherever it is read: on the character page, on the account's profile,
+ * and in the hall of fame's row. So the two are merged in one function, and all three call it instead of
+ * deciding for themselves, which is what let a page print one number and the table beside it another.
+ *
+ * `max` rather than "the account wins" or "the reading wins", because each source can legitimately be
+ * ahead: the pool counts unique ids and is filled in the background, so a live reading can carry a mount
+ * the pool has not been told about yet - and a reading can equally be a cached copy of two hours ago
+ * (`server/utils/swrCache`) while the account's own snapshots have moved on. Taking the higher of the two
+ * can only understate a figure by what the other source does not know yet, and it never lowers a number a
+ * reader has already been shown.
+ */
+export function bestFigures(live: AccountFigures, account: AccountTotals): AccountFigures {
+  const of = (value: number | null | undefined) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0)
+
+  return {
+    achievements: Math.max(of(live.achievements), of(account.achievements)),
+    mounts: Math.max(of(live.mounts), of(account.mounts)),
+    pets: Math.max(of(live.pets), of(account.pets)),
+    toys: Math.max(of(live.toys), of(account.toys)),
+    decor: Math.max(of(live.decor), of(account.decor)),
+    reputations: Math.max(of(live.reputations), of(account.reputations))
+  }
+}
+
 /** How many unique ids of each kind the account holds. */
-export function readAccountPool(userId: number): AccountPool {
+function readAccountPool(userId: number): AccountPool {
   const pool: AccountPool = { mounts: 0, pets: 0, toys: 0, decor: 0, reputations: 0 }
 
   try {
@@ -181,11 +220,14 @@ interface AccountMaxes {
 }
 
 /**
- * The account's totals: the pool where it answered, the best character otherwise.
+ * The account's totals: the best of what its pool counts and what its characters have been shown to hold.
  *
- * Nothing here adds two characters together. A collection is account-wide, so the pool's unique
- * count is the account's own number; where the pool is still empty (an account that has not
- * finished its first sync) the best character's reading stands in - `MAX`, never `SUM`.
+ * Nothing here adds two characters together. A collection is account-wide, so the site holds two lower
+ * bounds of the account's own figure - the pool's unique count of ids, and the highest reading of any one
+ * of its characters - and the higher of the two is the account's (`pick` below). `MAX`, never `SUM`: a
+ * pool of one and a reading of one are two views of the same mount rather than two mounts. The item level
+ * and the rating are not folded like that at all: they really are one character's, so the roster's best
+ * stands for the account without being merged with anything.
  */
 export function readAccountTotals(userId: number): AccountTotals {
   const maxes = useDb()
@@ -205,27 +247,43 @@ export function readAccountTotals(userId: number): AccountTotals {
   const pool = readAccountPool(userId)
   const accountWide = POOL_KINDS.filter((kind) => pool[kind] > 0)
 
-  /** The pool's own number, or the best character's reading while the pool has none. */
-  const pick = (kind: PoolKind, fallback: number | null): number => pool[kind] || fallback || 0
+  /**
+   * The account's number for a kind: the higher of what its pool counts and what its characters have
+   * been shown to hold.
+   *
+   * Never the sum of the two, and never one where the other would do: both are counts of the same
+   * collection, so each is a lower bound of what the account really has - the pool counts the unique ids
+   * the site has been shown across the whole roster, and the readings are Blizzard's own count for one of
+   * the account's characters, which is why they can differ by a few (a per-character view of an
+   * account-wide collection). Taking the higher of the two is the rule the rest of the site merges with
+   * (`bestFigures`), and it is what keeps an account's own page, the character page that belongs to it
+   * and the hall of fame's row from printing three different numbers for one collection: preferring the
+   * pool, as this did, left the other two with a figure the pool could only have understated.
+   */
+  const pick = (kind: PoolKind, fallback: number | null): number => Math.max(pool[kind] || 0, fallback || 0)
 
-  return {
-    ilvl: maxes.ilvl ?? null,
-    mplus: maxes.mplus ?? null,
+  /**
+   * The account's own six, gathered in one object: every one of them is also a figure of the totals below,
+   * and the rating is computed from this object rather than from a second list of the same values written
+   * out beside it - the shape is the formula's own input, so a figure cannot be present in one list and
+   * missing from the other.
+   */
+  const figures: AccountFigures = {
     achievements: maxes.achievements || 0,
     mounts: pick('mounts', maxes.mounts),
     pets: pick('pets', maxes.pets),
     toys: pick('toys', maxes.toys),
     decor: pick('decor', maxes.decor),
-    reputations: pick('reputations', maxes.reputations),
+    reputations: pick('reputations', maxes.reputations)
+  }
+
+  return {
+    ilvl: maxes.ilvl ?? null,
+    mplus: maxes.mplus ?? null,
+    ...figures,
     // The overall rating, off the very collections above - the same formula the table's own column is
     // computed with, so the pool never carries a score the leaderboard would not agree with.
-    score: calculatePlayerScore({
-      achievements: maxes.achievements || 0,
-      mounts: pick('mounts', maxes.mounts),
-      toys: pick('toys', maxes.toys),
-      decor: pick('decor', maxes.decor),
-      pets: pick('pets', maxes.pets)
-    }),
+    score: calculatePlayerScore(figures),
     accountWide
   }
 }
@@ -271,22 +329,27 @@ export function accountTotalsByCharacterKey(): Map<string, AccountTotals> {
 }
 
 /**
- * The pool of the account a character belongs to, or `null` for a character that belongs to none.
+ * The account's own totals for the character at an address, or `null` for a character that belongs to
+ * none.
  *
- * This is the whole "guest or account" rule in one function: a stranger's lookup finds no roster row
- * and is answered with Blizzard's per-character numbers, while a character of an account that has
- * synced is answered with the account's own pool.
+ * This is the whole "guest or account" rule in one lookup: a stranger's character finds no roster row
+ * and is answered with Blizzard's per-character numbers, while a character of an account that has ever
+ * been read is answered with the account's own totals.
+ *
+ * The totals rather than the pool itself, and that is the point of the function. The pool counts unique
+ * ids and is filled in the background one collection at a time, so an account can be known with its pool
+ * half-filled or still empty; the totals are the best of that pool's own count and the readings of the
+ * account's characters (`readAccountTotals`), which is the figure the profile page and the hall of fame's
+ * own rows print. Every reader of an account reads this, so a page cannot be answered from one of the
+ * account's numbers while the table is answered from another.
  */
-export function findOwnerPool(region: string, realm: string, name: string): AccountPool | null {
+function findOwnerTotals(region: string, realm: string, name: string): AccountTotals | null {
   try {
     const row = useDb()
       .prepare('SELECT user_id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
       .get(region, String(realm).toLowerCase(), String(name).toLowerCase()) as { user_id: number } | undefined
 
-    if (!row) return null
-
-    const pool = readAccountPool(row.user_id)
-    return poolIsEmpty(pool) ? null : pool
+    return row ? readAccountTotals(row.user_id) : null
   } catch {
     return null
   }
@@ -339,36 +402,84 @@ export function syncMainToLeaderboard(userId: number): void {
     pets: totals.pets || undefined,
     toys: totals.toys || undefined,
     decor: totals.decor || undefined,
+    reputations: totals.reputations || undefined,
     achievements: totals.achievements || undefined
   })
 }
 
 /**
- * Lays the account's own pool over a character's reading, in place.
+ * The figures a page prints for a character: the reading that was served, with the account's own figures
+ * laid over it and the site's record of the character weighed against it.
  *
- * This is the one place the "guest or account" rule is applied to a live character: the profile the
- * site just read is a character's, but the collections it carries are the account's, so a character
- * whose account has synced is answered with the pool instead. The item level, the rating and the
- * level are left alone - those really are the character's own.
+ * This is the one place the "guest or account" rule is applied to a live character, and the one place the
+ * trading of a cached reading for the record happens (`bestFigures`, `readCharacterReading`). What it
+ * returns is a **copy**: the profile handed to it is the one the endpoint read and cached, and it is also
+ * the object every later reader of the same page start from - a page that wrote its own figures into it
+ * would be writing them into the reading the site files next time, which is a loop rather than a view (the
+ * item level and the rating of a record the site had already filed used to keep coming back as what
+ * Blizzard had said).
  *
- * Returns whether a pool was applied, which is what a caller can tell a log from.
+ * A character with no account behind them is handed back with the flag off and nothing else touched: their
+ * figures are Blizzard's own, and a page reads the flag to say which numbers are whose.
  */
-export function overlayPool(profile: CharacterData, region: string, realm: string, name: string): boolean {
-  const pool = findOwnerPool(region, realm, name)
+export function overlayPool(
+  profile: CharacterData,
+  region: string,
+  realm: string,
+  name: string,
+  /** When the profile being overlaid was read from Blizzard, in seconds; now, for a reading just taken. */
+  readAt: number = nowSec()
+): CharacterData {
+  const account = findOwnerTotals(region, realm, name)
 
-  if (!pool) {
-    // No account behind this character: the figures stay Blizzard's own, and the flag says so - a
-    // page reads it to tell the reader which numbers are theirs and which are the character's.
-    profile.pooled = false
-    return false
+  if (!account) {
+    return { ...profile, score: calculatePlayerScore(scoreFigures(profile.stats)), pooled: false }
   }
 
-  if (pool.mounts) profile.stats.mounts.count = pool.mounts
-  if (pool.pets) profile.stats.pets.count = pool.pets
-  if (pool.toys) profile.stats.toys.count = pool.toys
-  if (pool.decor) profile.stats.decor.count = pool.decor
-  if (pool.reputations) profile.stats.reputations.count = pool.reputations
+  // The figures that really are one character's - the item level, the rating, the level - are taken from
+  // the newer of the two readings the site can see: the one being served, and the site's own record of the
+  // last reading it filed for this character (`server/utils/characterReading`). A profile is cached for two
+  // hours on this endpoint (`./swrCache`), so a page can hold a reading older than the record - the
+  // background pass has read the character since - and printing that one is exactly what left the item
+  // level and the rating at the bottom of a character page behind the rest of the site.
+  //
+  // The record is preferred only when it was read at least as recently as this profile was. A page that
+  // has just read Blizzard for itself is the newer of the two and keeps its own figures, which is also
+  // what makes the Refresh button show what it just fetched. A record whose moment is not on file is not
+  // weighed against one that has a moment - it is older than anything the site timed.
+  const reading = readCharacterReading(region, realm, name)
+  const recorded = reading && reading.readAt !== null && reading.readAt >= readAt
 
-  profile.pooled = true
-  return true
+  const figures = bestFigures(
+    {
+      achievements: profile.ap,
+      mounts: profile.stats.mounts.count,
+      pets: profile.stats.pets.count,
+      toys: profile.stats.toys.count,
+      decor: profile.stats.decor.count,
+      reputations: profile.stats.reputations.count
+    },
+    account
+  )
+
+  return {
+    ...profile,
+    ap: figures.achievements,
+    ilvl: recorded && reading.ilvl !== null ? reading.ilvl : profile.ilvl,
+    mPlusScore: recorded && reading.mplus !== null ? reading.mplus : profile.mPlusScore,
+    level: recorded && reading.level !== null ? reading.level : profile.level,
+    pooled: true,
+    // The rating of the very figures below, computed here and nowhere else: a page prints this number
+    // rather than working one out from the tiles, which is what kept the two from agreeing.
+    score: calculatePlayerScore(figures),
+    stats: {
+      ...profile.stats,
+      achievements: { ...profile.stats.achievements, count: figures.achievements },
+      mounts: { ...profile.stats.mounts, count: figures.mounts },
+      pets: { ...profile.stats.pets, count: figures.pets },
+      toys: { ...profile.stats.toys, count: figures.toys },
+      decor: { ...profile.stats.decor, count: figures.decor },
+      reputations: { ...profile.stats.reputations, count: figures.reputations }
+    }
+  }
 }

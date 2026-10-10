@@ -3,18 +3,22 @@
 // card, which draws the same tiers into its own SVG: one table, so a page and its card can never
 // disagree.
 import { collectionPercent, mPlusQualityTextClass, wowQualityTextClass } from '#shared/utils/wow-quality'
-// The overall rating, off the same formula the hall of fame ranks by, so the tile here and the
-// table's own column are one number.
-import { calculatePlayerScore } from '#shared/utils/leaderboardScore'
 // Counts are written by the site's one rule (`#shared/utils/formatNumber`): thousands grouped by a
 // space, so a tile reads `1 200` here exactly as it does on the card drawn from it.
 import { formatNumber } from '#shared/utils/formatNumber'
 // The profile the shell fetched (see the composable). The tiles and the summary are the
 // overview's alone, so everything they draw is computed here.
 import { useCharacterView } from '~/composables/characterView'
+// Where a tile leads. The query a link carries is built by the very composable the hall of fame reads
+// it back with, so a tile and the chip row that answers it can never spell the same choice differently.
+import { leaderboardColumnsQuery } from '~/composables/leaderboardView'
+// The figures a tile stands for are the table's own columns, so the keys below are that type rather
+// than any string: a tile added for a collection the hall of fame has no column for would not compile.
+import type { LeaderboardSort } from '#shared/data/leaderboardSchema'
 
 const { character } = useCharacterView()
 const { t } = useI18n()
+const localeUrl = useLocaleUrl()
 
 /**
  * The rating wears the tier it has reached, off the same Mythic+ bands the card colours the
@@ -24,23 +28,19 @@ const { t } = useI18n()
 const mPlusColor = computed(() => mPlusQualityTextClass(character.value?.mPlusScore ?? 0))
 
 /**
- * The overall rating, read off the collections the page is showing - which are the account's, because
- * every character's page is overlaid with the account's pool (`server/utils/accountPool`). It is the
- * very figure the hall of fame orders its table by, computed by the shared formula rather than stored
- * here, so a page and the table can never disagree.
+ * The overall rating of the page: the number the profile carries, rather than one worked out here.
+ *
+ * The figures the tiles print are the account's, and the rating of those very figures was computed where
+ * they were put together - on the server, once (`server/utils/accountPool`). A page that works one out for
+ * itself assembles its own list of the six figures, and a list written by hand beside a formula is a list
+ * that loses a figure the day the formula gains one: this page used to print a score without its
+ * reputation term, thousands of points below the table it was taken from.
  */
-const totalScore = computed(() =>
-  calculatePlayerScore({
-    achievements: character.value?.stats.achievements.count ?? 0,
-    mounts: character.value?.stats.mounts.count ?? 0,
-    toys: character.value?.stats.toys.count ?? 0,
-    decor: character.value?.stats.decor.count ?? 0,
-    pets: character.value?.stats.pets.count ?? 0
-  })
-)
+const totalScore = computed(() => character.value?.score ?? 0)
 
 interface StatTile {
-  key: string
+  /** The collection the tile stands for, which is also the hall of fame's own name for its column. */
+  key: LeaderboardSort
   /** File name in `~/assets/icons`, which `<AppIcon>` draws. */
   icon: string
   label: string
@@ -99,6 +99,18 @@ const tileColumns = computed<StatTile[][]>(() => {
 
   return [withBar.slice(0, 3), withBar.slice(3)]
 })
+
+/**
+ * Where a tile leads: the hall of fame with this collection's chip already lit, in the language being
+ * read.
+ *
+ * Every figure a tile prints is a figure the table has a column for, so the tile is the one way into
+ * the hall of fame that starts from a number a reader was looking at rather than from a menu: the chip
+ * they find switched on is the very tile they pressed, and the table is narrowed to it.
+ */
+function tileUrl(key: LeaderboardSort) {
+  return { path: localeUrl('/leaderboard'), query: leaderboardColumnsQuery([key]) }
+}
 </script>
 
 <template>
@@ -126,10 +138,11 @@ const tileColumns = computed<StatTile[][]>(() => {
          the boxes on large screens. -->
     <div class="relative grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-[36%] items-center">
       <div v-for="(column, columnIndex) in tileColumns" :key="columnIndex" class="space-y-4">
-        <div
+        <NuxtLink
           v-for="tile in column"
           :key="tile.key"
-          class="hoa-panel hoa-panel-interactive p-3 sm:p-4"
+          :to="tileUrl(tile.key)"
+          class="hoa-panel hoa-panel-interactive block p-3 sm:p-4"
         >
           <!-- Two columns of two rows. The first row carries the glyph, the label and the big
                number, which share one line so their centres line up. The second row carries the
@@ -137,7 +150,14 @@ const tileColumns = computed<StatTile[][]>(() => {
                the tile prints on the left, and how much of everything there is to collect on the
                right. The glyph is 1.5x the 1.15em it used to be (1.725em, so it scales with the
                label at both breakpoints) and sits in a square box, which is the 1:1 `viewBox` every
-               icon file is drawn on, so nothing is stretched. -->
+               icon file is drawn on, so nothing is stretched.
+
+               The whole tile is a link into the hall of fame, narrowed to this collection: the
+               figure under the reader's eye is a column of that table, so the table is one press
+               away rather than a trip through a menu (`tileUrl`). It is a link rather than a button
+               because it goes somewhere, and it keeps the frame the statistics above it wear - the
+               panel is `block` here, since a link is inline by default and would otherwise lay its
+               own grid out as one. -->
           <div class="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-2">
             <span class="flex min-w-0 items-center gap-2.5 text-base font-bold uppercase tracking-wider text-gray-200 sm:text-lg">
               <AppIcon :name="tile.icon" class="h-[1.725em] w-[1.725em] shrink-0" />
@@ -154,7 +174,7 @@ const tileColumns = computed<StatTile[][]>(() => {
           <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/5">
             <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" :style="{ width: tile.percent + '%' }"></div>
           </div>
-        </div>
+        </NuxtLink>
       </div>
     </div>
   </main>

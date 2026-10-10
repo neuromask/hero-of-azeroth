@@ -11,7 +11,14 @@
  * The one thing the server is not asked on every keystroke is the search box. A name is typed a
  * letter at a time, so the box keeps its own value and hands the server a debounced copy - a
  * reader typing `neromask` asks once, not eight times.
+ *
+ * One piece of the page's state travels in the address as well as in this composable: which columns
+ * the table shows. It is here because a tile on a character page links *into* the table - pressing
+ * the decor tile opens the hall of fame with the decor chip lit - so the page has to be able to open
+ * with the chips already chosen. The two functions below are that agreement, written once, so a link
+ * and the chip row that answers it can never spell it differently.
  */
+import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
 import type {
   LeaderboardFaction,
   LeaderboardPage,
@@ -25,7 +32,41 @@ const SEARCH_DEBOUNCE = 300
 /** How many players one page of the table holds. */
 export const LEADERBOARD_PER_PAGE = 25
 
+/** The query parameter the chips are written into, and the one a link into the table names. */
+export const LEADERBOARD_COLUMNS_PARAM = 'columns'
+
+/**
+ * The chips a set of columns means in an address: the figures it lights, or nothing at all for the
+ * overall state - which is what a table showing everything already says by saying nothing.
+ */
+export function leaderboardColumnsQuery(columns: LeaderboardSort[]): Record<string, string> {
+  const picked = columns.filter((key) => key !== 'total')
+  return picked.length ? { [LEADERBOARD_COLUMNS_PARAM]: picked.join(',') } : {}
+}
+
+/**
+ * The chips an address names, in the order the table draws them.
+ *
+ * Read back through `LEADERBOARD_SORTS`, so a word this build does not know - a link written before a
+ * figure existed, or a typo in one copied by hand - is dropped rather than turning into a column with
+ * nothing in it, and `null` says the address names no chips at all. `total` is not one column among
+ * the others: an address that names it means every column, which is the state `null` already stands
+ * for, so it is left out here and the overall chip is what the table falls back to.
+ */
+export function leaderboardColumnsFromQuery(value: unknown): LeaderboardSort[] | null {
+  const raw = Array.isArray(value) ? value.join(',') : value
+  if (typeof raw !== 'string' || !raw.trim()) return null
+
+  const said = raw.split(',').map((entry) => entry.trim())
+  const picked = LEADERBOARD_SORTS.filter((key) => key !== 'total' && said.includes(key))
+
+  return picked.length ? picked : null
+}
+
 export function useLeaderboardView() {
+  const route = useRoute()
+  const router = useRouter()
+
   /**
    * Which columns the table shows.
    *
@@ -35,16 +76,40 @@ export function useLeaderboardView() {
    * and the table shows exactly the figures that are lit; clearing the last one steps back into it.
    * So a reader is never looking at a table with no figures in it, and the overall chip is never lit
    * beside the others.
+   *
+   * The state opens with whatever the address names (`leaderboardColumnsFromQuery`), which is what
+   * makes a link from a character page's tile land on the figure it pointed at.
    */
-  const columns = ref<LeaderboardSort[]>(['total'])
+  const linked = leaderboardColumnsFromQuery(route.query[LEADERBOARD_COLUMNS_PARAM])
+  const columns = ref<LeaderboardSort[]>(linked || ['total'])
 
   /** True while every column is shown, which is what the overall chip means. */
   const showsAllColumns = computed(() => columns.value.includes('total'))
 
+  /**
+   * Switches the chips and writes the same choice into the address, in one place: a reader who
+   * arrived at the table by a link and then lit another figure must not be left with an address that
+   * says something the table does not show.
+   */
+  function applyColumns(next: LeaderboardSort[]) {
+    columns.value = next
+
+    const query = { ...route.query }
+    delete query[LEADERBOARD_COLUMNS_PARAM]
+    Object.assign(query, leaderboardColumnsQuery(next))
+
+    // The address is rebuilt from the one being read (`route.path`), rather than from the route's name:
+    // the page serves its Russian address as an alias of the English one, and a name resolves to the
+    // English path alone - which would drop the `/ru` a reader arrived with and hand them the table in
+    // the other language. `replace` rather than `push`, because the chips are a view of one table
+    // rather than a row of pages, and the way back belongs to wherever the reader came from.
+    void router.replace({ path: route.path, query })
+  }
+
   function toggleColumn(key: LeaderboardSort) {
     // The overall chip is not one column among the others: it is the state the others leave behind.
     if (key === 'total') {
-      columns.value = ['total']
+      applyColumns(['total'])
       return
     }
 
@@ -54,7 +119,7 @@ export function useLeaderboardView() {
       : [...picked, key]
 
     // The last figure switched off hands the table back to the overall chip.
-    columns.value = next.length ? next : ['total']
+    applyColumns(next.length ? next : ['total'])
   }
 
   /**

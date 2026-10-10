@@ -7,6 +7,7 @@
  * whole answer to a gateway timeout: a thirty-alt account costs one request at sign-in, not thirty.
  */
 import type { BlizzardRegion } from './params'
+import { fileDailyReading } from './characterReading'
 import { nowSec } from './db'
 
 /** What one roster read did, which is what a page or a log needs to explain an empty grid. */
@@ -146,13 +147,13 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
   const now = nowSec()
   const dayStart = Math.floor(now / 86400) * 86400
 
-  // The row as the roster lists it, plus the moment its figures were read: the snapshot is keyed to
-  // the day (`taken_at` below), so this is the only place a page can learn when the reading actually
-  // happened - which is what a tile prints as "Updated 5 minutes ago" rather than "20 hours ago".
+  // The row as the roster lists it. The moment its figures were read is not set here: it belongs to the
+  // reading below, which sets it whether or not the figures moved (`server/utils/characterReading`), so
+  // the column has one writer rather than two.
   db.prepare(
     `UPDATE characters
         SET realm_name = ?, display_name = ?, class_id = ?, level = ?, faction = ?,
-            avatar = ?, profession_1 = ?, profession_2 = ?, last_seen_at = ?, stats_read_at = ?
+            avatar = ?, profession_1 = ?, profession_2 = ?, last_seen_at = ?
       WHERE id = ?`
   ).run(
     profile.realm,
@@ -164,26 +165,13 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
     professions[0] || null,
     professions[1] || null,
     now,
-    now,
     row.id
   )
 
-  db.prepare('DELETE FROM snapshots WHERE character_id = ? AND taken_at = ?').run(row.id, dayStart)
-  db.prepare(
-    `INSERT INTO snapshots (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    row.id,
-    dayStart,
-    profile.ilvl ?? null,
-    profile.mPlusScore ?? null,
-    profile.ap ?? null,
-    profile.stats.mounts.count,
-    profile.stats.pets.count,
-    profile.stats.toys.count,
-    profile.stats.decor.count,
-    profile.stats.reputations?.count ?? null
-  )
+  // The day's reading, filed by the one function that knows how (`fileDailyReading`): the same call a
+  // character page makes when it reads a profile in full, so the two can never write the day's row
+  // differently - or leave one of them unfiled.
+  fileDailyReading(row.id, profile, dayStart)
 
   // What this character adds to the account's pool, both folded in as ids: its own mount journal
   // (a mount can belong to a side or a race, and it only ever appears in the journal of a character

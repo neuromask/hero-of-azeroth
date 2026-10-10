@@ -19,9 +19,6 @@ import { professionByName, professionLabel } from '#shared/utils/wow-professions
 import { formatNumber } from '#shared/utils/formatNumber'
 // The Mythic+ ladder the character page colours the rating by, so a figure keeps its colour here.
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
-// The overall rating, off the same formula the hall of fame ranks by, so the profile's figure and the
-// table's own column are one number.
-import { calculatePlayerScore } from '#shared/utils/leaderboardScore'
 
 definePageMeta({ alias: '/ru/profile' })
 
@@ -417,19 +414,14 @@ const characterUrl = (character: ProfileCharacter) =>
 const figure = (value: number | null | undefined) => (typeof value === 'number' ? formatNumber(value) : '—')
 
 /**
- * The account's overall rating, read off the main's figures - which are the account's own, because
- * every tile on this page is overlaid with the pool. It is the very number the hall of fame orders its
- * table by, taken from the shared formula rather than stored twice.
+ * The main's overall rating, as the endpoint computed it: the number and the figures it was made from were
+ * put together in one place, on the server (`server/api/profile/index.get.ts`), which is the same place and
+ * the same rule the character page and the hall of fame's row are answered by.
+ *
+ * This page used to work the number out for itself, from a list of six figures written by hand - and a list
+ * written by hand beside a formula is a list that loses a figure the day the formula gains one.
  */
-const mainScore = computed(() =>
-  calculatePlayerScore({
-    achievements: main.value?.latest?.achievements ?? 0,
-    mounts: main.value?.latest?.mounts ?? 0,
-    toys: main.value?.latest?.toys ?? 0,
-    decor: main.value?.latest?.decor ?? 0,
-    pets: main.value?.latest?.pets ?? 0
-  })
-)
+const mainScore = computed(() => main.value?.score ?? 0)
 
 /**
  * The main's whole stat line as one list, so the template stays a `v-for`.

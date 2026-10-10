@@ -45,6 +45,15 @@ export interface ProfileCharacter {
     decor: number | null
     reputations: number | null
   } | null
+  /**
+   * The overall rating of the figures above, computed where those figures were merged - which is here, in
+   * the one place the account's own totals are laid over a character's reading.
+   *
+   * The page prints this number rather than working one out from the figures it draws: a rating computed
+   * by the page that shows it is a second list of the six to keep in step with the formula, and that is
+   * exactly how a character page came to print a score without its reputation term.
+   */
+  score: number
 }
 
 /** The account's own totals, as the profile page reads them. */
@@ -130,6 +139,9 @@ export default defineEventHandler(async (event) => {
     isMain: row.is_main === 1,
     lastSeenAt: row.last_seen_at,
     statsReadAt: row.stats_read_at,
+    // Filled in below, off the figures the account's own totals are merged into: a character with no
+    // reading at all has no figures to rate, and the page prints a dash for it either way.
+    score: 0,
     latest: row.taken_at === null
       ? null
       : {
@@ -145,29 +157,50 @@ export default defineEventHandler(async (event) => {
         }
   }))
 
-  // Every collection tile is the account's, not the character's: mounts, pets, toys, decor and the
-  // factions driven to Exalted are shared across the whole Battle.net account, so the account's own
-  // pool is laid over the reading stored for the character (`server/utils/accountPool`). The item
-  // level, the rating and the level stay the character's own - those are the numbers that are
-  // actually theirs. A pool that is still empty leaves the reading as it was.
-  const pool = readAccountPool(user.id)
-  if (POOL_KINDS.some((kind) => pool[kind] > 0)) {
-    for (const character of characters) {
-      if (!character.latest) continue
+  // The account's totals: a WoW collection is shared across the whole Battle.net account, so nothing
+  // here is added up over the roster. Blizzard's own account collection is read where it exists, and the
+  // best character's reading stands in where it does not - `MAX`, never `SUM` (see
+  // `server/utils/accountPool`). Read before the rows below, because they are merged with it.
+  const account = readAccountTotals(user.id)
 
-      character.latest.mounts = pool.mounts || character.latest.mounts
-      character.latest.pets = pool.pets || character.latest.pets
-      character.latest.toys = pool.toys || character.latest.toys
-      character.latest.decor = pool.decor || character.latest.decor
-      character.latest.reputations = pool.reputations || character.latest.reputations
-    }
+  // Every figure a row prints is the best of two readings of the same account - the one stored for that
+  // character and the account's own totals - merged by the site's one rule (`bestFigures`), which is the
+  // merge the character page and the hall of fame's row are answered with as well. These rows used to be
+  // given the raw pool instead: no merge, so a reading that ran ahead of a pool still filling in was
+  // thrown away, and no achievement points at all, so the account printed one number on its own page and
+  // another on the character page it was opened from. The item level, the rating and the level stay the
+  // character's own - those really are theirs, and no account has a "best" of them to stand for it.
+  for (const character of characters) {
+    const latest = character.latest
+    if (!latest) continue
+
+    const figures = bestFigures(
+      {
+        achievements: latest.achievements ?? 0,
+        mounts: latest.mounts ?? 0,
+        pets: latest.pets ?? 0,
+        toys: latest.toys ?? 0,
+        decor: latest.decor ?? 0,
+        reputations: latest.reputations ?? 0
+      },
+      account
+    )
+
+    // A figure neither source knows keeps its `null`, which the page prints as a dash rather than as a
+    // zero: an account whose characters have never been read has no figures to print, not nought of them.
+    latest.achievements = figures.achievements || latest.achievements
+    latest.mounts = figures.mounts || latest.mounts
+    latest.pets = figures.pets || latest.pets
+    latest.toys = figures.toys || latest.toys
+    latest.decor = figures.decor || latest.decor
+    latest.reputations = figures.reputations || latest.reputations
+
+    // And the rating of the very figures above, computed here rather than by the page that prints them:
+    // the number and the figures it was made from travel together, so the account's page, the character
+    // page and the hall of fame's row cannot disagree about one player.
+    character.score = calculatePlayerScore(figures)
   }
 
-  // The account's totals: a WoW collection is shared across the whole Battle.net account, so
-  // nothing here is added up over the roster. Blizzard's own account collection is read where it
-  // exists, and the best character's reading stands in where it does not - `MAX`, never `SUM`
-  // (see `server/utils/accountPool`).
-  const account = readAccountTotals(user.id)
   const totals: ProfileTotals = {
     characters: characters.length,
     ilvl: account.ilvl,

@@ -22,6 +22,8 @@
  */
 import type { CharacterData } from './blizzard'
 import type { BlizzardRegion } from './params'
+import { fileDailyReading } from './characterReading'
+import { nowSec } from './db'
 
 /** A freshly read profile, and the three address segments it belongs to. */
 export interface ProfileFeedInput {
@@ -31,9 +33,20 @@ export interface ProfileFeedInput {
   /** The character's name, lowercased. */
   name: string
   profile: CharacterData
+  /**
+   * True when this profile is a reading the site has just taken from Blizzard, rather than a copy of one
+   * handed out of a cache.
+   *
+   * It decides one of the three writes below: a reading is filed as the character's own for the day
+   * (`server/utils/characterReading`), and the profile page, the hall of fame's row and the character page
+   * itself all compute their figures from what is filed. A copy is not filed - it is by definition older
+   * than the reading already on file, and filing it would move the record backwards for every reader who
+   * has not opened the same page in the last two hours.
+   */
+  reading?: boolean
 }
 
-export async function feedProfile({ region, realm, name, profile }: ProfileFeedInput): Promise<void> {
+export async function feedProfile({ region, realm, name, profile, reading }: ProfileFeedInput): Promise<void> {
   // Everything a stored record is made of, read off the profile once. Both stores are filled from
   // the same list on purpose: a field the table prints is a field the index has to keep, or the
   // table's own backfill (`backfillFromIndex`) would write rows without it.
@@ -49,6 +62,7 @@ export async function feedProfile({ region, realm, name, profile }: ProfileFeedI
     pets: profile.stats.pets.count,
     toys: profile.stats.toys.count,
     decor: profile.stats.decor.count,
+    reputations: profile.stats.reputations.count,
     achievements: profile.ap
   }
 
@@ -59,4 +73,22 @@ export async function feedProfile({ region, realm, name, profile }: ProfileFeedI
   // along here too - the index knows the slug alone, and a row prints the realm as the game spells
   // it.
   await upsertPlayer({ region, realm, name, realmName: profile.realm, ...figures })
+
+  // And the day's own reading, for a character that belongs to an account - and only when this profile is
+  // a reading rather than a copy of one (`reading` above). The three readers of an account's figures - the
+  // profile page, this page and the hall of fame's row - all compute them from what is filed
+  // (`server/utils/accountPool`), so a reading taken here and not filed would leave two of the three up to a
+  // sync behind the page it was taken from. That is the drift a reader notices as one collection reading as
+  // two numbers on two pages.
+  //
+  // A stranger's character has no account row to file a reading against, and is skipped: what the site
+  // knows about them is the index and the table's row, both written above. The day the reading belongs to
+  // is UTC, exactly as the background pass files it (`server/utils/characterReading`).
+  if (reading) {
+    const stored = useDb()
+      .prepare('SELECT id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
+      .get(region, realm, name) as { id: number } | undefined
+
+    if (stored) fileDailyReading(stored.id, profile, Math.floor(nowSec() / 86400) * 86400)
+  }
 }

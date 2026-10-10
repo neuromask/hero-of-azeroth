@@ -124,7 +124,7 @@ function initial(player: LeaderboardPlayer): string {
  * is a button, and the figure it names is the preset the endpoint already understands - so ordering
  * by pets is the same request as ordering by mounts, with a different word in it.
  *
- * Two of the seven are written out rather than translated: `M+` and `ilvl` are the game's own
+ * Two of the eight are written out rather than translated: `M+` and `ilvl` are the game's own
  * shorthand, a player reads them the same in either language, and a translated header is exactly
  * what makes a table look foreign.
  */
@@ -140,6 +140,7 @@ const COLUMNS: {
   { key: 'toys', label: 'toys', field: 'toys' },
   { key: 'pets', label: 'pets', field: 'pets' },
   { key: 'decor', label: 'decor', field: 'decor' },
+  { key: 'reputations', label: 'reputations', field: 'reputations' },
   { key: 'mplus', label: 'M+', field: 'mPlusScore', literal: true },
   { key: 'ilvl', label: 'ilvl', field: 'ilvl', literal: true }
 ]

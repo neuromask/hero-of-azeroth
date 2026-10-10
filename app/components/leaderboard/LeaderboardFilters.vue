@@ -55,7 +55,7 @@ const { realmLabel } = useRealmNames()
  *
  * A chip wears the site's own name for the figure it turns on - a "mount lord" where the column says
  * "mounts" - so a reader who has met one in the table knows which chip to reach for. The site has a
- * name of its own for four of them and borrows the column's for the rest, which is why the labels
+ * name of its own for five of them and borrows the column's for the rest, which is why the labels
  * come from two places: `lbPreset*` for the named ones, the collections' own keys for the plain ones.
  *
  * The overall chip wears the trophy rather than the site's emblem: the emblem is the brand in the
@@ -69,6 +69,7 @@ const COLUMN_CHIPS: { key: LeaderboardSort; icon: string; label: string; literal
   { key: 'toys', icon: 'toys', label: 'toys' },
   { key: 'pets', icon: 'pets', label: 'pets' },
   { key: 'decor', icon: 'decor', label: 'lbPresetDecor' },
+  { key: 'reputations', icon: 'exalted-rep', label: 'reputations' },
   { key: 'mplus', icon: 'key', label: 'lbPresetMplus' },
   { key: 'ilvl', icon: 'item-level', label: 'ilvl', literal: true }
 ]
@@ -85,7 +86,7 @@ function isShown(key: LeaderboardSort): boolean {
 }
 
 /**
- * The legend of the overall score: the five figures it is made of, in the order the table draws them,
+ * The legend of the overall score: the six figures it is made of, in the order the table draws them,
  * each with the multiplier it carries.
  *
  * The numbers are read off `SCORE_WEIGHTS` rather than written out here, so the panel a reader opens
@@ -96,7 +97,8 @@ const SCORE_LEGEND = [
   { key: 'mounts', icon: 'mounts', label: 'mounts', weight: SCORE_WEIGHTS.mounts },
   { key: 'toys', icon: 'toys', label: 'toys', weight: SCORE_WEIGHTS.toys },
   { key: 'pets', icon: 'pets', label: 'pets', weight: SCORE_WEIGHTS.pets },
-  { key: 'decor', icon: 'decor', label: 'decor', weight: SCORE_WEIGHTS.decor }
+  { key: 'decor', icon: 'decor', label: 'decor', weight: SCORE_WEIGHTS.decor },
+  { key: 'reputations', icon: 'exalted-rep', label: 'reputations', weight: SCORE_WEIGHTS.reputations }
 ] as const
 
 /**

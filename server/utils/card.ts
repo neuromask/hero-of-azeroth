@@ -2,9 +2,6 @@ import { Resvg } from '@resvg/resvg-js'
 import type { ResvgRenderOptions } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
 import { mPlusQualityHex, wowQualityHex } from '#shared/utils/wow-quality'
-// The overall rating, off the same formula the hall of fame ranks by, so the card and the table can
-// never disagree about what a character is worth.
-import { calculatePlayerScore } from '#shared/utils/leaderboardScore'
 // The one rule for how a figure is written on the site, shared with the pages the card previews.
 import { formatNumber } from '#shared/utils/formatNumber'
 // The class colours are shared with the page and the search history, so a card, a page and a
@@ -1107,13 +1104,12 @@ async function buildCardSvg(
    * The character's overall rating, off the same formula the hall of fame ranks by - so the card's
    * figure and the table's column are one number, read from the same collections.
    */
-  const score = calculatePlayerScore({
-    achievements: data.stats.achievements.count,
-    mounts: data.stats.mounts.count,
-    toys: data.stats.toys.count,
-    decor: data.stats.decor.count,
-    pets: data.stats.pets.count
-  })
+  /**
+   * The character's overall rating, taken from the profile the overlay put together rather than computed
+   * here: the number and the figures beside it were made in one place (`server/utils/accountPool`), which
+   * is what makes the card, the character page and the hall of fame's row one number.
+   */
+  const score = data.score ?? 0
 
   /**
    * The three figures are set at the same size - the largest one that fits any plate - because

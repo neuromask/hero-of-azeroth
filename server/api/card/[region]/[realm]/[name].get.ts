@@ -31,20 +31,25 @@ export default defineEventHandler(async (event) => {
     async () => {
       const character = await getCharacter(realm, name, region, locale)
 
-      // The collections a card prints are the account's, so a character whose account has synced is
-      // drawn with the account's pool; a stranger's lookup keeps Blizzard's per-character numbers.
-      overlayPool(character, region, realm, name)
-
       // The card is drawn from a profile, and reading a profile is what the site learns a character
-      // from - so a card is fed into the sitemap's index and into the hall of fame's table the same
-      // way a character page is (`server/utils/profileFeed.ts`). It is the feed the card used to be
-      // missing: a row backfilled from the index - which keeps no portrait and no faction - stayed
-      // half-empty for a character whose card had been drawn a hundred times, because the only reader
-      // that filled it in was the character page itself. The two writes are skipped when a record
-      // already says everything this profile does, so drawing a card the table knows costs no disk.
-      await feedProfile({ region, realm, name, profile: character })
+      // from - so a card is fed into the sitemap's index, into the hall of fame's table, and, as
+      // `reading: true`, into the character's own record for the day: the figures every page of the site
+      // computes its numbers from (`server/utils/characterReading`). It is fed before the account's
+      // figures are laid over it on purpose, so what is filed is what Blizzard said about the character
+      // rather than the account's union - the same reading the background pass files, which is what keeps
+      // the two writers of one day's row writing the same thing.
+      //
+      // It is the feed the card used to be missing: a row backfilled from the index - which keeps no
+      // portrait and no faction - stayed half-empty for a character whose card had been drawn a hundred
+      // times, because the only reader that filled it in was the character page itself. The writes are
+      // skipped when a record already says everything this profile does, so drawing a card the table
+      // knows costs no disk.
+      await feedProfile({ region, realm, name, profile: character, reading: true })
 
-      return renderCharacterCard(character, locale)
+      // And what the card is drawn from: the same reading, with the account's own figures laid over it by
+      // the site's one rule. The overlay returns a copy (`server/utils/accountPool`), so the drawing can
+      // never write a reader's view back into the reading filed above.
+      return renderCharacterCard(overlayPool(character, region, realm, name), locale)
     },
     force
   )

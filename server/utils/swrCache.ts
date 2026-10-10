@@ -17,6 +17,17 @@
 export interface SwrCache<T> {
   /** The value for `key`, fetching it with `producer` when it is missing, stale or forced. */
   (key: string, producer: () => Promise<T>, force?: boolean): Promise<T>
+  /**
+   * When the value on hand for `key` was fetched, in seconds since the epoch, or `null` when the store
+   * holds none.
+   *
+   * A caller that has to weigh its own answer against something else the site has stored needs to know how
+   * old that answer is - a character's profile, say, against the reading the site filed for the same
+   * character - and the store that handed it over is the only place that knows. The moment is the store's
+   * rather than the caller's on purpose: an answer served out of the cache was fetched when it was
+   * fetched, not when it was asked for, which is exactly the difference a caller cannot see otherwise.
+   */
+  fetchedAt(key: string): number | null
 }
 
 export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<T> {
@@ -54,7 +65,12 @@ export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<
     return fetching
   }
 
-  return (key, producer, force = false) => {
+  /**
+   * The store itself, with the moment of what it holds hanging off it: a caller that only wants a value
+   * reads it as the function it is, and a caller that has to weigh that value against something else reads
+   * `fetchedAt`.
+   */
+  const cache = ((key: string, producer: () => Promise<T>, force = false) => {
     const cached = values.get(key)
 
     if (force || !cached) return start(key, producer)
@@ -65,5 +81,12 @@ export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<
     // A failure there is the caller's to shrug off, not an unhandled rejection to raise.
     void start(key, producer).catch(() => {})
     return Promise.resolve(cached.value)
+  }) as SwrCache<T>
+
+  cache.fetchedAt = (key) => {
+    const cached = values.get(key)
+    return cached ? Math.floor(cached.at / 1000) : null
   }
+
+  return cache
 }

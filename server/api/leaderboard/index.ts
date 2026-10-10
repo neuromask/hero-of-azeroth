@@ -13,17 +13,19 @@
  * revalidate half is deliberately not used: it would answer the first reader after a change with the
  * table as it was, which is exactly the situation a reader cannot tell from a broken one.
  *
- * And the hour is not a promise about the figures, either: an answer is dropped the moment what it
- * was built from has moved (`shouldInvalidateCache` below), because the account pool behind a
- * signed-in row grows in the background and a table an hour behind the character page is a reader
- * seeing two different numbers for one player. All this handler has to do is not answer from a
+ * And the hour is not a promise about the figures, either: every answer is filed under the stamp of the
+ * data it was read from as well as under its own question (see `getKey` below), because the account pool
+ * behind a signed-in row grows in the background and a table an hour behind the character page is a
+ * reader seeing two different numbers for one player. All this handler has to do is not answer from a
  * table that is no longer the table.
  *
- * The cache key is the path plus the query, sorted so that two spellings of the same request
- * (`?sort=total&page=1` and `?page=1&sort=total`) share one entry. Nitro bounds the cache, so a
- * reader typing a name into the search box fills entries that expire on their own rather than
- * anything that has to be swept. Invalidating an entry re-resolves it under the same key, so nothing
- * accumulates behind a table that moves.
+ * The cache key is the address, the query - sorted, so that two spellings of the same request
+ * (`?sort=total&page=1` and `?page=1&sort=total`) share one entry - and that stamp. Carrying the stamp
+ * is what makes the invalidation exact rather than eventual: an entry written before the data moved is
+ * filed under a stamp nobody asks for again, so it can neither be handed to a reader who arrived after
+ * the sync nor keep its figures while another question is read again. A handful of stamps a day (a
+ * character looked up, a pool that grew) times the queries that were actually asked in that hour is
+ * what the cache holds, and Nitro bounds it besides.
  *
  * This handler knows a query and a payload. What the payload is read from - today a JSON file,
  * tomorrow a SQLite table - is entirely inside `leaderboardStorage`.
@@ -31,9 +33,6 @@
 import { getLeaderboard, leaderboardDataStamp } from '~~/server/utils/leaderboardStorage'
 import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
 import type { LeaderboardFaction, LeaderboardSort } from '#shared/data/leaderboardSchema'
-
-/** The stamp the answer standing in the cache was built from (see `shouldInvalidateCache`). */
-let servedStamp = ''
 
 /** The factions a caller may filter by; anything else means "everybody". */
 const FACTIONS: readonly LeaderboardFaction[] = ['alliance', 'horde', 'neutral']
@@ -73,10 +72,6 @@ export default defineCachedEventHandler(
   async (event) => {
     const query = getQuery(event)
 
-    // What this answer is built from, kept for the next request to compare against (see
-    // `shouldInvalidateCache` below).
-    servedStamp = leaderboardDataStamp()
-
     // The page's own answer is public and identical for every visitor, so a browser may hold it
     // for a minute and a CDN for the hour the handler caches for.
     setHeader(event, 'cache-control', 'public, max-age=60, s-maxage=3600, stale-while-revalidate=600')
@@ -98,19 +93,22 @@ export default defineCachedEventHandler(
     maxAge: 3600,
     swr: false,
     /**
-     * The entry is dropped when what it was built from has moved.
+     * The key an answer is filed under: the address, the question, and the stamp of the data behind
+     * both.
      *
-     * The table is not the only thing behind this answer: the account pool grows in the background
-     * (`server/utils/accountPool`) and the figures a signed-in row prints are read from it, so an
-     * answer an hour old can be answering with a pool that has since been filled in - the very thing
-     * that leaves a reader looking at a character page and a table that disagree. Comparing the stamp
-     * the answer was built with against the current one resolves the entry again, in place: the key
-     * does not change, so nothing accumulates, and a reader who arrives after a sync is answered with
-     * the figures the profile page already prints.
+     * The table is not the only thing behind an answer: the account pool grows in the background
+     * (`server/utils/accountPool`) and the figures a signed-in row prints are read from it, so an answer
+     * an hour old can be answering with a pool that has since been filled in - the very thing that leaves
+     * a reader looking at a character page and a table that disagree.
+     *
+     * Comparing the stamp against a variable would keep that promise for the entry that was rebuilt last
+     * and break it for every other entry in the cache, which is what this handler used to do: the answer
+     * to one question says nothing about whether the answer to another was read from the same table, so a
+     * reader who asked a different question in the meantime left the first entry answering from the table
+     * as it was before the move, for as long as the hour lasted. Carried in the key, it needs no
+     * bookkeeping at all: the data moved, so the key a reader asks for is not the key the stale answer is
+     * filed under, and the question is read again.
      */
-    shouldInvalidateCache: () => leaderboardDataStamp() !== servedStamp,
-    // The query is part of the key, canonicalised so that the same request spelled two ways is
-    // one cache entry.
     getKey: (event) => {
       const query = getQuery(event)
       const params = new URLSearchParams()
@@ -121,7 +119,7 @@ export default defineCachedEventHandler(
         params.set(key, Array.isArray(value) ? value.join(',') : String(value))
       }
 
-      return `${getRequestURL(event).pathname}?${params.toString()}`
+      return `${getRequestURL(event).pathname}?${params.toString()}@${leaderboardDataStamp()}`
     }
   }
 )
