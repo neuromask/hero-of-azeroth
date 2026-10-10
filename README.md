@@ -291,6 +291,7 @@ site pays for once and ships with the build. One command runs all of them, in th
 npm run refresh:all                     # every step, read with the character it remembers
 npm run refresh:all eu gordunni name    # the same, read with another character
 npm run refresh:all --only=collections,reputations
+npm run refresh:all --only=achievements # just the achievement atlas
 npm run refresh:all -- --dry-run        # print the commands and run nothing
 npm run deploy                          # nothing is live until this runs
 ```
@@ -298,6 +299,7 @@ npm run deploy                          # nothing is live until this runs
 | Step | Writes | What goes stale without it |
 | --- | --- | --- |
 | `collections` | `server/utils/collections-data.json` | an item a patch added, a new expansion's bucket, a new source — a shelf keeps the tree of the last run |
+| `achievements` | `server/utils/achievements-data.json` | an achievement a patch added, a new category, a renamed heading — a category keeps the tree of the last run |
 | `armoury` | `server/utils/armoury-totals.json` | the two fallbacks (a mount tile is normally measured against the live Armoury journal of that character) |
 | `meta` | `server/utils/achievement-meta.json` | the feed cards' wording, points and icons — a new achievement is read live, so it is slower rather than wrong |
 | `points` | `server/utils/achievement-points.json` | the fallback total for achievement points |
@@ -314,6 +316,11 @@ map has not got yet:
 ```text
   ⚠ not in the Russian label map yet (they read in English): Midnight: Season 2
 ```
+
+The achievements step needs no such edit: it reads Blizzard's own achievement-category index as it
+builds, so a `cat` or a `subcat` the index names is already written in Russian. Only a heading the
+index has not got (a boss, a zone) falls back to English, and one that should read differently can be
+named in `ACHIEVEMENT_LABELS_RU` (`shared/data/achievementsSchema.ts`).
 
 ## 🌍 Bilingual
 

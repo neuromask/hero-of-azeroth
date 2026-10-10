@@ -2,18 +2,18 @@
  * Every refresh a patch wants, in the order their outputs are read.
  *
  * A patch moves two kinds of number: the ones the site pays for once and ships with the build - the
- * collections atlas, the achievement catalogue, the reputation and total snapshots - and the ones it
- * reads live for whoever is being looked at. Only the first kind is refreshed here, and every step is
- * the same script `package.json` exposes on its own: this runs them in order, reports what each one
- * wrote, and names the headings a new patch brought that the Russian label map has not got yet.
+ * collections and achievements atlases, the achievement catalogue, the reputation and total snapshots
+ * - and the ones it reads live for whoever is being looked at. Only the first kind is refreshed here,
+ * and every step is the same script `package.json` exposes on its own: this runs them in order,
+ * reports what each one wrote, and names the headings a new patch brought that the Russian label map
+ * has not got yet.
  *
  * The character the Armoury is read with is the one the snapshot already records, so a second run needs
  * no arguments at all; `region realm name` changes it.
  *
  * Usage: npm run refresh:all [region] [realm] [name] [--only=a,b] [--no-fresh] [--dry-run]
  *
- *   --only       run just these steps: collections, armoury, meta, points, reputations
- *                (the collections step also rebuilds the achievements atlas)
+ *   --only       run just these steps: collections, achievements, armoury, meta, points, reputations
  *   --no-fresh   keep the throw-away caches of the achievement and reputation walks (a quick pass)
  *   --dry-run    print the commands and run nothing
  */
@@ -57,10 +57,13 @@ const WANTED = flagValue('--only')
   .map((key) => key.trim())
   .filter(Boolean)
 
-/** The steps, in order: what a patch adds to the atlas, the snapshots the tiles fall back on, then the
- *  three walks. `--only` names them by their key. */
+/** The steps, in order: what a patch adds to the atlases, the snapshots the tiles fall back on, then
+ *  the three walks. `--only` names them by their key. The two atlases are one script run twice - the
+ *  shelves and the achievements are separate trees, and `--only=collections` / `--only=achievements`
+ *  each rebuilds one and leaves the other alone. */
 const STEPS = [
-  { key: 'collections', script: 'refresh-collections.mjs', args: [REGION], atlas: true },
+  { key: 'collections', script: 'refresh-collections.mjs', args: [REGION, '--only=collections'], atlas: true },
+  { key: 'achievements', script: 'refresh-collections.mjs', args: [REGION, '--only=achievements'] },
   { key: 'armoury', script: 'refresh-armoury-totals.mjs', args: [REGION, REALM, NAME] },
   { key: 'meta', script: 'refresh-achievement-meta.mjs', args: [REGION, '8', ...FRESH] },
   { key: 'points', script: 'refresh-achievement-points.mjs', args: [REGION, ...FRESH] },

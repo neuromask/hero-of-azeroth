@@ -34,24 +34,37 @@
  * are carried through so the endpoint can filter by them.
  *
  * `--only=mounts` (a comma list) rebuilds just those shelves and keeps the rest of the atlas on disk,
- * which is enough when only one source has moved. `--only=achievements` rebuilds just the achievement
- * atlas and leaves the collections one alone.
+ * which is enough when only one source has moved. The group token `collections` names every shelf at
+ * once and `achievements` the achievement atlas, so `--only=collections` and `--only=achievements`
+ * are the two halves `refresh:all` runs - one script, two steps.
  *
- * Usage: npm run refresh:collections [region] [--only=<kinds>]   (default region: eu)
+ * Usage: npm run refresh:collections [region] [--only=<kinds|collections|achievements>]  (default region: eu)
  */
 import fs from 'node:fs'
 
 const REGION = (process.argv.slice(2).find((a) => !a.startsWith('--') && !/^\d+$/.test(a)) || 'eu').toLowerCase()
 /**
  * `--only=mounts` (a comma list) rebuilds just those shelves and keeps the rest of the atlas on
- * disk, so a change to the mounts tree does not mean reading every pet and toy again.
+ * disk, so a change to the mounts tree does not mean reading every pet and toy again. `collections`
+ * is a group token for every shelf at once, and `achievements` names the other atlas - the two
+ * tokens `refresh:all` uses so it can run the two halves as separate steps.
  */
 const ONLY = (process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length) || '')
   .split(',')
   .map((kind) => kind.trim())
   .filter(Boolean)
+
+/** The shelf kinds, read lazily from the shelves themselves, so `collections` never lists them. */
+let shelfKinds = null
+
 /** Whether `kind` is being built, which is everything unless `--only` names a subset. */
-const builds = (kind) => !ONLY.length || ONLY.includes(kind)
+function builds(kind) {
+  if (!ONLY.length) return true
+  if (ONLY.includes(kind)) return true
+  if (!ONLY.includes('collections')) return false
+  if (!shelfKinds) shelfKinds = new Set(SHELVES.map((shelf) => shelf.kind))
+  return shelfKinds.has(kind)
+}
 
 /** A browser-ish user agent: SimpleArmory and Wowhead answer a plain fetch more readily with one. */
 const FETCH_HEADERS = { 'user-agent': 'Mozilla/5.0 (compatible; heroofazeroth.com)' }
@@ -455,8 +468,10 @@ const data = {
   shelves: { ...previous.shelves }
 }
 
+let shelvesBuilt = 0
 for (const shelf of SHELVES) {
   if (!builds(shelf.kind)) continue
+  shelvesBuilt++
 
   const { groups, written } = await buildShelf(shelf)
   data.shelves[shelf.kind] = groups
@@ -466,8 +481,12 @@ for (const shelf of SHELVES) {
   )
 }
 
-fs.writeFileSync(OUT, `${JSON.stringify(data)}\n`)
-console.log(`-> server/utils/collections-data.json (${Math.round(fs.statSync(OUT).size / 1024)} KB)`)
+// An `--only=achievements` run builds no shelf, so the collections atlas on disk is left untouched
+// rather than rewritten with the same shelves and a new date.
+if (shelvesBuilt) {
+  fs.writeFileSync(OUT, `${JSON.stringify(data)}\n`)
+  console.log(`-> server/utils/collections-data.json (${Math.round(fs.statSync(OUT).size / 1024)} KB)`)
+}
 
 if (builds('achievements')) {
   const ACH_OUT = new URL('server/utils/achievements-data.json', ROOT)

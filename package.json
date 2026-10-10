@@ -12,6 +12,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "refresh:achievements": "node scripts/refresh-achievement-points.mjs",
+    "refresh:achievements-atlas": "node scripts/refresh-collections.mjs --only=achievements",
     "refresh:achievement-meta": "node scripts/refresh-achievement-meta.mjs",
     "refresh:armoury-totals": "node scripts/refresh-armoury-totals.mjs",
   "refresh:all": "node scripts/refresh-all.mjs",
