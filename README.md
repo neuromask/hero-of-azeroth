@@ -69,7 +69,10 @@ the size a social network wants, with the character's own render and class artwo
 | --- | --- |
 | `/` | Front door: region switch, realm autocomplete, character name, recent searches |
 | `/region-eu/<realm>/<name>` | Overview: the stat tiles, the render, download / share / refresh |
+| `/region-eu/<realm>/<name>/collections` | Collections summary: a tile per shelf and the running total |
 | `/region-eu/<realm>/<name>/collections/mounts` | A shelf: sections with bars, sources side by side, the three switches, the note |
+| `/region-eu/<realm>/<name>/achievements` | Achievements summary: a tile per category and the running total |
+| `/region-eu/<realm>/<name>/achievements/dungeons` | One achievement category: sections with bars, subcategories side by side, the tile grid |
 | `/region-eu/<realm>/<name>/activity` | The achievement feed with its category filters |
 | `/leaderboard` | The hall of fame: every character the site has looked up, ranked, filtered and searched |
 | `/ru/…` | The very same pages in Russian |
@@ -151,7 +154,8 @@ a second implementation is a second answer.
 | Endpoint | Answers |
 | --- | --- |
 | `/api/character/<region>/<realm>/<name>` | The entire profile the overview draws (`?force=true` re-reads Blizzard) |
-| `/api/collections/<region>/<realm>/<name>?kind=mounts` | One shelf, laid over the character's ids — `kind` is `mounts`, `pets`, `toys` or `decors`, and `?unobtainable=1` / `?upcoming=1` are the two switches |
+| `/api/collections/<region>/<realm>/<name>?kind=mounts` | One shelf, laid over the character's ids — `kind` is `mounts`, `pets`, `toys` or `decors`, and `?unobtainable=1` / `?upcoming=1` are the two switches; without `kind` it answers the summary |
+| `/api/achievements/<region>/<realm>/<name>` | The achievements summary, laid over the character's log (omit `?category=` for the summary, add it for one category's shelf) |
 | `/api/activity/<region>/<realm>/<name>` | The recent-achievement feed |
 | `/api/card/<region>/<realm>/<name>?locale=ru_RU` | The shareable JPEG, 1200×630 |
 | `/api/realms` | The realm list the search box completes from |
@@ -165,10 +169,10 @@ a second implementation is a second answer.
 | `app/pages/index.vue` | The front door and its search |
 | `app/pages/leaderboard.vue` | The hall of fame |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
-| `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
+| `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `activity` |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |

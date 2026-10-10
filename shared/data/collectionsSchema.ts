@@ -461,3 +461,24 @@ export interface CollectionPage {
   /** When the shelf was assembled, so a caller can tell a fresh copy from a revalidated one. */
   generatedAt: number
 }
+
+/** One shelf on the summary page: its own count and the share of it the character holds. */
+export interface CollectionShelfSummary {
+  kind: CollectionKind
+  collected: number
+  total: number
+  percent: number
+}
+
+/** The whole collections log of a character, summarised: the total and a row per shelf. */
+export interface CollectionSummary {
+  /** How many items the character holds, across every shelf. */
+  collected: number
+  /** How many it could hold, across every shelf, under the same filtering as a shelf. */
+  total: number
+  percent: number
+  /** The shelves, in the order the collections menu lists them. */
+  shelves: CollectionShelfSummary[]
+  /** When the summary was assembled, so a caller can tell a fresh copy from a revalidated one. */
+  generatedAt: number
+}

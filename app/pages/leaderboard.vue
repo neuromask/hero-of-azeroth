@@ -142,6 +142,8 @@ const activityUrl = computed(() => localeUrl(current.value ? `${characterPath.va
 
 /** The collections subtree of that character, which the menu's entries hang from. */
 const collectionsPath = computed(() => `${characterPath.value}/collections`)
+/** The achievements subtree of that character, which the menu's entries hang from. */
+const achievementsPath = computed(() => `${characterPath.value}/achievements`)
 
 // The history lives in the browser and the server has none, so it is read once the page is mounted:
 // the first render carries the front-door fallback and the tabs take their real addresses a moment
@@ -179,6 +181,11 @@ onMounted(loadHistory)
 
       <CollectionMenu v-if="current" :path="collectionsPath" :active="false" />
       <NuxtLink v-else :to="localeUrl('/')" class="hoa-tab hoa-liquid-glass">{{ t('tabCollections') }}</NuxtLink>
+
+      <!-- The achievements are the same pair - the summary tab and the categories menu - right after
+           the collections, so a reader who came from a character has the whole log a click away. -->
+      <AchievementMenu v-if="current" :path="achievementsPath" :active="false" />
+      <NuxtLink v-else :to="localeUrl('/')" class="hoa-tab hoa-liquid-glass">{{ t('tabAchievements') }}</NuxtLink>
 
       <NuxtLink :to="activityUrl" class="hoa-tab hoa-liquid-glass">{{ t('tabActivity') }}</NuxtLink>
 

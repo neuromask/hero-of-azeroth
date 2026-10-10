@@ -42,11 +42,14 @@ const apiLocale = computed(() => (locale.value === 'ru' ? 'ru_RU' : 'en_US'))
  */
 const overviewPath = computed(() => `/${regionPath(region)}/${realm}/${name}`)
 const activityPath = computed(() => `${overviewPath.value}/activity`)
-/** The collections subtree, which opens on the mounts shelf (see the `collections/` folder). */
+/** The collections subtree, which opens on the summary (see the `collections/` folder). */
 const collectionsPath = computed(() => `${overviewPath.value}/collections`)
+/** The achievements subtree, which opens on the summary (see the `achievements/` folder). */
+const achievementsPath = computed(() => `${overviewPath.value}/achievements`)
 /** The view the address names, which is what the tabs are lit by. */
 const onActivityTab = computed(() => /\/activity\/?$/.test(route.path))
 const onCollectionsTab = computed(() => /\/collections(?:\/|$)/.test(route.path))
+const onAchievementsTab = computed(() => /\/achievements(?:\/|$)/.test(route.path))
 /** Whether `kind` is the shelf being read, which is the entry the collections menu lights. */
 const onShelf = (kind: string) => new RegExp(`/collections/${kind}/?$`).test(route.path)
 
@@ -864,16 +867,19 @@ onBeforeUnmount(() => {
             <NuxtLink
               :to="localeUrl(overviewPath)"
               class="hoa-tab hoa-liquid-glass"
-              :class="{ 'hoa-tab-active': !onActivityTab && !onCollectionsTab }"
-              :aria-current="!onActivityTab && !onCollectionsTab ? 'page' : undefined"
+              :class="{ 'hoa-tab-active': !onActivityTab && !onCollectionsTab && !onAchievementsTab }"
+              :aria-current="!onActivityTab && !onCollectionsTab && !onAchievementsTab ? 'page' : undefined"
             >
               {{ $t('tabOverview') }}
             </NuxtLink>
-            <!-- The collections are three shelves - mounts, pets, toys - and the menu that chooses
-                 between them is part of this navigation rather than a row of tabs on the page
+            <!-- The collections are four shelves - mounts, pets, toys, decor - and the menu that
+                 chooses between them is part of this navigation rather than a row of tabs on the page
                  (`app/components/CollectionMenu.vue`). It stands where a reader looks for it: right
                  after the profile. -->
             <CollectionMenu :path="collectionsPath" :active="onCollectionsTab" />
+            <!-- The achievements are fifteen categories, chosen the same way: the menu is part of this
+                 navigation (`app/components/AchievementMenu.vue`), right after the collections. -->
+            <AchievementMenu :path="achievementsPath" :active="onAchievementsTab" />
             <NuxtLink
               :to="localeUrl(activityPath)"
               class="hoa-tab hoa-liquid-glass"

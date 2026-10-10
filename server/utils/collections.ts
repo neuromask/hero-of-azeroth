@@ -17,6 +17,7 @@ import {
   type CollectionPage,
   type CollectionSection,
   type CollectionSubgroup,
+  type CollectionSummary,
   type CollectionViewOptions
 } from '#shared/data/collectionsSchema'
 import atlas from './collections-data.json'
@@ -159,6 +160,28 @@ function shelfLabel(english: string, russian: boolean): string {
 const FACTION_SIDE: Record<string, 'A' | 'H'> = { ALLIANCE: 'A', HORDE: 'H' }
 
 /**
+ * Whether one atlas row is drawn for a character under `view`: the whole of a shelf's filtering in one
+ * place, so a shelf and the summary can never disagree about what a number counts.
+ *
+ * A row the file marks for the other faction is dropped, a row the site draws in a spotlight of its
+ * own is dropped, an item the game has not shipped is drawn only for a visitor who asked for the
+ * upcoming stock, and a retired item only for a character who holds it - or for a visitor who asked
+ * for the hidden ones, and the item is not one the game has still to ship.
+ */
+function kept(
+  entry: AtlasItem,
+  collected: Set<number>,
+  side: 'A' | 'H' | null,
+  view: CollectionViewOptions
+): boolean {
+  if (entry.side && side && entry.side !== side) return false
+  if (entry.highlighted) return false
+  if (entry.new && !view.upcoming) return false
+  if (!collected.has(entry.id) && entry.notObtainable && !(view.unobtainable && !entry.notReleased)) return false
+  return true
+}
+
+/**
  * Turns a run of atlas rows into tiles, dropping the ones SimpleArmory's own shelf would not draw, so
  * that a character's numbers read the same here as they do there.
  *
@@ -189,13 +212,9 @@ function toItems(
   const items: CollectionItem[] = []
 
   for (const entry of entries) {
-    if (entry.side && side && entry.side !== side) continue
-    if (entry.highlighted) continue
-    if (entry.new && !view.upcoming) continue
+    if (!kept(entry, collected, side, view)) continue
 
     const held = collected.has(entry.id)
-    if (!held && entry.notObtainable && !(view.unobtainable && !entry.notReleased)) continue
-
     const name = (russian ? entry.ru || entry.en : entry.en || entry.ru).trim()
     if (!name) continue
 
@@ -315,6 +334,86 @@ export function buildCollectionPage(
     total: totalInAll,
     percent: totalInAll ? Math.round((collectedInAll / totalInAll) * 100) : 0,
     sections,
+    generatedAt: Date.now()
+  }
+}
+
+/**
+ * The count of one shelf, without building its tiles: what a summary card reads. It walks the same
+ * rows the shelf would and drops the same ones (`kept`), so the two numbers are always the same
+ * number - a row the site lists twice is left out of both, exactly as `heldCount`/`countedTotal` do
+ * for a built shelf.
+ */
+function countShelf(
+  kind: CollectionKind,
+  collected: Set<number>,
+  side: 'A' | 'H' | null,
+  view: CollectionViewOptions
+): { collected: number; total: number } {
+  let held = 0
+  let total = 0
+
+  for (const group of SHELVES[kind] || []) {
+    for (const source of group.subs) {
+      for (const entry of source.items) {
+        if (!kept(entry, collected, side, view)) continue
+        if (entry.dupe || entry.bounty) continue
+        total++
+        if (collected.has(entry.id)) held++
+      }
+    }
+  }
+
+  return { collected: held, total }
+}
+
+/** The ids the character holds on every shelf, read in one pass - what a summary stands on. */
+export async function getCollectedByKind(
+  region: string,
+  realm: string,
+  name: string,
+  locale: string
+): Promise<Record<CollectionKind, Set<number>>> {
+  const sets = await Promise.all(
+    COLLECTION_KINDS.map((kind) => getCollectedIds(region, realm, name, kind, locale))
+  )
+
+  return Object.fromEntries(COLLECTION_KINDS.map((kind, index) => [kind, sets[index]])) as Record<
+    CollectionKind,
+    Set<number>
+  >
+}
+
+/**
+ * Assembles the summary page: the running total over every shelf and a row per shelf, in the order
+ * the menu lists them, under the default view (the retired and upcoming items hidden, as a shelf
+ * opens). `faction` keeps the other side's items out of the count, exactly as it does on a shelf.
+ */
+export function buildCollectionSummary(
+  locale: string,
+  collectedByKind: Record<CollectionKind, Set<number>>,
+  faction?: string | null
+): CollectionSummary {
+  const side = FACTION_SIDE[String(faction || '').toUpperCase()] || null
+
+  const shelves = COLLECTION_KINDS.map((kind) => {
+    const count = countShelf(kind, collectedByKind[kind], side, {})
+    return {
+      kind,
+      collected: count.collected,
+      total: count.total,
+      percent: count.total ? Math.round((count.collected / count.total) * 100) : 0
+    }
+  })
+
+  const held = shelves.reduce((sum, shelf) => sum + shelf.collected, 0)
+  const total = shelves.reduce((sum, shelf) => sum + shelf.total, 0)
+
+  return {
+    collected: held,
+    total,
+    percent: total ? Math.round((held / total) * 100) : 0,
+    shelves,
     generatedAt: Date.now()
   }
 }

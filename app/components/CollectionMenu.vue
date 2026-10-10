@@ -3,15 +3,18 @@
 import { COLLECTION_KINDS } from '#shared/data/collectionsSchema'
 
 /**
- * The Collections entry of a character's navigation: the button that opens the three shelves, and the
- * menu under it.
+ * The Collections entry of a character's navigation: the tab that opens the summary, and the menu of
+ * the shelves beside it.
  *
- * The menu is what chooses between mounts, pets and toys - the shelf pages carry no navigation of
- * their own - and it opens on a click, and closes on the next one, on a click anywhere outside it, on
- * Escape, and as soon as a shelf is picked. It is a button rather than a link because the tab opens a
- * menu instead of going anywhere; the entries are links of their own, so each shelf keeps an address
- * that can be shared and crawled, and the panel is hidden with `invisible` rather than left out of
- * the document, so those addresses are in the markup the server sends even while it is shut.
+ * The section has a root of its own - the summary that draws every shelf as a tile - so the tab is a
+ * link and goes there, which is what a reader expects of a tab. The shelves hang off a caret next to
+ * it: the summary first, the four shelves a click away. The caret opens on a click, and closes on the
+ * next one, on a click anywhere outside the pair, on Escape, and as soon as a shelf is picked, so the
+ * two menus of the character's navigation - this one and the achievements' - read alike.
+ *
+ * The entries are links of their own, so each shelf keeps an address that can be shared and crawled,
+ * and the pane is hidden with `invisible` rather than left out of the document, so those addresses
+ * are in the markup the server sends even while it is shut.
  */
 const props = defineProps<{
   /** The collections subtree of this character, which the entries hang from. */
@@ -23,10 +26,13 @@ const props = defineProps<{
 const localeUrl = useLocaleUrl()
 const route = useRoute()
 
-/** Whether the menu is open, which a click on the tab toggles and the next click takes back. */
+/** Whether the menu is open, which a click on the caret toggles and the next click takes back. */
 const open = ref(false)
-/** The tab and its menu, which is what a click has to land outside of to shut it. */
+/** The tab, the caret and the menu, which is what a click has to land outside of to shut it. */
 const root = ref<HTMLElement | null>(null)
+
+/** Whether the summary is what is being read, which is the tab the link lights. */
+const onSummary = computed(() => /\/collections\/?$/.test(route.path))
 
 /** Whether `kind` is the shelf being read, which is the entry the menu lights. */
 function onShelf(kind: string): boolean {
@@ -61,19 +67,30 @@ watch(
 </script>
 
 <template>
-  <div ref="root" class="relative">
+  <div ref="root" class="relative flex items-stretch">
+    <!-- The tab itself opens the summary. -->
+    <NuxtLink
+      :to="localeUrl(props.path)"
+      class="hoa-tab hoa-liquid-glass rounded-r-none"
+      :class="{ 'hoa-tab-active': onSummary }"
+      :aria-current="onSummary ? 'page' : undefined"
+    >
+      {{ $t('tabCollections') }}
+    </NuxtLink>
+
+    <!-- The caret opens the shelves. It is a button rather than a link because it opens a menu
+         instead of going anywhere, and it is drawn against the tab (`-ml-px` merges the shared rim)
+         so the two read as one control. The arrow is the chevron the Download button and the legend
+         under a shelf wear, so the controls that open a tray read alike. -->
     <button
       type="button"
-      class="hoa-tab hoa-liquid-glass"
+      class="hoa-tab hoa-liquid-glass -ml-px rounded-l-none px-2"
       :class="{ 'hoa-tab-active': props.active || open }"
       aria-haspopup="true"
       :aria-expanded="open"
+      :aria-label="$t('collectionsCategoriesMenu')"
       @click="open = !open"
     >
-      {{ $t('tabCollections') }}
-      <!-- The arrow is the chevron the Download button and the legend under a shelf wear, so the
-           three controls that open a tray read alike. It is drawn in `currentColor`, which is what
-           warms it with the tab: the tab is lit gold while the menu is open, and the arrow with it. -->
       <svg
         class="h-4 w-4 shrink-0 transition-transform duration-200"
         :class="open ? 'rotate-180' : ''"
@@ -85,9 +102,9 @@ watch(
       </svg>
     </button>
 
-    <!-- Shut, the panel is invisible but still in the document: the three shelves are addresses a
-         crawler should find, and they are read from the markup rather than from a script. The pane is
-         the site's own menu glass (`.hoa-pop`), the one every menu, picker and legend on the site is
+    <!-- Shut, the panel is invisible but still in the document: the shelves are addresses a crawler
+         should find, and they are read from the markup rather than from a script. The pane is the
+         site's own menu glass (`.hoa-pop`), the one every menu, picker and legend on the site is
          drawn in. The row the tab stands in is not a frosted block of its own - the header panel ends
          above it - so the pane keeps the page as its backdrop and blur is drawn against the page it
          hangs over. -->

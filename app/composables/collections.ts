@@ -7,7 +7,7 @@
  * that switch describes (`?unobtainable=1`, `?upcoming=1`), so the numbers change with the request
  * rather than being filtered here.
  */
-import type { CollectionKind, CollectionPage, CollectionViewOptions } from '#shared/data/collectionsSchema'
+import type { CollectionKind, CollectionPage, CollectionSummary, CollectionViewOptions } from '#shared/data/collectionsSchema'
 import { useCharacterView } from './characterView'
 
 export function useCollection(kind: () => CollectionKind, view: Ref<CollectionViewOptions>) {
@@ -32,6 +32,24 @@ export function useCollection(kind: () => CollectionKind, view: Ref<CollectionVi
     {
       default: () => null,
       watch: [() => kind(), apiLocale, () => flags.value.unobtainable, () => flags.value.upcoming]
+    }
+  )
+}
+
+/**
+ * The root page's read: every shelf at once, summarised. It asks the same endpoint as a shelf and
+ * simply leaves the `kind` off, so the one endpoint answers both shapes and the server decides from
+ * the request rather than the client naming two addresses.
+ */
+export function useCollectionSummary() {
+  const { region, realm, name, apiLocale } = useCharacterView()
+
+  return useAsyncData<CollectionSummary | null>(
+    () => `collections:summary:${region}:${realm}:${name}:${apiLocale.value}`,
+    () => $fetch<CollectionSummary>(`/api/collections/${region}/${realm}/${name}?locale=${apiLocale.value}`),
+    {
+      default: () => null,
+      watch: [apiLocale]
     }
   )
 }

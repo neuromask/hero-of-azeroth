@@ -27,8 +27,15 @@
  * back to where a file carries one language or none. What a character holds is read per request, by
  * the server, and matched against the ids stored here.
  *
+ * The Achievements atlas is built in the same pass, from SimpleArmory's `achievements.json` - see
+ * `buildAchievements` below and `server/utils/achievements-data.json`. It follows the same rule as a
+ * shelf: SimpleArmory's own tree (a `supercat`, the `cats` under it and the `subcats` under those) is
+ * stored as it stands, and the marks that decide what one character sees - `side` and `notObtainable` -
+ * are carried through so the endpoint can filter by them.
+ *
  * `--only=mounts` (a comma list) rebuilds just those shelves and keeps the rest of the atlas on disk,
- * which is enough when only one source has moved.
+ * which is enough when only one source has moved. `--only=achievements` rebuilds just the achievement
+ * atlas and leaves the collections one alone.
  *
  * Usage: npm run refresh:collections [region] [--only=<kinds>]   (default region: eu)
  */
@@ -312,6 +319,134 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
   return { groups: tree.finish(), written }
 }
 
+/**
+ * The achievement shelves, keyed by the slug the site's addresses use (`/…/achievements/character`).
+ *
+ * SimpleArmory names its top level after the subject a group of achievements is about - `Characters`,
+ * `Player vs. Player`, `Dungeons & Raids` - where the collections files name an expansion or an event.
+ * The slugs below are the ones the site serves, so the mapping is written down rather than derived:
+ * a name that is renamed upstream keeps its address, and a supercat the site has not seen yet is
+ * given a slug of its own rather than dropped.
+ */
+const ACHIEVEMENT_SLUGS = {
+  Characters: 'character',
+  Quests: 'quests',
+  Exploration: 'exploration',
+  Housing: 'housing',
+  Delves: 'delves',
+  'Player vs. Player': 'pvp',
+  'Dungeons & Raids': 'dungeons',
+  Professions: 'professions',
+  Reputation: 'reputation',
+  'World Events': 'events',
+  'Pet Battles': 'pets',
+  Collections: 'collections',
+  'Expansion Features': 'expansions',
+  'Feats of Strength': 'feats',
+  Legacy: 'legacy'
+}
+
+/**
+ * A map of English heading to its Russian spelling, read off Blizzard's own achievement-category
+ * index: SimpleArmory files its `cats` and `subcats` under the very names Blizzard uses (`Cataclysm
+ * Raid`, `Warsong Gulch`, `Ulduar`), so a category the index names is translated here rather than in
+ * a hand-kept list. A heading the index has not got - a boss, a zone, a vendor - is left empty here
+ * and falls back to SimpleArmory's English when a page is read (see `achievementLabel`).
+ */
+async function achievementCategoryNames() {
+  const [en, ru] = await Promise.all([
+    api(`https://${REGION}.api.blizzard.com/data/wow/achievement-category/index?${ns}&locale=en_US`),
+    api(`https://${REGION}.api.blizzard.com/data/wow/achievement-category/index?${ns}&locale=ru_RU`)
+  ])
+
+  const localized = new Map((ru?.categories || []).map((category) => [category.id, category.name]))
+  const names = new Map()
+  for (const category of en?.categories || []) {
+    const translated = localized.get(category.id)
+    if (category?.name && translated) names.set(category.name, translated)
+  }
+  return names
+}
+
+/**
+ * One achievement shelf, read from SimpleArmory's `achievements.json` and named by Blizzard.
+ *
+ * The tree is stored as the file writes it - a supercat, the `cats` under it and the `subcats` under
+ * those (see `server/utils/achievementCollections.ts`) - with three things filled in per row:
+ *
+ *   - **the name in both languages.** SimpleArmory carries English only, so an achievement's name is
+ *     looked up in Blizzard's static index (one call per language for all nine thousand), and a
+ *     `cat`/`subcat` heading is translated by the category index where it can be.
+ *   - **the marks a character's view is decided by.** `side` (`'A'` or `'H'`) is kept for an
+ *     achievement only one faction can earn, and `notObtainable` for one the game has retired;
+ *     everything else in the file is a presentation mark the site does not draw by.
+ *   - **its icon name**, lower-cased, because ZamImg serves a sprite by name and is case-sensitive.
+ *
+ * The rows are stored in the order the file lists them, ids and all, because a character's progress
+ * over a category is counted as the file counts it.
+ */
+async function buildAchievements() {
+  const text = await fetchText(`${SIMPLEARMORY}/achievements.json`)
+  if (!text) throw new Error("SimpleArmory's achievements.json could not be read")
+
+  const [enIndex, ruIndex, labels, source] = await Promise.all([
+    api(`https://${REGION}.api.blizzard.com/data/wow/achievement/index?${ns}&locale=en_US`),
+    api(`https://${REGION}.api.blizzard.com/data/wow/achievement/index?${ns}&locale=ru_RU`),
+    achievementCategoryNames(),
+    Promise.resolve(JSON.parse(text))
+  ])
+
+  const enNames = new Map((enIndex?.achievements || []).map((entry) => [entry.id, entry.name]))
+  const ruNames = new Map((ruIndex?.achievements || []).map((entry) => [entry.id, entry.name]))
+
+  const categories = {}
+  let written = 0
+
+  for (const [index, supercat] of (source.supercats || []).entries()) {
+    const slugName = ACHIEVEMENT_SLUGS[supercat.name] || slug(supercat.name) || `group-${index}`
+    const sections = []
+
+    for (const [ci, cat] of (supercat.cats || []).entries()) {
+      const subs = []
+
+      for (const [si, sub] of (cat.subcats || []).entries()) {
+        const items = []
+
+        for (const item of sub.items || []) {
+          const id = Number(item.id)
+          if (!Number.isFinite(id)) continue
+
+          const row = {
+            id,
+            en: enNames.get(id) || item.title || '',
+            ru: ruNames.get(id) || item.title || '',
+            icon: iconName(item.icon),
+            points: typeof item.points === 'number' ? item.points : 0,
+            wow: { t: 'achievement', id }
+          }
+          if (item.side === 'A' || item.side === 'H') row.side = item.side
+          if (item.notObtainable) row.notObtainable = true
+
+          items.push(row)
+          written++
+        }
+
+        if (!items.length) continue
+        const name = sub.name || ''
+        subs.push({ id: `${slugName}-${ci}-${si}`, en: name, ru: labels.get(name) || '', items })
+      }
+
+      if (!subs.length) continue
+      const name = cat.name || ''
+      sections.push({ id: `${slugName}-${ci}`, en: name, ru: labels.get(name) || '', subs })
+    }
+
+    if (sections.length) categories[slugName] = sections
+  }
+
+  return { categories, written }
+}
+
 const data = {
   region: REGION,
   computedAt: new Date().toISOString().slice(0, 10),
@@ -333,5 +468,20 @@ for (const shelf of SHELVES) {
 
 fs.writeFileSync(OUT, `${JSON.stringify(data)}\n`)
 console.log(`-> server/utils/collections-data.json (${Math.round(fs.statSync(OUT).size / 1024)} KB)`)
+
+if (builds('achievements')) {
+  const ACH_OUT = new URL('server/utils/achievements-data.json', ROOT)
+  const { categories, written } = await buildAchievements()
+  const slugs = Object.keys(categories)
+  const sections = slugs.reduce((n, name) => n + categories[name].length, 0)
+
+  fs.writeFileSync(
+    ACH_OUT,
+    `${JSON.stringify({ region: REGION, computedAt: data.computedAt, achievements: written, categories })}\n`
+  )
+
+  console.log(`achievements: ${written} written, ${slugs.length} categories (${sections} sections)`)
+  console.log(`-> server/utils/achievements-data.json (${Math.round(fs.statSync(ACH_OUT).size / 1024)} KB)`)
+}
 
 

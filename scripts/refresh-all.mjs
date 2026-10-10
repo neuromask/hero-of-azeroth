@@ -13,6 +13,7 @@
  * Usage: npm run refresh:all [region] [realm] [name] [--only=a,b] [--no-fresh] [--dry-run]
  *
  *   --only       run just these steps: collections, armoury, meta, points, reputations
+ *                (the collections step also rebuilds the achievements atlas)
  *   --no-fresh   keep the throw-away caches of the achievement and reputation walks (a quick pass)
  *   --dry-run    print the commands and run nothing
  */
