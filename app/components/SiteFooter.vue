@@ -71,13 +71,11 @@ const QUIET = 'text-gray-500'
     <span
       class="hoa-panel hoa-panel-interactive border flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 rounded-full px-4 py-2 text-gray-400"
     >
-      <a :href="SITE" :class="LINK">heroofazeroth.com</a>
+      <a :href="SITE" :class="LINK">heroofazeroth.com</a><span :class="QUIET">&copy; {{ new Date().getFullYear() }}</span>
       <span :class="QUIET" aria-hidden="true">&middot;</span>
       <a :href="REPOSITORY" :class="LINK" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub</a>
       <span :class="QUIET" aria-hidden="true">&middot;</span>
       <span>crafted by <a :href="TELEGRAM" target="_blank" rel="noopener noreferrer" title="Telegram" :class="LINK">neuromask</a></span>
-      <span :class="QUIET" aria-hidden="true">&middot;</span>
-      <span :class="QUIET">&copy; {{ new Date().getFullYear() }}</span>
     </span>
   </div>
 </template>
