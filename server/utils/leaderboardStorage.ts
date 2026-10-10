@@ -32,6 +32,9 @@ import { join, resolve } from 'node:path'
 import { calculatePlayerScore, totalCollectables, SCORE_VERSION } from '#shared/utils/leaderboardScore'
 // The index the sitemap is built from: the same characters, and what the backfill starts from.
 import { readCharacterIndex } from './characterIndex'
+// The one rule the table learns from the site's accounts: a character an account kept to itself
+// does not belong here, and only a main does (see `./leaderboardExclusions`).
+import { excludedLeaderboardKeys, leaderboardKey } from './leaderboardExclusions'
 import type {
   LeaderboardFaction,
   LeaderboardLeader,
@@ -417,6 +420,11 @@ let writes: Promise<void> = Promise.resolve()
 export function upsertPlayer(profile: PlayerProfileInput): Promise<void> {
   writes = writes.then(async () => {
     try {
+      // A character an account kept to itself never enters the public table (see
+      // `./leaderboardExclusions`); its main is not excluded, so naming one is what puts an
+      // account's character here at all.
+      if (excludedLeaderboardKeys().has(leaderboardKey(profile.region, profile.realm, profile.name))) return
+
       const file = await readTable()
       const key = identity(profile)
       const previous = file.players.find((entry) => identity(entry) === key)
@@ -546,6 +554,21 @@ function byRating(a: LeaderboardPlayer, b: LeaderboardPlayer): number {
 }
 
 /** Whether a player survives the filters a caller asked for. */
+/**
+ * The players the public table may draw: everybody the site knows, minus the characters an
+ * account kept to itself.
+ *
+ * The exclusion is read from SQLite through a minute-long memo (`./leaderboardExclusions`), so a
+ * burst of page reads pays one query for a fact that almost never moves.
+ */
+function visiblePlayers(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
+  const excluded = excludedLeaderboardKeys()
+  if (!excluded.size) return players
+
+  return players.filter((player) => !excluded.has(leaderboardKey(player.region, player.realm, player.name)))
+}
+
+/** Whether a player survives the filters a caller asked for. */
 function matches(player: LeaderboardPlayer, query: LeaderboardQuery): boolean {
   if (query.faction && query.faction !== 'all' && player.faction !== query.faction) return false
   if (query.realm && player.realm !== query.realm.toLowerCase()) return false
@@ -577,7 +600,7 @@ export async function getLeaderboard(query: LeaderboardQuery = {}): Promise<Lead
   const asked = Math.max(1, Math.floor(query.page || 1))
 
   // `filter` copies, so the snapshot's own array is never reordered by a reader.
-  const players = file.players
+  const players = visiblePlayers(file.players)
     .filter((player) => matches(player, query))
     .sort((a, b) => compare(a, b, sort))
 
@@ -615,11 +638,12 @@ export async function getLeaderboardStanding(
   const file = await readTable()
   const key = identity(character)
 
-  const player = file.players.find((entry) => identity(entry) === key)
+  const visible = visiblePlayers(file.players)
+  const player = visible.find((entry) => identity(entry) === key)
   if (!player) return null
 
   // `sort` copies, so the snapshot's own array is left in the order the writes put it in.
-  const ranked = file.players.slice().sort((a, b) => compare(a, b, 'total'))
+  const ranked = visible.slice().sort((a, b) => compare(a, b, 'total'))
 
   return {
     player,
@@ -643,7 +667,7 @@ export async function getGlobalStats(): Promise<LeaderboardStats> {
   if (statsMemo) return statsMemo
 
   const file = await readTable()
-  statsMemo = computeStats(file.players)
+  statsMemo = computeStats(visiblePlayers(file.players))
 
   return statsMemo
 }

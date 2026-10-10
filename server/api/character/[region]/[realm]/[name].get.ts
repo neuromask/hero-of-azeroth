@@ -44,6 +44,12 @@ export default defineEventHandler(async (event) => {
     // updates - and that second update is what fills in a record the sitemap's thinner index could
     // only write half of. Both writes are skipped when the record already says everything this
     // profile does, so a reader who opens a page the table already knows costs the disk nothing.
+    // The collection figures are the account's, not this character's: a character whose account has
+    // synced is answered with the account's pool, while a stranger's lookup finds no pool and keeps
+    // Blizzard's own per-character numbers (`server/utils/accountPool`). It is applied before the
+    // feed below, so the row the site stores is the one a reader was shown.
+    overlayPool(character, region, realm, name)
+
     await feedProfile({ region, realm, name, profile: character })
 
     return character

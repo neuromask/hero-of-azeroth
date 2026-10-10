@@ -864,7 +864,7 @@ onBeforeUnmount(() => {
                of everybody keeps the bar, the tabs and the language pair exactly where they are, so
                the two pages read as one site rather than two. The fade behind the row lets the cards
                below dissolve into the bar rather than poke at its edge. -->
-          <div class="relative flex flex-wrap gap-2">
+          <div class="relative flex flex-wrap items-center gap-2">
             <NuxtLink
               :to="localeUrl(overviewPath)"
               class="hoa-tab hoa-liquid-glass"
@@ -906,8 +906,9 @@ onBeforeUnmount(() => {
             <CharacterSearchDialog />
             <!-- The languages sit at the far end of the row the tabs are on: a reader looks for the
                  switch where the navigation is, and the pair travels with the header as it is pinned
-                 to the top of the window. -->
+                 to the top of the window. The account plate stands to their right, as everywhere. -->
             <LocaleSwitch class="ml-auto" />
+            <AuthMenu />
           </div>
         </nav>
       </header>

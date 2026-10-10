@@ -121,11 +121,30 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- The languages are the pair every page carries, so the switch a reader learns on the
-             character page is the one they meet here (`app/components/LocaleSwitch.vue`). -->
-        <LocaleSwitch />
+             character page is the one they meet here (`app/components/LocaleSwitch.vue`). The account
+             plate no longer stands beside it: it has gone down to the foot of the card, under the
+             search's own button (see below). -->
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <LocaleSwitch />
+        </div>
       </div>
 
       <CharacterSearchForm />
+
+      <!-- And under the search's own button, behind a hairline, the second way into the same page:
+           bringing an account of one's own instead of looking somebody else's up. It stands second
+           because the search is what this page is for, and the divider says as much without a
+           sentence - a gold hairline that fades out at both ends, so it reads as a seam in the card
+           rather than as a rule cutting it in two. -->
+      <div class="mt-6 flex items-center gap-3" aria-hidden="true">
+        <span class="h-px flex-1 bg-gradient-to-r from-transparent to-wow-gold/40" />
+        <span class="text-[10px] uppercase tracking-[0.2em] text-white">{{ $t('or') }}</span>
+        <span class="h-px flex-1 bg-gradient-to-l from-transparent to-wow-gold/40" />
+      </div>
+
+      <div class="mt-4 flex justify-center">
+        <AuthMenu />
+      </div>
     </div>
 
     <!-- The sign-off, drawn by the same component every page carries, so the two pages sign off

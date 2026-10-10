@@ -10,8 +10,10 @@
  * and a link is what changes it. It also means a crawler reads the pair, and the header switches
  * with no JavaScript at all.
  *
- * The plates are the ones the card on the front page wears, so the control reads the same wherever
- * a reader meets it: the language being read is the one warmed with the brand gold.
+ * The plates are the bar's own control (`hoa-plate`, written once for the whole corner in
+ * `app/assets/css/main.css`), so the pair is the same box, rim and glow as the account plate they
+ * travel beside: the language being read warms that box with the brand gold (`hoa-plate-gold`), and
+ * the one not being read is the neutral glass the way out wears.
  */
 import { SUPPORTED_LOCALES, type AppLocale } from '~/composables/lang'
 
@@ -34,8 +36,8 @@ const NAMES: Record<AppLocale, string> = { en: 'English', ru: 'Русский' }
       :hreflang="code"
       :title="NAMES[code]"
       :aria-current="code === locale ? 'true' : undefined"
-      class="inline-flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs font-semibold leading-none transition-all"
-      :class="code === locale ? 'border-wow-gold bg-wow-gold/10' : 'border-white/10 bg-black/40 opacity-60 hover:opacity-100'"
+      class="hoa-plate"
+      :class="code === locale ? 'hoa-plate-gold' : ''"
     >{{ code.toUpperCase() }}</a>
   </div>
 </template>

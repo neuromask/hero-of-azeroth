@@ -2,6 +2,9 @@ import { Resvg } from '@resvg/resvg-js'
 import type { ResvgRenderOptions } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
 import { mPlusQualityHex, wowQualityHex } from '#shared/utils/wow-quality'
+// The overall rating, off the same formula the hall of fame ranks by, so the card and the table can
+// never disagree about what a character is worth.
+import { calculatePlayerScore } from '#shared/utils/leaderboardScore'
 // The one rule for how a figure is written on the site, shared with the pages the card previews.
 import { formatNumber } from '#shared/utils/formatNumber'
 // The class colours are shared with the page and the search history, so a card, a page and a
@@ -70,6 +73,7 @@ const LABELS: Record<string, Record<string, string>> = {
     toys: 'Игрушки',
     decor: 'Декор',
     reputations: 'Репутации',
+    score: 'Счёт',
     level: 'Ур.'
   },
   en_US: {
@@ -81,6 +85,7 @@ const LABELS: Record<string, Record<string, string>> = {
     toys: 'Toys',
     decor: 'Decor',
     reputations: 'Reputations',
+    score: 'Overall',
     level: 'Lv.'
   }
 }
@@ -762,7 +767,7 @@ const FOOTER_TOP = CARD_HEIGHT - FOOTER_BOTTOM_PAD - FOOTER_HEIGHT
  * of a figure's label and of its number, off the top edge of its plate, and a plate is taller than
  * that pair needs: a figure sits at the top of its plate and the plate runs on below it.
  */
-const PLATES_COLUMNS = 2
+const PLATES_COLUMNS = 3
 const PLATES_GAP = 16
 const PLATE_WIDTH = (COLUMN_WIDTH - (PLATES_COLUMNS - 1) * PLATES_GAP) / PLATES_COLUMNS
 const PLATES_HEIGHT = 84
@@ -1099,12 +1104,25 @@ async function buildCardSvg(
   }
 
   /**
-   * Both figures are set at the same size - the largest one that fits either plate - because a
-   * pair of numbers set at two sizes reads as an accident.
+   * The character's overall rating, off the same formula the hall of fame ranks by - so the card's
+   * figure and the table's column are one number, read from the same collections.
+   */
+  const score = calculatePlayerScore({
+    achievements: data.stats.achievements.count,
+    mounts: data.stats.mounts.count,
+    toys: data.stats.toys.count,
+    decor: data.stats.decor.count,
+    pets: data.stats.pets.count
+  })
+
+  /**
+   * The three figures are set at the same size - the largest one that fits any plate - because
+   * numbers set at two sizes read as an accident.
    */
   const statSize = STATS_NUMBER_SIZES.find(size =>
     statWidth('item-level', formatNumber(data.ilvl), size) <= PLATE_WIDTH - 24
     && statWidth('key', formatNumber(data.mPlusScore), size) <= PLATE_WIDTH - 24
+    && statWidth('trophy', formatNumber(score), size) <= PLATE_WIDTH - 24
   ) || STATS_NUMBER_SIZES[STATS_NUMBER_SIZES.length - 1]
 
   /**
@@ -1190,8 +1208,9 @@ async function buildCardSvg(
   <!-- The two headline figures, strictly under the grid: the item level is a plain white number,
        with no ladder to be read against, and the rating wears the tier its band has reached, off
        the same bands the page colours it with. -->
-  ${plateSvg('item-level', L.itemLevel, formatNumber(data.ilvl), '#ffffff', 0, statSize)}
-  ${plateSvg('key', L.mPlus, formatNumber(data.mPlusScore), mPlusQualityHex(data.mPlusScore), 1, statSize)}
+  ${plateSvg('trophy', L.score, formatNumber(score), '#f8b700', 0, statSize)}
+  ${plateSvg('item-level', L.itemLevel, formatNumber(data.ilvl), '#ffffff', 1, statSize)}
+  ${plateSvg('key', L.mPlus, formatNumber(data.mPlusScore), mPlusQualityHex(data.mPlusScore), 2, statSize)}
 
   <rect x="${COLUMN_X}" y="${FOOTER_TOP}" width="${COLUMN_WIDTH}" height="${FOOTER_HEIGHT}" rx="10" fill="#05070b" fill-opacity="0.6"/>
   <text x="${COLUMN_X + 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="#94a3b8">heroofazeroth.com</text>

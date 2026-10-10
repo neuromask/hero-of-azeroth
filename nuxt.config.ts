@@ -18,6 +18,16 @@ const GTM_ID = process.env.NUXT_PUBLIC_GTM_ID || 'GTM-WXMVB755'
 const PORT = 3100
 
 /**
+ * Development's port is pinned by the command, not by this file.
+ *
+ * `nuxt dev` resolves its port as `--port`, then `NUXT_PORT`, then `NITRO_PORT`, then `PORT`, and
+ * only then `devServer.port` - and it reads those variables *before* this config is loaded, so
+ * nothing here can win against a stray `PORT` inherited from another project or an editor. That is
+ * why `npm run dev` is `nuxt dev --port 3100`: the CLI argument is the one answer nothing else can
+ * move, and the OAuth callback is registered against `http://localhost:3100`.
+ */
+
+/**
  * Google Tag Manager. The loader goes into `<head>` and Nitro prints the
  * `<noscript>` half right after `<body>` (see `app.head.noscript`), which is the
  * position Google asks for. The container id is interpolated into both, so the
@@ -45,6 +55,19 @@ export default defineNuxtConfig({
     port: PORT,
     blizzardClientId: process.env.NUXT_BLIZZARD_CLIENT_ID,
     blizzardClientSecret: process.env.NUXT_BLIZZARD_CLIENT_SECRET,
+    /**
+     * The secret the sign-in cookie is sealed with (h3 `useSession` -> iron). Public game data
+     * still rides the client-credentials client above; this one is only for the reader's own
+     * session, so it is a secret of the site rather than of the Battle.net app.
+     */
+    sessionPassword: process.env.NUXT_SESSION_PASSWORD,
+    /**
+     * The OAuth callback, when it has to be named rather than worked out. Left unset, the callback
+     * is the site's own host plus `/api/auth/callback` - except on a local address, where it is the
+     * address the browser is actually reading (see `server/utils/bnetOAuth.ts`), because a
+     * development sign-in must come back to the development server rather than to production.
+     */
+    oauthRedirectUri: process.env.NUXT_OAUTH_REDIRECT_URI,
     public: {
       // Absolute host of the public site: canonical URLs, hreflang links, the
       // sitemap and the structured data are all built on it, so none of them
@@ -66,6 +89,12 @@ export default defineNuxtConfig({
   ],
   /** `nuxt dev` (and `nuxt preview`, which runs the built server) on the same port. */
   devServer: { port: PORT },
+  /**
+   * Vite's own server, should it ever be the one that listens, is not allowed to drift either.
+   * Nuxt's dev server is the listener (see the port note above), so this is the belt to that
+   * braces - a Vite that opened 3101 instead of failing would break the same callback.
+   */
+  vite: { server: { strictPort: true } },
   /**
    * The head tags that belong to the site rather than to a page: the tag manager,
    * the icons a browser and a crawler look for, and the `theme-color` a mobile

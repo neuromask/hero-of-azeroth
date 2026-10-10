@@ -67,7 +67,7 @@ the size a social network wants, with the character's own render and class artwo
 
 | Address | What it shows |
 | --- | --- |
-| `/` | Front door: region switch, realm autocomplete, character name, recent searches |
+| `/` | Front door: region switch, realm autocomplete, character name, recent searches, and the Battle.net sign-in under the search button behind a hairline |
 | `/region-eu/<realm>/<name>` | Overview: the stat tiles, the render, download / share / refresh |
 | `/region-eu/<realm>/<name>/collections` | Collections summary: a tile per shelf and the running total |
 | `/region-eu/<realm>/<name>/collections/mounts` | A shelf: sections with bars, sources side by side, the three switches, the note |
@@ -99,6 +99,16 @@ npm run build     # production build into .output
 npm run preview   # run the built server locally
 npm run deploy    # build, push the sources, upload the build to the host (see Deploying)
 ```
+
+The development port is **pinned to 3100**, and it is not a preference. `nuxt dev` resolves its port
+as `--port`, then `NUXT_PORT`, then `NITRO_PORT`, then `PORT`, and only then `devServer.port` - and it
+reads those variables before `nuxt.config.ts` is loaded, so a stray `PORT` inherited from another
+project or an editor would quietly move the dev server elsewhere. Both scripts therefore pass the
+port on the command line (`nuxt dev --port 3100`), which nothing else can override, and
+`npm run dev` first checks the port is free (`scripts/check-dev-port.mjs`) so a second dev server
+fails with a message that names the cause instead of drifting to another port - which would leave the
+Battle.net callback, registered against `http://localhost:3100/api/auth/callback`, refused on the
+way back.
 
 ---
 
@@ -354,12 +364,65 @@ switches with no JavaScript at all.
 - Google Tag Manager is wired in `nuxt.config.ts` — the loader in `<head>`, the `<noscript>` frame right
   after `<body>`.
 
+## 🔐 Accounts & alts
+
+A reader may sign in with Battle.net, which is what turns the site's one-character lookup into an
+account with a roster of alts behind it. The public half of the site is untouched: looking a
+character up still costs nothing and needs no account.
+
+- **Sign-in** is OAuth 2.0 Authorization Code Flow (`scope=wow.profile`), served by
+  `server/api/auth/{login,callback,logout}.get.ts`. The callback makes exactly *two* Battle.net
+  calls - the token exchange and the account summary (`/profile/user/wow`) - and writes them before
+  redirecting, so an account with thirty alts never holds the callback open into a gateway timeout.
+- **The session** is an h3 sealed cookie (`useSession`, `iron`), and it carries only a session id.
+  The tokens themselves live in SQLite, encrypted with AES-256-GCM under `NUXT_SESSION_PASSWORD`
+  (`server/utils/tokenCrypto.ts`), so a session can be revoked by deleting a row.
+- **Battle.net does not issue refresh tokens.** The stored `refresh_token` column is honoured if one
+  ever arrives, but the normal path when the 24-hour access token runs out is a fresh sign-in - which
+  Battle.net's own SSO cookie (about 30 days) answers without asking for a password again.
+- **Storage** is a single SQLite file, `server/data/hoa.db`, opened through the built-in `node:sqlite`
+  driver (`server/utils/db.ts`): accounts, characters, sessions and one snapshot per character per
+  day. No database server, no native dependency, no migration step - the schema is created on first
+  open. It sits beside the JSON stores, and `npm run deploy --prune` never touches it.
+- **Stats are filled in the background.** The sign-in writes names, not figures; the profile page
+  reads a few characters on demand (`server/api/profile/sync.post.ts`) and a server plugin
+  (`server/plugins/characterSync.ts`) does the same on a timer, so no page ever waits on a Blizzard
+  read per alt.
+- **The account pool is the source of every figure.** Mounts, pets, toys, decor and the factions
+  driven to Exalted are shared across a whole Battle.net account, so the account's numbers are a
+  **union of unique ids** (`account_pool`), filled from Blizzard's account collections
+  (`/profile/user/wow/collections/*`) and from each character as the roster is read - its own mount
+  journal (a mount can belong to a side or a race, so it only ever shows up for a character who can
+  use it) and the factions it has driven to Exalted - never a `SUM` over alts
+  (`server/utils/accountPool.ts`). The pool is what the profile tiles, the
+  character pages, the card and the main's row in the hall of fame all read; a character that
+  belongs to **no** account - a stranger's lookup - keeps Blizzard's per-character numbers, and
+  `findOwnerPool` is the one place that rule lives. The overview says which of the two a figure is:
+  while a pool answered, `character.pooled` is `true` and every tile reads `account-wide` under its
+  label; a character with no pool reads `per character` on mounts and reputations and `account-wide`
+  on the collections Blizzard keeps for the account (pets, toys, decor, achievement points). The main
+  tile's **Download** draws the account
+  card (`/api/profile/card`), **Update all** walks the roster sequentially (700 ms apart, with a
+  progress bar), each tile refreshes on its own with a 30-second cooldown, and the account menu (the
+  sliders button) holds the privacy switch, the roster order and the filters.
+- **One main per account.** A character the reader names as their main (`/api/profile/main`) is the
+  only one the public leaderboard shows; every other character of the account stays a personal stat
+  (`server/utils/leaderboardExclusions.ts`). The profile draws it twice: as the large card the page
+  leads with, and in the roster grid among the others - where its star is the filled one, while every
+  other tile carries the same star left hollow, and pressing that is the promotion. A privacy switch
+  (`/api/profile/privacy`) decides whether the roster is visible to other readers or only the main is.
+
+Register the callback in the Battle.net developer portal before the first sign-in:
+`https://heroofazeroth.com/api/auth/callback` (plus a localhost copy for development). It must match
+`NUXT_PUBLIC_SITE_URL` exactly.
+
 ## ⚙️ Configuration
 
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `NUXT_BLIZZARD_CLIENT_ID` | — *(required)* | Blizzard API client id |
 | `NUXT_BLIZZARD_CLIENT_SECRET` | — *(required)* | Blizzard API client secret |
+| `NUXT_SESSION_PASSWORD` | — *(required for accounts)* | Seals the sign-in cookie and encrypts the Battle.net tokens kept on disk (32+ characters) |
 | `NUXT_PUBLIC_SITE_URL` | `https://heroofazeroth.com` | Canonical host for SEO and the sitemap |
 | `NUXT_PUBLIC_GTM_ID` | `GTM-WXMVB755` | Tag manager container |
 | `PORT` / `NITRO_PORT` | `3100` | Port the built server binds (`server/plugins/port.ts`) |

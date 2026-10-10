@@ -166,6 +166,12 @@ const broken = ref(false)
             :style="{ color: classHex }"
           >{{ displayName }}</NuxtLink>
 
+          <!-- The same mark the table puts on this character's row, drawn the same way: the plate is
+               about the character the browser opened, and it says so. -->
+          <span
+            class="inline-flex shrink-0 items-center rounded border border-wow-gold/60 bg-wow-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-wow-goldLight"
+          >{{ t('lbSelectedBadge') }}</span>
+
           <span
             v-if="faction"
             class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none"

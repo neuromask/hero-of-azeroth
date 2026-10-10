@@ -1,25 +1,18 @@
 <script setup lang="ts">
 /**
- * Who this browser is signed in as: the character it looked at last.
+ * Who this browser is: the Battle.net account it is signed in as, or the character it looked at
+ * last.
  *
- * The site has no accounts, and it does not need any: a reader's "profile" is the character they last
- * opened, which the browser already remembers for the front page's history (`useSearchHistory`) - so
- * this chip is the sign-in state of the site, read from the same place the search field reads its
- * suggestions from. Opening a character page is what signs a reader in; clearing the browser's storage
- * is what signs them out.
+ * The site reads the sign-in off `/api/profile`, which answers `user: null` to a visitor who has
+ * not signed in - so this chip is the one place the two states are told apart. Signed in, it is an
+ * account chip: the battletag, a way to the profile and a way out. Signed out, it keeps the state
+ * the site has always had - the character this browser opened last, read from the same history the
+ * front page's search suggestions come from (`useSearchHistory`) - and, on a page that offers no
+ * search of its own, a link to one.
  *
- * It shows the portrait Blizzard serves for the character, its name in its class colour and the realm
- * it lives on, and hands over the one thing a reader wants from it: the way back to the profile. A
- * character the media call had no picture for - or a row written before the portrait was kept - draws
- * a monogram in the class colour instead, and a reader who has not looked anybody up yet is offered
- * the search rather than an empty plate.
- *
- * The history lives in the browser, so it is read once the component is mounted, exactly as the front
- * page reads it: the server renders the "not signed in" state and the chip fills in a moment later.
- *
- * That empty state is a call to look somebody up, which is the chip's own job on a page that has no
- * search of its own - and it stands down (`signIn`) on a page whose row already carries the search
- * (`app/pages/leaderboard.vue`), so the same act is never offered twice in one bar.
+ * The account is fetched with `useFetch`, so the server renders the chip already knowing the state
+ * (the session cookie rides along with the SSR request) and no layout shift follows the hydration.
+ * The guest half still fills in on mount, because it lives in the browser and nowhere else.
  */
 import { useSearchHistory } from '~/composables/searchHistory'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
@@ -27,9 +20,8 @@ import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 withDefaults(
   defineProps<{
     /**
-     * Whether the chip offers the way in while this browser has nobody, which is the link to the
-     * search. A page that offers the search itself asks for the chip alone: nothing is drawn until
-     * there is somebody to draw.
+     * Whether the chip offers the way in while this browser has no account, which is the link to
+     * the search. A page that offers the search itself asks for the chip alone.
      */
     signIn?: boolean
   }>(),
@@ -39,9 +31,15 @@ withDefaults(
 const { t, locale } = useI18n()
 const localeUrl = useLocaleUrl()
 
+/** The account as the profile endpoint reports it, or `null` for a visitor. */
+const { data } = await useFetch<{ user: { battletag: string | null } | null }>('/api/profile', {
+  key: 'profile-identity'
+})
+const signedIn = computed(() => Boolean(data.value?.user))
+
 const { history, load } = useSearchHistory()
 
-/** The character this browser looked at last, which is what the chip stands for. */
+/** The character this browser looked at last, which is the guest half of the chip. */
 const current = computed(() => history.value[0] || null)
 
 /** The address of that character's own page, or of the search when there is nobody yet. */
@@ -70,14 +68,33 @@ watch(current, () => {
 })
 
 onMounted(load)
+
+/** The battletag as it is drawn, with the account number the game appends left off. */
+const accountName = computed(() => (data.value?.user?.battletag || '').split('#')[0] || 'Battle.net')
 </script>
 
 <template>
-  <!-- The signed-in state: the portrait, who it is, and the way to their page. It draws no blur of
-       its own - it stands on the bar's own glass, and a `backdrop-filter` there could only sample
-       that glass (`app/assets/css/main.css`). -->
+  <!-- Signed in: the account, where a guest sees the character they last looked at. The whole chip
+       is the way to the profile, because that is the one thing a signed-in reader wants from it. -->
+  <NuxtLink
+    v-if="signedIn"
+    :to="localeUrl('/profile')"
+    class="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-2 lg:w-auto"
+  >
+    <span class="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl border border-wow-gold/40 bg-wow-gold/10">
+      <AppIcon name="emblem" class="h-6 w-6" />
+    </span>
+
+    <div class="min-w-0">
+      <p class="text-[10px] font-normal uppercase tracking-wider text-gray-500">{{ t('profileSignedIn') }}</p>
+      <p class="truncate text-sm font-bold leading-tight text-white">{{ accountName }}</p>
+      <p class="truncate text-xs text-gray-400">{{ t('myProfile') }}</p>
+    </div>
+  </NuxtLink>
+
+  <!-- Signed out with a character behind this browser: the guest chip, exactly as it was. -->
   <div
-    v-if="current"
+    v-else-if="current"
     class="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-2 lg:w-auto"
   >
     <span
@@ -109,15 +126,16 @@ onMounted(load)
     </NuxtLink>
   </div>
 
-  <!-- Nobody yet: the chip becomes the way in rather than an empty plate - unless the page brings the
-       search itself, in which case there is nothing for the chip to say. -->
-  <NuxtLink
+  <!-- Nobody yet: the chip becomes the Battle.net sign-in, or the way to the search on a page that
+       brings its own. -->
+  <a
     v-else-if="signIn"
-    :to="localeUrl('/')"
+    href="/api/auth/login"
     class="hoa-tab hoa-liquid-glass w-full justify-center text-xs lg:w-auto"
-    :title="t('profileSignIn')"
+    :title="t('signInBattleNet')"
   >
     <AppIcon name="emblem" class="h-[1.1em] w-[1.1em]" />
-    {{ t('profileSignIn') }}
-  </NuxtLink>
+    {{ t('signInBattleNet') }}
+  </a>
 </template>
+

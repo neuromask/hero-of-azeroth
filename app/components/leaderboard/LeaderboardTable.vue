@@ -13,10 +13,10 @@
  * from the sitemap's index, which never kept a URL - or one whose picture fails to load draws a
  * monogram in the class colour instead, so a row is never a broken image.
  *
- * One of the rows can be the reader's own - the character this browser is signed in as (see
- * `useSearchHistory`) - and the table marks such a row rather than moving it: the order is the
- * endpoint's to decide, and a table that pulled a row to the top because it happened to be the
- * reader's would no longer be the table it was handed.
+ * One of the rows can be the character this browser opened last (see `app/pages/leaderboard.vue`),
+ * and the table marks such a row rather than moving it: the order is the endpoint's to decide, and a
+ * table that pulled a row to the top because it happened to be the one being read would no longer be
+ * the table it was handed.
  */
 import { searchHistoryKey } from '~/composables/searchHistory'
 import { formatNumber } from '#shared/utils/formatNumber'
@@ -37,11 +37,18 @@ const props = defineProps<{
   /** True while a fresh answer is on its way, which dims the table rather than emptying it. */
   pending?: boolean
   /**
-   * The character this browser is signed in as, written as `searchHistoryKey` writes it, whose row is
-   * marked as the reader's own. Absent for a reader who has looked nobody up, and absent from a page
-   * whose rows are not that character's - the mark is a mark on a row, never a claim about the table.
+   * The character this browser opened last, written as `searchHistoryKey` writes it, whose row wears
+   * the mark of the one being read (see `app/pages/leaderboard.vue`). Absent for a browser that has
+   * opened nobody, and absent from a page whose rows are not that character's - the mark is a mark on
+   * a row, never a claim about the table.
    */
   highlight?: string
+  /**
+   * The main of the account the reader is signed in with, written the same way, whose row wears the
+   * second badge - the character that is *theirs*. Absent for a reader who is not signed in, and
+   * absent from a page that does not hold the account's main.
+   */
+  owner?: string
 }>()
 
 const emit = defineEmits<{ (event: 'update:sort', value: LeaderboardSort): void }>()
@@ -79,14 +86,26 @@ function profileUrl(player: LeaderboardPlayer): string {
 }
 
 /**
- * Whether a row is the reader's own: the character this browser is signed in as.
+ * Whether a row is the character this browser is reading - the one it opened last
+ * (see `app/pages/leaderboard.vue`).
  *
  * The identity is the one the search history is kept under, which is what makes the two the same
  * character rather than two spellings of one - the browser wrote its key down from the profile it
  * read, the table built the row from the record the site stored, and a key is what says they agree.
  */
-function isMe(player: LeaderboardPlayer): boolean {
+function isSelected(player: LeaderboardPlayer): boolean {
   return !!props.highlight && props.highlight === searchHistoryKey(player)
+}
+
+/**
+ * Whether a row belongs to the reader's own account: it is the main that account leads with.
+ *
+ * A second, stronger mark than the one above - the character being read is whatever the browser last
+ * opened, while the main is the reader's own, so the two badges answer two different questions and a
+ * row may carry both.
+ */
+function isOwner(player: LeaderboardPlayer): boolean {
+  return !!props.owner && props.owner === searchHistoryKey(player)
 }
 
 /**
@@ -272,22 +291,22 @@ function open(player: LeaderboardPlayer) {
         </thead>
 
         <tbody>
-          <!-- A row that is the reader's own is marked as such, and the mark rides on the row: a bar of
-               the brand gold down its edge, the glass warmed with it, and the badge that says whose row
-               it is. Nothing about the order changes - a row is where the table put it. -->
+          <!-- A row that is the selected character is marked as such, and the mark rides on the row: a
+               bar of the brand gold down its edge, the glass warmed with it, and the badge that says
+               whose row it is. Nothing about the order changes - a row is where the table put it. -->
           <tr
             v-for="(player, index) in players"
             :key="searchHistoryKey(player)"
-            :data-you="isMe(player) ? 'true' : undefined"
+            :data-you="isSelected(player) ? 'true' : undefined"
             class="cursor-pointer border-b border-white/5 transition-colors last:border-b-0"
-            :class="isMe(player) ? 'bg-wow-gold/[0.08] hover:bg-wow-gold/15' : 'hover:bg-white/[0.05]'"
+            :class="isSelected(player) ? 'bg-wow-gold/[0.08] hover:bg-wow-gold/15' : 'hover:bg-white/[0.05]'"
             @click="open(player)"
           >
             <!-- The rank: the first three of the whole table wear a medal and its glow, and the
-                 reader's own row wears the gold bar that marks it from across the table. -->
+                 selected row wears the gold bar that marks it from across the table. -->
             <td
               class="px-3 py-2.5 align-middle"
-              :class="isMe(player) ? 'border-l-2 border-wow-gold' : ''"
+              :class="isSelected(player) ? 'border-l-2 border-wow-gold' : ''"
             >
               <span
                 class="inline-grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold tabular-nums whitespace-nowrap"
@@ -334,11 +353,20 @@ function open(player: LeaderboardPlayer) {
                       @click.stop
                     >{{ player.displayName }}</NuxtLink>
 
-                    <!-- The reader's own row says so, in the same gold the bar down its edge is. -->
+                    <!-- The reader's own character, right after the name: the main their account leads
+                         with. It is filled gold where the "selected" mark beside it is outlined, because
+                         the two say different things - this one is a fact about whose row it is, the
+                         other about which row is being read. -->
                     <span
-                      v-if="isMe(player)"
-                      class="inline-flex shrink-0 items-center rounded border border-wow-gold/60 bg-wow-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-wow-goldLight"
+                      v-if="isOwner(player)"
+                      class="inline-flex shrink-0 items-center rounded bg-wow-gold px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black"
                     >{{ t('lbYouBadge') }}</span>
+
+                    <!-- The selected row says so, in the same gold the bar down its edge is. -->
+                    <span
+                      v-if="isSelected(player)"
+                      class="inline-flex shrink-0 items-center rounded border border-wow-gold/60 bg-wow-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-wow-goldLight"
+                    >{{ t('lbSelectedBadge') }}</span>
 
                     <span
                       v-if="factionById(player.faction)"

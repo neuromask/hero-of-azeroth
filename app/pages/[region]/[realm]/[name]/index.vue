@@ -3,6 +3,9 @@
 // card, which draws the same tiers into its own SVG: one table, so a page and its card can never
 // disagree.
 import { collectionPercent, mPlusQualityTextClass, wowQualityTextClass } from '#shared/utils/wow-quality'
+// The overall rating, off the same formula the hall of fame ranks by, so the tile here and the
+// table's own column are one number.
+import { calculatePlayerScore } from '#shared/utils/leaderboardScore'
 // Counts are written by the site's one rule (`#shared/utils/formatNumber`): thousands grouped by a
 // space, so a tile reads `1 200` here exactly as it does on the card drawn from it.
 import { formatNumber } from '#shared/utils/formatNumber'
@@ -20,12 +23,28 @@ const { t } = useI18n()
  */
 const mPlusColor = computed(() => mPlusQualityTextClass(character.value?.mPlusScore ?? 0))
 
+/**
+ * The overall rating, read off the collections the page is showing - which are the account's, because
+ * every character's page is overlaid with the account's pool (`server/utils/accountPool`). It is the
+ * very figure the hall of fame orders its table by, computed by the shared formula rather than stored
+ * here, so a page and the table can never disagree.
+ */
+const totalScore = computed(() =>
+  calculatePlayerScore({
+    achievements: character.value?.stats.achievements.count ?? 0,
+    mounts: character.value?.stats.mounts.count ?? 0,
+    toys: character.value?.stats.toys.count ?? 0,
+    decor: character.value?.stats.decor.count ?? 0,
+    pets: character.value?.stats.pets.count ?? 0
+  })
+)
+
 interface StatTile {
   key: string
   /** File name in `~/assets/icons`, which `<AppIcon>` draws. */
   icon: string
   label: string
-  /** The scope in small print under the label: whose numbers this tile shows. */
+  /** Whose figures the tile prints - the account's, or the character's own (`accountWide`/`perCharacter`). */
   note: string
   /** The tier colour the count is set in, from the shared quality ladder. */
   color: string
@@ -37,16 +56,13 @@ interface StatTile {
  * The stat tiles with their progress bars, split into the two columns they are
  * laid out in around the character. Achievements lead the right column.
  *
- * Every tile names the scope of its number in small print, because the six do not come
- * from the same place: pets, toys and decor arrive account-wide from Blizzard - they are
- * identical for every character of an account - while mounts and the achievement points
- * are the character's own, and reputations are too - deliberately so, because a character
- * is only ever on one side of the faction war while the account's characters are not, so a
- * count across the account would mix the two sides and have no reachable total to sit
- * under. The tile counts the ladders this character has finished itself - the Exalted
- * factions, plus a renown faction at its last renown level and a delve companion at its
- * last level, which have no Exalted tier at all. Its denominator is what a character of
- * this faction can reach, not Blizzard's whole faction index - see `reputationTotal`.
+ * Under every label stands whose figures the tile prints. The collection numbers come from the
+ * account's own pool (`server/utils/accountPool`) whenever there is one - the reader brought the
+ * account, so the page speaks for it, and every tile says so. A character whose owner never came
+ * back with an account has no pool to read: mounts and reputations are then only the character's
+ * own reading, while pets, toys, decor and the achievement points are the collections Blizzard
+ * keeps for the account, so those keep saying the account's. The server tells the two cases apart
+ * with `character.pooled`, which is set where the pool is applied.
  *
  * The count carries the tier its collection has reached rather than a fixed colour, so the
  * number says how far along the tile is at a glance. The ladder is the shared one, off the
@@ -56,20 +72,25 @@ const tileColumns = computed<StatTile[][]>(() => {
   const c = character.value
   if (!c) return []
 
-  const accountWide = t('accountWide')
-  const perCharacter = t('perCharacter')
+  /** Kinds Blizzard only ever reports for the character itself, so an accountless one has no pool to offer. */
+  const characterOwned = ['mounts', 'reputations']
+
+  const noteFor = (key: string) =>
+    c.pooled || !characterOwned.includes(key) ? t('accountWide') : t('perCharacter')
 
   const tiles = [
-    { key: 'mounts', icon: 'mounts', label: t('mounts'), note: perCharacter, count: c.stats.mounts.count, total: c.stats.mounts.total },
-    { key: 'toys', icon: 'toys', label: t('toys'), note: accountWide, count: c.stats.toys.count, total: c.stats.toys.total },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), note: perCharacter, count: c.stats.reputations.count, total: c.stats.reputations.total },
-    { key: 'achievements', icon: 'achievments', label: t('achievements'), note: perCharacter, count: c.stats.achievements.count, total: c.stats.achievements.total },
-    { key: 'pets', icon: 'pets', label: t('pets'), note: accountWide, count: c.stats.pets.count, total: c.stats.pets.total },
-    { key: 'decor', icon: 'decor', label: t('decor'), note: accountWide, count: c.stats.decor.count, total: c.stats.decor.total }
+    { key: 'mounts', icon: 'mounts', label: t('mounts'), count: c.stats.mounts.count, total: c.stats.mounts.total },
+    { key: 'toys', icon: 'toys', label: t('toys'), count: c.stats.toys.count, total: c.stats.toys.total },
+    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), count: c.stats.reputations.count, total: c.stats.reputations.total },
+    { key: 'achievements', icon: 'achievments', label: t('achievements'), count: c.stats.achievements.count, total: c.stats.achievements.total },
+    { key: 'pets', icon: 'pets', label: t('pets'), count: c.stats.pets.count, total: c.stats.pets.total },
+    { key: 'decor', icon: 'decor', label: t('decor'), count: c.stats.decor.count, total: c.stats.decor.total }
   ]
 
   const withBar = tiles.map((tile) => ({
     ...tile,
+    // Whose figures this tile prints, read off the same character the numbers came from.
+    note: noteFor(tile.key),
     // The count wears the tier its collection has reached, the way the card's numbers do.
     color: wowQualityTextClass(tile.count, tile.total),
     display: formatNumber(tile.count),
@@ -112,8 +133,9 @@ const tileColumns = computed<StatTile[][]>(() => {
         >
           <!-- Two columns of two rows. The first row carries the glyph, the label and the big
                number, which share one line so their centres line up. The second row carries the
-               scope of the number and the `total / %`, written in the same style so the two read as
-               one line. The glyph is 1.5x the 1.15em it used to be (1.725em, so it scales with the
+               note under the label it belongs to and the `total / %` under the number: whose figures
+               the tile prints on the left, and how much of everything there is to collect on the
+               right. The glyph is 1.5x the 1.15em it used to be (1.725em, so it scales with the
                label at both breakpoints) and sits in a square box, which is the 1:1 `viewBox` every
                icon file is drawn on, so nothing is stretched. -->
           <div class="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-2">
@@ -122,10 +144,12 @@ const tileColumns = computed<StatTile[][]>(() => {
               <span class="truncate text-[22px]">{{ tile.label }}</span>
             </span>
             <span class="text-2xl sm:text-3xl font-extrabold whitespace-nowrap text-right" :class="tile.color">{{ tile.display }}</span>
-            <!-- Under the first row: whose numbers the tile shows, and how much of everything there
-                 is to collect they cover. -->
-            <span class="truncate text-[12px] uppercase px-10 font-normal text-gray-400">{{ tile.note }}</span>
-            <span class="whitespace-nowrap text-right text-[12px] font-normal text-gray-400 tabular-nums">{{ formatNumber(tile.total) }} / {{ formatNumber(tile.percent) }}%</span>
+            <!-- Indented past the glyph, so the note stands under the label it belongs to rather
+                 than under the icon. -->
+            <span class="truncate px-10 text-[12px] font-normal uppercase text-gray-400">{{ tile.note }}</span>
+            <span class="whitespace-nowrap text-right text-[12px] font-normal text-gray-400 tabular-nums">
+              {{ formatNumber(tile.total) }} / {{ formatNumber(tile.percent) }}%
+            </span>
           </div>
           <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/5">
             <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" :style="{ width: tile.percent + '%' }"></div>
@@ -145,6 +169,16 @@ const tileColumns = computed<StatTile[][]>(() => {
          the tiles above are cut from: the same frame, the same blur and the same lift under the
          pointer, so the row reads as one more block of statistics. -->
     <div class="hoa-panel hoa-panel-interactive flex w-full items-center justify-between gap-3 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 lg:w-auto">
+      <!-- The overall rating leads the row, the way it leads the table: the one figure that sums up
+           everything beside it. -->
+      <div class="text-center">
+        <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('lbColScore') }}</span>
+        <span class="text-2xl sm:text-3xl font-extrabold text-wow-goldLight inline-flex items-center justify-center gap-2 whitespace-nowrap">
+          <AppIcon name="trophy" class="h-[0.85em] w-[0.85em]" />
+          {{ formatNumber(totalScore) }}
+        </span>
+      </div>
+      <div class="h-8 w-[1px] bg-white/15"></div>
       <div class="text-center">
         <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('itemLevel') }}</span>
         <span class="text-2xl sm:text-3xl font-extrabold text-white inline-flex items-center justify-center gap-2 whitespace-nowrap">

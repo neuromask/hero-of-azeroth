@@ -362,6 +362,51 @@
     box-shadow: 0 0 14px rgba(248, 183, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
+  /* The control the account corner of a header is built from: the way in, the account itself, the way
+     out, and the two language plates beside them. Written once, so that corner is one shape in every
+     row of the site - one height, one corner, one lit rim, and one glow that widens under the pointer
+     - and so the whole set moves together when the frame is changed. The box is the download
+     button's (`app/pages/[region]/[realm]/[name].vue`), which is what makes a control of this row
+     read as the site's own rather than as a borrowed button.
+
+     Only the colour differs between the plates, and the modifiers below are the whole of that
+     difference. What is left in the class itself is the neutral glass: the way out wears it, and so
+     does the language the reader is not reading. */
+  .hoa-plate {
+    @apply inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-white/25 bg-white/10 px-3 text-xs font-bold text-white transition-all duration-300;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.12);
+  }
+
+  .hoa-plate:hover {
+    @apply border-white/45 bg-white/20;
+    box-shadow: 0 0 28px rgba(255, 255, 255, 0.22);
+  }
+
+  /* Battle.net's blue: the password is typed on Blizzard's page rather than on this one, so this is
+     the one control of the row that wears the brand's colour instead of the site's. */
+  .hoa-plate-bnet {
+    @apply border-[#00aeff]/60 bg-[#0074e0]/30;
+    box-shadow: 0 0 15px rgba(0, 174, 255, 0.25);
+  }
+
+  .hoa-plate-bnet:hover {
+    @apply border-[#4dc8ff]/90 bg-[#0074e0]/45;
+    box-shadow: 0 0 28px rgba(0, 174, 255, 0.5);
+  }
+
+  /* And the brand's gold: the language being read, which is the one plate of the row that marks where
+     the reader already is rather than offering a way somewhere. */
+  .hoa-plate-gold {
+    @apply border-wow-gold bg-wow-gold/10;
+    box-shadow: 0 0 15px rgba(248, 183, 0, 0.25);
+  }
+
+  .hoa-plate-gold:hover {
+    @apply border-wow-goldLight bg-wow-gold/20;
+    box-shadow: 0 0 28px rgba(248, 183, 0, 0.4);
+  }
+
+
   /* One square of a collections grid, drawn as a slot rather than a bare square.
      The tile is a plain element - an anchor the widget turns into a tooltip, or a span for the few
      items Wowhead has no page for - and this class is what draws it, so the markup the server sends

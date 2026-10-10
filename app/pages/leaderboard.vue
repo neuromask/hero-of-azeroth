@@ -90,8 +90,40 @@ const { history, load: loadHistory } = useSearchHistory()
 
 const current = computed(() => history.value[0] || null)
 
-/** The identity of that character in the table, which is what one of its rows is marked by. */
+/**
+ * The identity of the character this browser opened last, which is what one of the table's rows is
+ * marked by.
+ *
+ * The mark is about the character being read rather than about who owns it: the page is a table of
+ * characters, and the browser knows exactly one of them - the one it last opened - so that is the row
+ * it can point at. The badge on that row says "selected", which is what it is, rather than claiming
+ * the row is the reader's own.
+ */
 const meKey = computed(() => (current.value ? searchHistoryKey(current.value) : ''))
+
+/**
+ * The account's own main, which the table marks with a second badge.
+ *
+ * The two marks say different things and can stand on the same row: the first says which character is
+ * being read (the one this browser opened last), and this one says which character is the reader's -
+ * the main their account leads with. A reader looking at somebody else's character sees exactly one
+ * badge, and on their own main both.
+ *
+ * The payload is the same `/api/profile` the header's account chip reads, under the same key, so the
+ * two share one request rather than making two.
+ */
+const { data: account } = await useFetch<{
+  user: { mainCharacterId: number | null } | null
+  characters: { region: string; realmSlug: string; name: string; isMain: boolean }[]
+}>('/api/profile', { key: 'profile-identity' })
+
+const ownerKey = computed(() => {
+  if (!account.value?.user) return ''
+
+  const characters = account.value.characters || []
+  const main = characters.find((entry) => entry.isMain) || characters[0]
+  return main ? searchHistoryKey({ region: main.region, realm: main.realmSlug, name: main.name }) : ''
+})
 
 /**
  * How the reader's own row is reached from the plate above the filters.
@@ -165,13 +197,23 @@ onMounted(loadHistory)
          pair ending the row, exactly where it sits on every other page
          (`app/components/SiteHeader.vue`). -->
     <SiteHeader :title="t('lbTitle')" :meta="meta">
-      <!-- What the bar carries on the right: the signed-in chip - the character this browser looked at
-           last, standing where an account would sit on a site that had accounts. It is asked for the
-           chip alone (`:sign-in="false"`), because the row below already carries the search that the
-           chip's empty state would otherwise offer: with nobody known yet, the right side of this bar
-           is deliberately empty and the row's button is the only way in. -->
+      <!-- What the bar carries on the right: the plate of the character this browser opened last - its
+           portrait, the place it holds in the table and the way to that row. It stands where an account
+           chip would on a site that had accounts, and the account itself is in the row below, beside
+           the languages. A browser that has opened nobody draws no plate at all, and the right side of
+           this bar is then empty by design.
+
+           Its own glass is switched off here (`before:hidden`), because the bar already carries a
+           frosted layer of its own and a pane of glass inside a pane can only sample the pane - the
+           plate would read as a washed copy of the bar. What is left is the frame, drawn in the gold
+           that marks the character the page is about. -->
       <template #actions>
-        <MyProfile :sign-in="false" />
+        <LeaderboardYou
+          v-if="current"
+          class="before:hidden !border-wow-gold/40 !bg-black/25 !shadow-none"
+          :character="current"
+          @reveal="revealRow"
+        />
       </template>
 
       <!-- The character's own views, pointing at the character this reader came from. The menu of
@@ -198,18 +240,13 @@ onMounted(loadHistory)
 
       <!-- And the way to add somebody who is not in the table yet: the front page's own two fields,
            dropped as a sheet under this row when the button is pressed. It closes this row rather than
-           standing beside the identity chip, because the row is where a page's controls live - and
+           standing beside the character's plate, because the row is where a page's controls live - and
            while this browser knows nobody yet, it is the only control in the bar at all. -->
       <CharacterSearchDialog />
     </SiteHeader>
 
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
       <LeaderboardStats :stats="stats" :pending="pending" />
-
-      <!-- The reader's own place, which is the page's own fact rather than the table's: it is read
-           before a filter is touched, and it does not move when one is. A browser that has looked
-           nobody up draws no plate at all - there is nobody to place. -->
-      <LeaderboardYou v-if="current" class="mt-3" :character="current" @reveal="revealRow" />
 
       <LeaderboardFilters
         class="mt-3"
@@ -239,6 +276,7 @@ onMounted(loadHistory)
         :offset="offset"
         :pending="pending"
         :highlight="meKey"
+        :owner="ownerKey"
         @update:sort="setSort"
       />
 

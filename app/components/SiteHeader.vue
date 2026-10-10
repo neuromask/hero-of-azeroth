@@ -78,7 +78,7 @@ const localeUrl = useLocaleUrl()
         aria-hidden="true"
       />
 
-      <div class="relative flex flex-wrap gap-2">
+      <div class="relative flex flex-wrap items-center gap-2">
         <!-- The page's own tabs. A page whose row is plain links hands them over as `links`; a page
              whose row carries a control rather than a link - the hall of fame borrows the collections
              menu from a character page - writes the whole row into the slot instead. -->
@@ -98,6 +98,10 @@ const localeUrl = useLocaleUrl()
         <!-- The languages sit at the far end of the row the links are on, exactly where a reader
              finds them on a character page. -->
         <LocaleSwitch class="ml-auto" />
+
+        <!-- And the account, to the right of the languages: the blue Battle.net plate while nobody
+             is signed in, the profile and the way out once somebody is. -->
+        <AuthMenu />
       </div>
     </nav>
   </header>

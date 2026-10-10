@@ -31,6 +31,10 @@ export default defineEventHandler(async (event) => {
     async () => {
       const character = await getCharacter(realm, name, region, locale)
 
+      // The collections a card prints are the account's, so a character whose account has synced is
+      // drawn with the account's pool; a stranger's lookup keeps Blizzard's per-character numbers.
+      overlayPool(character, region, realm, name)
+
       // The card is drawn from a profile, and reading a profile is what the site learns a character
       // from - so a card is fed into the sitemap's index and into the hall of fame's table the same
       // way a character page is (`server/utils/profileFeed.ts`). It is the feed the card used to be

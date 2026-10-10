@@ -169,6 +169,12 @@ export interface CharacterData {
   gender: string
   /** Armoury class artwork used as the background ('' when unavailable). */
   backgroundUrl: string
+  /**
+   * Whether the figures below came from the account's own pool (`server/utils/accountPool`) rather
+   * than from Blizzard's per-character reading. It is set when a profile is served, so a page can
+   * say which of its numbers are the account's and which are still the character's own.
+   */
+  pooled?: boolean
   stats: {
     mounts: CharacterStat
     pets: CharacterStat
@@ -496,5 +502,107 @@ export async function getCharacter(realm: string, name: string, region?: string,
   } finally {
     // Whoever asks from here on finds the answer cached, or starts a fresh read.
     pendingCharacters.delete(key)
+  }
+}
+
+/**
+ * The factions a character has driven to the top of their own ladder, as ids.
+ *
+ * Reputations are the one account-wide figure the game does not expose per account: the pane is a
+ * character's own log, and a faction finished on any character is a faction the account has
+ * finished. So the ids of the ones this character has maxed are read here - Exalted, or the last
+ * renown level of a faction that has one - to be folded into the account's pool
+ * (`server/utils/accountPool`). Nothing else uses them, and a character Blizzard will not answer
+ * for simply contributes nothing.
+ */
+export async function getMaxedReputationIds(
+  realm: string,
+  name: string,
+  region: string,
+  locale = 'en_US'
+): Promise<number[]> {
+  try {
+    const token = await getBlizzardToken(region)
+    const data = await $fetch<any>(
+      `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/reputations`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        query: { namespace: `profile-${region}`, locale }
+      }
+    )
+
+    return (data?.reputations || [])
+      .filter((entry: any) => isReputationMaxed(entry.faction?.id, entry.standing))
+      .map((entry: any) => entry.faction?.id)
+      .filter((id: any) => typeof id === 'number')
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The mounts a character's own journal holds, as ids.
+ *
+ * The account's own collection endpoint answers the account-wide journal, but a mount can belong to
+ * a side or a race - one a Horde character can ride, one an Alliance character can, a class mount -
+ * and those only ever appear in the journal of a character who can use them. So each character's
+ * own list is read as the character is read and folded into the account's pool, which is what makes
+ * the account's mount figure a union across the whole roster rather than one endpoint's answer
+ * (`server/utils/accountPool`).
+ */
+export async function getCharacterMountIds(
+  realm: string,
+  name: string,
+  region: string,
+  locale = 'en_US'
+): Promise<number[]> {
+  try {
+    const token = await getBlizzardToken(region)
+    const data = await $fetch<any>(
+      `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/collections/mounts`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        query: { namespace: `profile-${region}`, locale }
+      }
+    )
+
+    return (data?.mounts || [])
+      .map((entry: any) => entry?.mount?.id ?? entry?.id)
+      .filter((id: any) => typeof id === 'number')
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The primary professions a character has taken up, as the game names them.
+ *
+ * The profile summary does not carry them - a character's professions are a document of their own -
+ * so this is one more call per character, made only where a character is read in full
+ * (`server/utils/accountSync`). A character may hold two primaries, and a tile has room for two
+ * pills, so the list is cut to two; the names arrive in the language the read was asked for.
+ */
+export async function getCharacterProfessions(
+  realm: string,
+  name: string,
+  region: string,
+  locale = 'en_US'
+): Promise<string[]> {
+  try {
+    const token = await getBlizzardToken(region)
+    const data = await $fetch<any>(
+      `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/professions`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        query: { namespace: `profile-${region}`, locale }
+      }
+    )
+
+    return (data?.primaries || [])
+      .map((entry: any) => entry?.profession?.name)
+      .filter((profession: any) => typeof profession === 'string' && profession)
+      .slice(0, 2)
+  } catch {
+    return []
   }
 }
