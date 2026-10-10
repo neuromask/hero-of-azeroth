@@ -291,34 +291,36 @@ function clear() {
              that keeps it over the table below - is the site's menu pane (`.hoa-pop`), and the band
              its heading stays at the top in is that pane's own (`.hoa-pop-title`). -->
         <div
-          class="hoa-pop absolute left-0 top-full mt-2 max-h-72 w-64 overflow-y-auto transition-opacity duration-150"
+          class="hoa-pop absolute left-0 top-full mt-2 w-64 transition-opacity duration-150"
           :class="realmOpen ? 'opacity-100' : 'invisible opacity-0'"
           role="menu"
         >
-          <p class="hoa-pop-title">
-            {{ t('realm') }}
-          </p>
+          <div class="max-h-72 overflow-y-auto">
+            <p class="hoa-pop-title">
+              {{ t('realm') }}
+            </p>
 
-          <button
-            type="button"
-            role="menuitem"
-            class="flex w-full items-center px-4 py-2 text-left text-sm font-normal transition-colors"
-            :class="!realm ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
-            @click="pickRealm('')"
-          >{{ t('lbAllRealms') }}</button>
+            <button
+              type="button"
+              role="menuitem"
+              class="flex w-full items-center px-4 py-2 text-left text-sm font-normal transition-colors"
+              :class="!realm ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
+              @click="pickRealm('')"
+            >{{ t('lbAllRealms') }}</button>
 
-          <button
-            v-for="option in realms"
-            :key="`${option.region}:${option.realm}`"
-            type="button"
-            role="menuitem"
-            class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm font-normal transition-colors"
-            :class="realm === option.realm ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
-            @click="pickRealm(option.realm)"
-          >
-            <span class="truncate">{{ option.label }}</span>
-            <span class="shrink-0 whitespace-nowrap text-xs text-gray-500">{{ option.region.toUpperCase() }} · {{ formatNumber(option.count) }}</span>
-          </button>
+            <button
+              v-for="option in realms"
+              :key="`${option.region}:${option.realm}`"
+              type="button"
+              role="menuitem"
+              class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm font-normal transition-colors"
+              :class="realm === option.realm ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
+              @click="pickRealm(option.realm)"
+            >
+              <span class="truncate">{{ option.label }}</span>
+              <span class="shrink-0 whitespace-nowrap text-xs text-gray-500">{{ option.region.toUpperCase() }} · {{ formatNumber(option.count) }}</span>
+            </button>
+          </div>
         </div>
       </div>
 

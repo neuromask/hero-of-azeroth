@@ -104,25 +104,27 @@ watch(
 
     <!-- Shut, the panel is invisible but still in the document: the categories are addresses a crawler
          should find, and they are read from the markup rather than from a script. The pane is the
-         site's own menu glass (`.hoa-pop`), and it scrolls inside itself because fifteen rows are
-         taller than a phone screen. -->
+         site's own menu glass (`.hoa-pop`), and the list inside it scrolls because fifteen rows are
+         taller than a phone screen - the glass stays put while the rows travel under it. -->
     <div
-      class="hoa-pop absolute left-0 top-full mt-2 max-h-[70vh] w-56 overflow-y-auto p-1.5 transition-opacity duration-150"
+      class="hoa-pop absolute left-0 top-full mt-2 w-56 p-1.5 transition-opacity duration-150"
       :class="open ? 'opacity-100' : 'invisible opacity-0'"
       role="menu"
     >
-      <NuxtLink
-        v-for="category in ACHIEVEMENT_CATEGORIES"
-        :key="category"
-        :to="localeUrl(`${props.path}/${category}`)"
-        class="flex items-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors"
-        :class="onCategory(category) ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
-        :aria-current="onCategory(category) ? 'page' : undefined"
-        role="menuitem"
-        @click="open = false"
-      >
-        {{ $t(ACHIEVEMENT_LABEL_KEYS[category]) }}
-      </NuxtLink>
+      <div class="max-h-[70vh] overflow-y-auto">
+        <NuxtLink
+          v-for="category in ACHIEVEMENT_CATEGORIES"
+          :key="category"
+          :to="localeUrl(`${props.path}/${category}`)"
+          class="flex items-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors"
+          :class="onCategory(category) ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
+          :aria-current="onCategory(category) ? 'page' : undefined"
+          role="menuitem"
+          @click="open = false"
+        >
+          {{ $t(ACHIEVEMENT_LABEL_KEYS[category]) }}
+        </NuxtLink>
+      </div>
     </div>
   </div>
 </template>

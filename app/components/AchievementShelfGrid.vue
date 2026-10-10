@@ -207,26 +207,30 @@ function placeholderHeight(section: AchievementSection): string {
     <!-- The quick anchors: a chip for every section of this shelf, so a category of a dozen sections
          can be walked without hunting for one. A phone has no room for the panel beside the tiles and
          is given none. -->
-    <nav
+    <div
       v-if="page.sections.length > 1"
-      ref="railEl"
-      class="hoa-anchors sticky z-30 hidden lg:flex lg:max-h-[calc(100vh-var(--hoa-sticky-top)-2rem)] lg:w-52 lg:shrink-0 lg:flex-col lg:gap-1 lg:overflow-x-hidden lg:overflow-y-auto"
+      class="hoa-anchors sticky z-30 hidden lg:flex lg:max-h-[calc(100vh-var(--hoa-sticky-top)-2rem)] lg:w-52 lg:shrink-0"
       :style="{ top: `${stickyTop}px` }"
-      :aria-label="$t(ACHIEVEMENT_LABEL_KEYS[page.category])"
     >
-      <button
-        v-for="(section, index) in page.sections"
-        :key="section.id"
-        :ref="(element) => setChip(index, element as Element | null)"
-        type="button"
-        class="hoa-tab shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:text-xs lg:w-full lg:justify-start lg:whitespace-normal lg:text-left"
-        :class="{ 'hoa-tab-active': index === activeSection }"
-        :aria-current="index === activeSection ? 'true' : undefined"
-        @click="jumpTo(index)"
+      <nav
+        ref="railEl"
+        class="flex min-h-0 w-full flex-col gap-1 overflow-x-hidden overflow-y-auto p-2"
+        :aria-label="$t(ACHIEVEMENT_LABEL_KEYS[page.category])"
       >
-        {{ section.label }}
-      </button>
-    </nav>
+        <button
+          v-for="(section, index) in page.sections"
+          :key="section.id"
+          :ref="(element) => setChip(index, element as Element | null)"
+          type="button"
+          class="hoa-tab shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:text-xs lg:w-full lg:justify-start lg:whitespace-normal lg:text-left"
+          :class="{ 'hoa-tab-active': index === activeSection }"
+          :aria-current="index === activeSection ? 'true' : undefined"
+          @click="jumpTo(index)"
+        >
+          {{ section.label }}
+        </button>
+      </nav>
+    </div>
 
     <!-- The shelf itself: the column of sections the anchors walk. -->
     <div class="min-w-0 flex-1 space-y-5">

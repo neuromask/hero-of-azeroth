@@ -15,9 +15,10 @@
  * The bar is pinned to the top of the window (`sticky`), above the page (`z-40`), and its panel
  * keeps only its bottom corners rounded because it stands flush against the top edge - all of it
  * copied from the character shell on purpose, so the two headers are the same object to the eye.
- * It wears `hoa-bar`, which is what marks the glass inside it as pinned: the panel and the tabs are
- * the surfaces Chromium can leave showing a stale, unblurred strip of the page behind them, and the
- * hint a pinned surface needs is applied by `.hoa-bar` in `app/assets/css/main.css`.
+ * It wears `hoa-bar`, which marks the bar as a context of its own: the panel and the tabs are the
+ * surfaces Chromium can leave showing a stale, unblurred strip of the page behind them once the bar is
+ * pinned, and the bar's own isolation is what keeps a repaint of the page below from being measured as
+ * a change of the bar (`app/assets/css/main.css`).
  */
 defineProps<{
   /** The page's name, printed where a character page prints the character's. */
@@ -42,7 +43,7 @@ const localeUrl = useLocaleUrl()
          as the tabs of the row below do. Nothing else about the bar moves: its tint, its hairline and
          its drop are still its own. -->
     <div
-      class="hoa-panel hoa-panel-layered relative z-30 flex flex-col items-start justify-between gap-4 rounded-t-none border-t-0 px-4 py-1.5 shadow-none sm:px-6 sm:py-3.5 lg:flex-row lg:items-center"
+      class="hoa-panel hoa-panel-layered hoa-panel-flush relative z-30 flex flex-col items-start justify-between gap-4 rounded-t-none border-t-0 px-4 py-1.5 sm:px-6 sm:py-3.5 lg:flex-row lg:items-center"
     >
       <div class="flex items-center gap-4 sm:gap-6">
         <!-- The brand mark is the artwork itself (`app/assets/icons/hoa-emblem.svg`): a gold plate

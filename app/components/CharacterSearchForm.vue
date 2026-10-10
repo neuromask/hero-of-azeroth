@@ -456,38 +456,40 @@ onBeforeUnmount(() => {
            cross on the right drops one character without picking it. -->
       <div
         v-if="nameOpen && historyMatches.length"
-        class="hoa-pop absolute mt-1 w-full max-h-72 overflow-y-auto"
+        class="hoa-pop absolute mt-1 w-full"
       >
-        <p class="hoa-pop-title">
-          {{ $t('searchHistory') }}
-        </p>
-        <div
-          v-for="(entry, i) in historyMatches"
-          :key="searchHistoryKey(entry)"
-          class="group relative"
-          @mouseenter="nameActiveIndex = i"
-        >
-          <button
-            type="button"
-            :data-active="nameActiveIndex === i"
-            class="w-full text-left px-4 py-2 pr-10 text-sm transition-colors"
-            :class="nameActiveIndex === i ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
-            @click="selectHistory(entry)"
+        <div class="max-h-72 overflow-y-auto">
+          <p class="hoa-pop-title">
+            {{ $t('searchHistory') }}
+          </p>
+          <div
+            v-for="(entry, i) in historyMatches"
+            :key="searchHistoryKey(entry)"
+            class="group relative"
+            @mouseenter="nameActiveIndex = i"
           >
-            <!-- The remembered name wears the colour of the class it was found with; a
-                 match under the pointer keeps the gold the search marks it with. -->
-            <CharacterName :class-id="entry.classId" :class-name="entry.class">
-              <span v-for="(part, k) in highlightName(entry.name)" :key="k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
-            </CharacterName>
-            <span class="text-gray-500 text-xs"> · <span v-for="(part, k) in highlightName(historyRealmName(entry))" :key="'realm-' + k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
-          </button>
-          <button
-            type="button"
-            class="absolute right-2 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-xs leading-none text-gray-500 opacity-0 transition-colors hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 focus-visible:opacity-100"
-            :aria-label="$t('removeFromHistory')"
-            :title="$t('removeFromHistory')"
-            @click.stop="removeHistory(entry)"
-          >&#10005;</button>
+            <button
+              type="button"
+              :data-active="nameActiveIndex === i"
+              class="w-full text-left px-4 py-2 pr-10 text-sm transition-colors"
+              :class="nameActiveIndex === i ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
+              @click="selectHistory(entry)"
+            >
+              <!-- The remembered name wears the colour of the class it was found with; a
+                   match under the pointer keeps the gold the search marks it with. -->
+              <CharacterName :class-id="entry.classId" :class-name="entry.class">
+                <span v-for="(part, k) in highlightName(entry.name)" :key="k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
+              </CharacterName>
+              <span class="text-gray-500 text-xs"> · <span v-for="(part, k) in highlightName(historyRealmName(entry))" :key="'realm-' + k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
+            </button>
+            <button
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-xs leading-none text-gray-500 opacity-0 transition-colors hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 focus-visible:opacity-100"
+              :aria-label="$t('removeFromHistory')"
+              :title="$t('removeFromHistory')"
+              @click.stop="removeHistory(entry)"
+            >&#10005;</button>
+          </div>
         </div>
       </div>
     </div>
@@ -534,30 +536,32 @@ onBeforeUnmount(() => {
              the hall of fame's realm menu and the history list above this field wear. -->
         <div
           v-if="open"
-          class="hoa-pop absolute mt-1 w-full max-h-72 overflow-y-auto"
+          class="hoa-pop absolute mt-1 w-full"
         >
-          <p v-if="realmsPending && !realms.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('loading') }}</p>
-          <p v-else-if="!matches.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('noRealms') }}</p>
-          <template v-else>
-            <div v-for="section in sections" :key="section.key">
-              <p class="hoa-pop-title">
-                {{ section.label }}
-              </p>
-              <button
-                v-for="r in section.items"
-                :key="r.slug"
-                type="button"
-                :data-active="activeIndex === r.index"
-                class="w-full text-left px-4 py-2 text-sm transition-colors"
-                :class="activeIndex === r.index ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
-                @mouseenter="activeIndex = r.index"
-                @click="selectRealm(r)"
-              >
-                <span v-for="(part, i) in highlight(r.name)" :key="i" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
-                <span class="text-gray-500 text-xs"> · <span v-for="(part, j) in highlight(realmSecondary(r))" :key="j" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
-              </button>
-            </div>
-          </template>
+          <div class="max-h-72 overflow-y-auto">
+            <p v-if="realmsPending && !realms.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('loading') }}</p>
+            <p v-else-if="!matches.length" class="px-4 py-3 text-sm text-gray-400">{{ $t('noRealms') }}</p>
+            <template v-else>
+              <div v-for="section in sections" :key="section.key">
+                <p class="hoa-pop-title">
+                  {{ section.label }}
+                </p>
+                <button
+                  v-for="r in section.items"
+                  :key="r.slug"
+                  type="button"
+                  :data-active="activeIndex === r.index"
+                  class="w-full text-left px-4 py-2 text-sm transition-colors"
+                  :class="activeIndex === r.index ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
+                  @mouseenter="activeIndex = r.index"
+                  @click="selectRealm(r)"
+                >
+                  <span v-for="(part, i) in highlight(r.name)" :key="i" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
+                  <span class="text-gray-500 text-xs"> · <span v-for="(part, j) in highlight(realmSecondary(r))" :key="j" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
+                </button>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
       <p v-if="realmError" class="mt-1 text-xs text-red-400">{{ $t('pickRealm') }}</p>

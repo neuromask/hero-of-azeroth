@@ -662,10 +662,11 @@ onBeforeUnmount(() => {
            (below), pinned together to the top of the window, so a visitor who has scrolled into the
            feed still has the character, the tabs and the Refresh button in view. The bar sits above
            the views (`z-40`) so they pass behind it, and the panel keeps only its bottom corners
-           rounded because the bar stands flush against the top edge. It wears `hoa-bar`, which marks
-           the glass inside it as pinned - the panel and the tabs are where Chromium can leave a
-           stale, unblurred strip of the page showing - and the hint that answers it lives in
-           `app/assets/css/main.css`. -->
+           rounded because the bar stands flush against the top edge. It wears `hoa-bar`, which marks the
+           bar as a context of its own - the panel and the tabs are where Chromium can leave a stale,
+           unblurred strip of the page showing once the bar is pinned, and the bar's own isolation is
+           what keeps a repaint of the page below from being measured as a change of the bar
+           (`app/assets/css/main.css`). -->
       <header class="hoa-bar sticky top-0 z-40 container mx-auto px-4">
         <!-- The panel is a layer of its own above the navigation row below it (`z-30` against the
              row's `auto`), because the share tray opens downwards out of this panel and into that
@@ -674,7 +675,7 @@ onBeforeUnmount(() => {
              drawn by a layer of the panel instead of by the panel itself (`hoa-panel-layered`), so the
              tray is not cut off from the page behind the bar: a `backdrop-filter` on the panel would
              leave the tray blurring nothing but the bar it hangs in. -->
-        <div class="hoa-panel hoa-panel-layered relative z-30 rounded-t-none border-t-0 shadow-none px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div class="hoa-panel hoa-panel-layered hoa-panel-flush relative z-30 rounded-t-none border-t-0 px-4 py-1.5 sm:px-6 sm:py-3.5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div class="flex items-center gap-4 sm:gap-6">
             <!-- The character's own portrait, in the place the site's brand mark holds on every other
                  page (see `portraitHex` above): the square at the top left is where a reader looks

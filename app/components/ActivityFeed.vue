@@ -248,7 +248,7 @@ function accentOf(item: ActivityItem) {
                 >
                   {{ formatRelative(item.completedAt) }}
                   <span
-                    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/15 bg-black/90 px-2.5 py-1 text-[11px] font-normal text-gray-200 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur group-hover/date:block"
+                    class="hoa-tip pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap px-2.5 py-1 text-[11px] font-normal text-gray-200 group-hover/date:block"
                   >
                     {{ formatAbsolute(item.completedAt) }}
                   </span>
