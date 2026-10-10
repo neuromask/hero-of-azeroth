@@ -26,6 +26,9 @@ import type { CharacterData } from './blizzard'
 // The overall rating, off the same formula the hall of fame ranks by - so the pool's own figure and
 // the table's column are one number.
 import { calculatePlayerScore } from '#shared/utils/leaderboardScore'
+// The identity the hall of fame keys a row on, so the totals below are handed back under the key
+// the table itself looks a row up by.
+import { leaderboardKey } from './leaderboardExclusions'
 
 /** The kinds the pool counts, one per figure a tile prints. */
 export const POOL_KINDS = ['mounts', 'pets', 'toys', 'decor', 'reputations'] as const
@@ -225,6 +228,46 @@ export function readAccountTotals(userId: number): AccountTotals {
     }),
     accountWide
   }
+}
+
+/**
+ * The account's totals, handed back under the key the hall of fame keys a row on.
+ *
+ * This is what lets the table *read* the account rather than wait to be told: the row of a
+ * signed-in player is drawn with the account's own figures wherever it is read, whether or not that
+ * character has been looked up since the pool last grew. Without it a row written before the pool
+ * existed keeps the character's faction-limited numbers until somebody happens to open that page,
+ * while the page itself already answers with the account's - the table and the character page
+ * disagreeing about the same reader.
+ *
+ * One pass over the roster answers every row, and each account's totals are read once however many
+ * of its characters the table holds.
+ */
+export function accountTotalsByCharacterKey(): Map<string, AccountTotals> {
+  const totals = new Map<string, AccountTotals>()
+
+  try {
+    const rows = useDb()
+      .prepare('SELECT user_id, region, realm_slug, name_key FROM characters')
+      .all() as { user_id: number; region: string; realm_slug: string; name_key: string }[]
+
+    const byAccount = new Map<number, AccountTotals>()
+
+    for (const row of rows) {
+      let account = byAccount.get(row.user_id)
+      if (!account) {
+        account = readAccountTotals(row.user_id)
+        byAccount.set(row.user_id, account)
+      }
+
+      totals.set(leaderboardKey(row.region, row.realm_slug, row.name_key), account)
+    }
+  } catch {
+    // No database, or one with no roster yet: no account stands behind any row, which is the
+    // stranger's answer the table already knows how to draw.
+  }
+
+  return totals
 }
 
 /**

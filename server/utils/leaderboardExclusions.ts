@@ -20,6 +20,15 @@ const CACHE_MS = 60 * 1000
 
 let cached: { keys: Set<string>; at: number } | null = null
 
+/**
+ * How many times the set has been dropped outright.
+ *
+ * The leaderboard's answer is cached for an hour (`server/api/leaderboard`), and what the set holds
+ * is part of that answer - a character that stops being the main drops out of the table. Counting
+ * the drops is what lets the endpoint notice, without it having to know a thing about a roster.
+ */
+let revision = 0
+
 /** The identity the leaderboard keys a record on: its three address segments, lowercased. */
 export function leaderboardKey(region: string, realm: string, name: string): string {
   return `${region}:${realm}:${name}`.toLowerCase()
@@ -55,4 +64,10 @@ export function excludedLeaderboardKeys(): Set<string> {
 /** Drops the memoised set, so a main that just changed is honoured at once. */
 export function clearLeaderboardExclusions(): void {
   cached = null
+  revision += 1
+}
+
+/** How many times the set has been dropped, which is what a stamp of the table's own view reads. */
+export function exclusionsRevision(): number {
+  return revision
 }

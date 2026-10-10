@@ -184,8 +184,9 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
   // What this character adds to the account's pool, both folded in as ids: its own mount journal
   // (a mount can belong to a side or a race, and it only ever appears in the journal of a character
   // who can use it, so the union across the roster is the account's real figure) and the factions it
-  // has finished. The main's public row follows only when the pool actually grew, so a pass over a
-  // hundred alts is not a hundred leaderboard writes.
+  // has finished. A pool that grew hands the account's row over at once; the rest of the batch is
+  // handed over once per account when the pass ends (`syncDueCharacters`), so a pass over a hundred
+  // alts is not a hundred leaderboard writes.
   try {
     const mounts = await getCharacterMountIds(row.realm_slug, row.name_key, row.region, locale)
     const factions = await getMaxedReputationIds(row.realm_slug, row.name_key, row.region, locale)
@@ -251,6 +252,19 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
       done += 1
     } catch {
       // Retried on the next pass; one character that cannot be read never stops the batch.
+    }
+  }
+
+  // And the main's public row once per account the pass touched. What that row prints is the
+  // account's own figures (`./accountPool`), and the snapshots written above are one of the things
+  // they are read from - so a pass that moved a figure the row shows has to hand it over. Once per
+  // account rather than once per character: a record that already says these figures is not written
+  // again, so a pass over a hundred alts is one comparison and no disk at all.
+  for (const account of new Set(due.map((row) => row.user_id))) {
+    try {
+      syncMainToLeaderboard(account)
+    } catch {
+      // The row keeps what it had; the next pass tries again.
     }
   }
 

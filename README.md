@@ -400,7 +400,11 @@ character up still costs nothing and needs no account.
   `findOwnerPool` is the one place that rule lives. The overview says which of the two a figure is:
   while a pool answered, `character.pooled` is `true` and every tile reads `account-wide` under its
   label; a character with no pool reads `per character` on mounts and reputations and `account-wide`
-  on the collections Blizzard keeps for the account (pets, toys, decor, achievement points). The main
+  on the collections Blizzard keeps for the account (pets, toys, decor, achievement points). The hall
+  of fame *reads* the pool too, on every request that answers with a table
+  (`accountTotalsByCharacterKey`): its row for a signed-in player is drawn with the account's figures
+  rather than with whatever the row happened to be written with, so the table and that player's own
+  page cannot disagree because one of them was looked up before the pool grew. The main
   tile's **Download** draws the account
   card (`/api/profile/card`), **Update all** walks the roster sequentially (700 ms apart, with a
   progress bar), each tile refreshes on its own with a 30-second cooldown, and the account menu (the

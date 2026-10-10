@@ -34,7 +34,10 @@ import { calculatePlayerScore, totalCollectables, SCORE_VERSION } from '#shared/
 import { readCharacterIndex } from './characterIndex'
 // The one rule the table learns from the site's accounts: a character an account kept to itself
 // does not belong here, and only a main does (see `./leaderboardExclusions`).
-import { excludedLeaderboardKeys, leaderboardKey } from './leaderboardExclusions'
+import { excludedLeaderboardKeys, exclusionsRevision, leaderboardKey } from './leaderboardExclusions'
+// The account behind a row, and the figures it holds: what makes the table print the account's
+// numbers for a signed-in player rather than one character's (see `withAccountTotals`).
+import { accountTotalsByCharacterKey } from './accountPool'
 import type {
   LeaderboardFaction,
   LeaderboardLeader,
@@ -246,6 +249,52 @@ let loading: Promise<LeaderboardFile> | null = null
 
 /** The statistics of the snapshot, memoised until a write replaces it (see `getGlobalStats`). */
 let statsMemo: LeaderboardStats | null = null
+
+/** How many times the file has been written, which is what a stamp of the table itself is made of. */
+let revision = 0
+
+/** The stamp the memoised statistics were read from, so a pool that moved behind them is noticed. */
+let statsStamp = ''
+
+/**
+ * A stamp of everything the table is drawn with: the table's own file, the pool, and the readings
+ * the accounts' figures are taken from.
+ *
+ * The endpoint that serves the table holds its answer for an hour (`server/api/leaderboard`), which
+ * is the site's performance story - but an hour is also how long a pool that just grew, or a
+ * character that was just read, would stay invisible behind that answer. The stamp is what the
+ * endpoint compares its entry against: it moves whenever any of the three moves, and the entry is
+ * rebuilt from the stamp that is current rather than from the one it was built with.
+ */
+export function leaderboardDataStamp(): string {
+  return `${revision}:${exclusionsRevision()}:${accountDataStamp()}`
+}
+
+/**
+ * A stamp of what the accounts hold: the pool, and the newest reading of a character.
+ *
+ * A memo taken before a sync must not answer after it. The pool grows in the background
+ * (`./accountPool`) and the snapshots are written by the same task, while the table's own file can
+ * sit untouched for weeks - so the widgets, which are computed from the rows, would keep printing
+ * the figures of a pool that has since been filled in.
+ */
+function accountDataStamp(): string {
+  try {
+    const row = useDb()
+      .prepare(
+        `SELECT (SELECT COUNT(*) FROM account_pool) AS pool,
+                (SELECT COALESCE(MAX(first_seen_at), 0) FROM account_pool) AS poolSeen,
+                (SELECT COUNT(*) FROM snapshots) AS readings,
+                (SELECT COALESCE(MAX(taken_at), 0) FROM snapshots) AS readingAt`
+      )
+      .get() as { pool: number; poolSeen: number; readings: number; readingAt: number }
+
+    return `${row.pool}:${row.poolSeen}:${row.readings}:${row.readingAt}`
+  } catch {
+    // No database yet: nothing that could move behind the memo's back.
+    return 'none'
+  }
+}
 
 /** A table with nothing in it, which is what an unreadable or missing file reads as. */
 function emptyFile(): LeaderboardFile {
@@ -470,9 +519,11 @@ export function upsertPlayer(profile: PlayerProfileInput): Promise<void> {
       }
 
       // The snapshot is replaced before the file is written, so the readers that arrive while the
-      // disk is being written see the new table rather than the old one.
+      // disk is being written see the new table rather than the old one. The revision moves with it,
+      // which is how a cache keyed on the data knows this table is not the one it answered from.
       snapshot = next
       statsMemo = null
+      revision += 1
 
       await writeTable(next)
     } catch (error) {
@@ -555,17 +606,76 @@ function byRating(a: LeaderboardPlayer, b: LeaderboardPlayer): number {
 
 /** Whether a player survives the filters a caller asked for. */
 /**
+ * The account's own figures laid over the rows that belong to one.
+ *
+ * The table lists one character per account - its main - and a collector comparing rows there is
+ * comparing accounts, so that row has to print the account's collections rather than one character's
+ * faction-limited ones (`./accountPool`). Writing that into the row is not enough on its own: a row
+ * is written when the pool grows or when somebody opens that character, so a table that trusted the
+ * file would keep whatever the row said the last time it was written - which, for a character nobody
+ * has opened since the pool was built, is the number the site had before it ever had accounts.
+ *
+ * So the totals are laid over the row on the way out instead, which is what makes the table and the
+ * character's own page one number by construction rather than by timing.
+ *
+ * Nothing is lowered. The pool counts unique ids, and where it has nothing to say the best reading
+ * of the account - or the row's own figure, which is a live Blizzard read - stands.
+ */
+function withAccountTotals(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
+  const accounts = accountTotalsByCharacterKey()
+  if (!accounts.size) return players
+
+  return players.map((player) => {
+    const account = accounts.get(leaderboardKey(player.region, player.realm, player.name))
+    if (!account) return player
+
+    const figures = {
+      mounts: Math.max(player.mounts, account.mounts),
+      pets: Math.max(player.pets, account.pets),
+      toys: Math.max(player.toys, account.toys),
+      decor: Math.max(player.decor, account.decor),
+      achievements: Math.max(player.achievements, account.achievements)
+    }
+
+    // A row the account has nothing to add to is handed back as it stands, so the common case - an
+    // account whose row was already written from its own pool - allocates nothing.
+    if (isSameFigures(player, figures)) return player
+
+    // The rating is a stored column, so it is recomputed here from the figures being served: the
+    // table's order is the order of what a reader sees.
+    return { ...player, ...figures, score: calculatePlayerScore({ ...player, ...figures }) }
+  })
+}
+
+/** Whether a row already prints these figures. */
+function isSameFigures(
+  player: LeaderboardPlayer,
+  figures: Pick<LeaderboardPlayer, 'mounts' | 'pets' | 'toys' | 'decor' | 'achievements'>
+): boolean {
+  return (
+    player.mounts === figures.mounts &&
+    player.pets === figures.pets &&
+    player.toys === figures.toys &&
+    player.decor === figures.decor &&
+    player.achievements === figures.achievements
+  )
+}
+
+/**
  * The players the public table may draw: everybody the site knows, minus the characters an
- * account kept to itself.
+ * account kept to itself, and with each account's own figures over its own row.
  *
  * The exclusion is read from SQLite through a minute-long memo (`./leaderboardExclusions`), so a
- * burst of page reads pays one query for a fact that almost never moves.
+ * burst of page reads pays one query for a fact that almost never moves. The totals are read the
+ * same way, once per read rather than once per row.
  */
 function visiblePlayers(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
   const excluded = excludedLeaderboardKeys()
-  if (!excluded.size) return players
+  const roster = excluded.size
+    ? players.filter((player) => !excluded.has(leaderboardKey(player.region, player.realm, player.name)))
+    : players
 
-  return players.filter((player) => !excluded.has(leaderboardKey(player.region, player.realm, player.name)))
+  return withAccountTotals(roster)
 }
 
 /** Whether a player survives the filters a caller asked for. */
@@ -664,10 +774,14 @@ const FACTION_ORDER: readonly LeaderboardFaction[] = ['alliance', 'horde', 'neut
  * point of the memo is that the page's cost does not grow with the table at all.
  */
 export async function getGlobalStats(): Promise<LeaderboardStats> {
-  if (statsMemo) return statsMemo
+  // The memo follows the data, not only the table's own writes: a pool that grew since the last
+  // read moves the widgets' figures even when no row was rewritten for it (`accountDataStamp`).
+  const stamp = accountDataStamp()
+  if (statsMemo && stamp === statsStamp) return statsMemo
 
   const file = await readTable()
   statsMemo = computeStats(visiblePlayers(file.players))
+  statsStamp = stamp
 
   return statsMemo
 }
