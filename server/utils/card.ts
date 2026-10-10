@@ -2,6 +2,8 @@ import { Resvg } from '@resvg/resvg-js'
 import type { ResvgRenderOptions } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
 import { mPlusQualityHex, wowQualityHex } from '#shared/utils/wow-quality'
+// The one rule for how a figure is written on the site, shared with the pages the card previews.
+import { formatNumber } from '#shared/utils/formatNumber'
 // The class colours are shared with the page and the search history, so a card, a page and a
 // remembered name all read one table (see `shared/utils/wow-class.ts`).
 import { classColorHex } from '#shared/utils/wow-class'
@@ -605,10 +607,11 @@ interface Tile {
  * rather than picked here because all six have to hold the same one, and it is what places the
  * count between the heading and the bar. The count is set in the tier colour its collection has
  * reached - the same ladder the page's tiles set theirs in - and the bar's fill is the share of
- * the collection that is complete. The count is written as plain digits, with no thousands
- * separator, so it reads the same here as it does on the page and in the game. The tile carries
- * no small print: at this width there is no room for the total and the percentage beside the
- * label, which is what the bar is for.
+ * the collection that is complete. The count is written the way every figure on the site is written
+ * (`#shared/utils/formatNumber`), which is what makes the picture and the page it previews agree to
+ * the digit: thousands are grouped by a space, so `1 200` mounts reads the same on the card as in
+ * the tile it was drawn from. The tile carries no small print: at this width there is no room for
+ * the total and the percentage beside the label, which is what the bar is for.
  */
 function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: number): string {
   const inset = width - TILE_PAD * 2
@@ -620,7 +623,7 @@ function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: nu
   // bloom the bars have on the page, and crisp on top of it so the fill keeps its edges.
   return `<rect x="${round2(x)}" y="${y}" width="${round2(width)}" height="${TILE_HEIGHT}" rx="14" fill="#05070b" fill-opacity="0.6" stroke="#1e293b" stroke-width="2"/>
   ${headingSvg(tile.icon, tile.label, x + TILE_PAD, y + TILE_LABEL_Y, inset)}
-  <text x="${round2(x + width / 2)}" y="${round2(y + tileNumberY(numberSize))}" font-size="${numberSize}" font-weight="700" fill="${tile.color}" text-anchor="middle">${tile.count}</text>
+  <text x="${round2(x + width / 2)}" y="${round2(y + tileNumberY(numberSize))}" font-size="${numberSize}" font-weight="700" fill="${tile.color}" text-anchor="middle">${formatNumber(tile.count)}</text>
   <rect x="${barX}" y="${barY}" width="${barWidth}" height="${TILE_BAR_HEIGHT}" rx="4" fill="#0b1220" stroke="#334155" stroke-width="1"/>
   <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)" filter="url(#barGlow)"/>
   <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)"/>`
@@ -858,7 +861,7 @@ interface Badge {
 function characterBadges(data: CharacterData, classColor: string): Badge[] {
   const specClass = [data.spec, data.class].filter(Boolean).join(' ')
   return [
-    { text: String(data.level), color: '#f8b700' },
+    { text: formatNumber(data.level), color: '#f8b700' },
     { text: data.race, color: '#e2e8f0' },
     { text: specClass, color: classColor },
     { text: data.guild ? `<${data.guild}>` : '', color: '#e2e8f0' },
@@ -972,15 +975,15 @@ function tileNumberY(numberSize: number): number {
  */
 function measurementPlan(tiles: Tile[], data: CharacterData, L: Record<string, string>, classColor: string): MeasureRequest[] {
   const plan: MeasureRequest[] = []
-  const counts = tiles.map(tile => String(tile.count))
+  const counts = tiles.map(tile => formatNumber(tile.count))
 
   for (const size of TILE_NUMBER_SIZES) {
     for (const count of counts) plan.push({ value: count, size })
   }
 
   for (const size of STATS_NUMBER_SIZES) {
-    plan.push({ value: String(data.ilvl), size })
-    plan.push({ value: String(data.mPlusScore), size })
+    plan.push({ value: formatNumber(data.ilvl), size })
+    plan.push({ value: formatNumber(data.mPlusScore), size })
   }
 
   for (const tile of tiles) {
@@ -1041,7 +1044,7 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
   // All six counts are set at one size - the largest that fits a tile's room - and every column
   // of the grid is the same width, so the room is the column less the padding on either side.
   const tileWidth = (COLUMN_WIDTH - (TILE_COLUMNS - 1) * TILE_GAP) / TILE_COLUMNS
-  const numberSize = tileNumberSize(tiles.map(tile => String(tile.count)), tileWidth - TILE_PAD * 2)
+  const numberSize = tileNumberSize(tiles.map(tile => formatNumber(tile.count)), tileWidth - TILE_PAD * 2)
 
   /**
    * The grid, drawn row by row. A last row holding fewer tiles than the grid is wide shares
@@ -1100,8 +1103,8 @@ async function buildCardSvg(
    * pair of numbers set at two sizes reads as an accident.
    */
   const statSize = STATS_NUMBER_SIZES.find(size =>
-    statWidth('item-level', String(data.ilvl), size) <= PLATE_WIDTH - 24
-    && statWidth('key', String(data.mPlusScore), size) <= PLATE_WIDTH - 24
+    statWidth('item-level', formatNumber(data.ilvl), size) <= PLATE_WIDTH - 24
+    && statWidth('key', formatNumber(data.mPlusScore), size) <= PLATE_WIDTH - 24
   ) || STATS_NUMBER_SIZES[STATS_NUMBER_SIZES.length - 1]
 
   /**
@@ -1187,8 +1190,8 @@ async function buildCardSvg(
   <!-- The two headline figures, strictly under the grid: the item level is a plain white number,
        with no ladder to be read against, and the rating wears the tier its band has reached, off
        the same bands the page colours it with. -->
-  ${plateSvg('item-level', L.itemLevel, String(data.ilvl), '#ffffff', 0, statSize)}
-  ${plateSvg('key', L.mPlus, String(data.mPlusScore), mPlusQualityHex(data.mPlusScore), 1, statSize)}
+  ${plateSvg('item-level', L.itemLevel, formatNumber(data.ilvl), '#ffffff', 0, statSize)}
+  ${plateSvg('key', L.mPlus, formatNumber(data.mPlusScore), mPlusQualityHex(data.mPlusScore), 1, statSize)}
 
   <rect x="${COLUMN_X}" y="${FOOTER_TOP}" width="${COLUMN_WIDTH}" height="${FOOTER_HEIGHT}" rx="10" fill="#05070b" fill-opacity="0.6"/>
   <text x="${COLUMN_X + 20}" y="${FOOTER_TOP + 21}" font-size="15" fill="#94a3b8">heroofazeroth.com</text>

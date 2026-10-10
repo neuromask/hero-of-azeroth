@@ -19,6 +19,8 @@
  */
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
+// How a figure is written on the site: one rule, shared with the card and every other page.
+import { formatNumber } from '#shared/utils/formatNumber'
 import type { LeaderboardPlayer, LeaderboardStats } from '#shared/data/leaderboardSchema'
 
 const props = defineProps<{
@@ -36,11 +38,6 @@ const { realmLabel } = useRealmNames()
 
 /** A dash, which is what a figure the table does not know is printed as. */
 const DASH = '—'
-
-/** A figure the way the language being read writes it: `4 589` in Russian, `4,589` in English. */
-function format(value: number): string {
-  return value.toLocaleString(locale.value === 'ru' ? 'ru-RU' : 'en-US')
-}
 
 /** A class's name in the language being read. The id is the same in every language, the word is not. */
 function className(classId: number): string {
@@ -87,16 +84,16 @@ const cards = computed<Card[]>(() => {
       key: 'players',
       icon: 'user',
       label: t('lbStatPlayers'),
-      value: stats ? format(stats.players) : DASH,
+      value: stats ? formatNumber(stats.players) : DASH,
       hint: stats
-        ? t('lbStatPlayersHint', { realms: format(stats.realms), classes: format(stats.classes) })
+        ? t('lbStatPlayersHint', { realms: formatNumber(stats.realms), classes: formatNumber(stats.classes) })
         : DASH
     },
     {
       key: 'collector',
       icon: 'mounts',
       label: t('lbStatCollector'),
-      value: leader ? format(leader.value) : DASH,
+      value: leader ? formatNumber(leader.value) : DASH,
       hint: leader ? `${t('lbStatItems')} · ${nameOf(leader.player)}` : DASH,
       hintHex: leader ? classById(leader.player.classId)?.hex : undefined,
       href: leader ? profileUrl(leader.player) : undefined
@@ -108,14 +105,14 @@ const cards = computed<Card[]>(() => {
       label: t('lbStatClass'),
       value: topClass ? className(topClass.classId) : DASH,
       hint: topClass
-        ? t('lbStatClassHint', { share: topClass.share, count: format(topClass.count) })
+        ? t('lbStatClassHint', { share: topClass.share, count: formatNumber(topClass.count) })
         : DASH
     },
     {
       key: 'rating',
       icon: 'key',
       label: t('lbStatRating'),
-      value: rating ? format(rating.value) : DASH,
+      value: rating ? formatNumber(rating.value) : DASH,
       valueClass: rating ? mPlusQualityTextClass(rating.value) : undefined,
       hint: rating ? nameOf(rating.player) : DASH,
       hintHex: rating ? classById(rating.player.classId)?.hex : undefined,
@@ -125,7 +122,7 @@ const cards = computed<Card[]>(() => {
       key: 'architect',
       icon: 'decor',
       label: t('lbStatArchitect'),
-      value: architect ? format(architect.value) : DASH,
+      value: architect ? formatNumber(architect.value) : DASH,
       hint: architect ? nameOf(architect.player) : DASH,
       hintHex: architect ? classById(architect.player.classId)?.hex : undefined,
       href: architect ? profileUrl(architect.player) : undefined

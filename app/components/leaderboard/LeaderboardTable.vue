@@ -19,6 +19,7 @@
  * reader's would no longer be the table it was handed.
  */
 import { searchHistoryKey } from '~/composables/searchHistory'
+import { formatNumber } from '#shared/utils/formatNumber'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
 import { factionById } from '#shared/utils/wow-faction'
@@ -54,10 +55,10 @@ const { realmLabel } = useRealmNames()
 /** The medal colours of the first three ranks: gold, silver, bronze. */
 const MEDALS = ['#f8b700', '#cbd5e1', '#d08b4a']
 
-/** A figure the way the language being read writes it, or a dash when the table does not know it. */
+/** A figure the way the site writes figures, or a dash when the table does not know it. */
 function format(value: number): string {
   if (!value) return '—'
-  return value.toLocaleString(locale.value === 'ru' ? 'ru-RU' : 'en-US')
+  return formatNumber(value)
 }
 
 /** A class's name in the language being read. */
@@ -286,7 +287,7 @@ function open(player: LeaderboardPlayer) {
               :class="isMe(player) ? 'border-l-2 border-wow-gold' : ''"
             >
               <span
-                class="inline-grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold tabular-nums"
+                class="inline-grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold tabular-nums whitespace-nowrap"
                 :style="medalOf(index)
                   ? {
                       color: '#0b0b0b',
@@ -294,7 +295,7 @@ function open(player: LeaderboardPlayer) {
                       boxShadow: `0 0 14px ${medalOf(index)}66`
                     }
                   : { color: '#9ca3af' }"
-              >{{ rankOf(index) }}</span>
+              >{{ formatNumber(rankOf(index)) }}</span>
             </td>
 
             <!-- Who the row is: portrait, name in the class colour, side, realm, class and level. -->
@@ -354,7 +355,7 @@ function open(player: LeaderboardPlayer) {
                   </div>
 
                   <p class="truncate text-xs text-gray-500">
-                    {{ realmLabel(player.region, player.realm, player.realmName) }} · {{ className(player.classId) }} · {{ t('lbLevel') }} {{ player.level }}
+                    {{ realmLabel(player.region, player.realm, player.realmName) }} · {{ className(player.classId) }} · {{ t('lbLevel') }} {{ formatNumber(player.level) }}
                   </p>
                 </div>
               </div>
@@ -365,7 +366,7 @@ function open(player: LeaderboardPlayer) {
             <td
               v-for="column in visible"
               :key="column.key"
-              class="px-2 py-2.5 text-right tabular-nums"
+              class="px-2 py-2.5 text-right tabular-nums whitespace-nowrap"
               :class="column.key === 'mplus'
                 ? mPlusQualityTextClass(player.mPlusScore)
                 : 'text-gray-200'"
@@ -375,7 +376,7 @@ function open(player: LeaderboardPlayer) {
                  asked for - the one figure with a header of its own outside the list above. -->
             <td
               v-if="showsScore"
-              class="px-3 py-2.5 text-right font-extrabold tabular-nums text-wow-gold"
+              class="px-3 py-2.5 text-right font-extrabold tabular-nums whitespace-nowrap text-wow-gold"
             >{{ format(player.score) }}</td>
           </tr>
         </tbody>

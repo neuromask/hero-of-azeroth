@@ -26,6 +26,7 @@
 import { searchHistoryKey } from '~/composables/searchHistory'
 import type { SearchHistoryEntry } from '~/composables/searchHistory'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
+import { formatNumber } from '#shared/utils/formatNumber'
 import { factionById } from '#shared/utils/wow-faction'
 import type { LeaderboardStanding } from '#shared/data/leaderboardSchema'
 
@@ -124,11 +125,6 @@ const initial = computed(() => (displayName.value || props.character.name).charA
 
 /** A portrait that failed to load, which the monogram then stands in for. */
 const broken = ref(false)
-
-/** A figure the way the language being read writes it. */
-function format(value: number): string {
-  return value.toLocaleString(locale.value === 'ru' ? 'ru-RU' : 'en-US')
-}
 </script>
 
 <template>
@@ -187,7 +183,7 @@ function format(value: number): string {
         <p class="truncate text-xs text-gray-500">
           {{ realmName }}
           <template v-if="className"> · {{ className }}</template>
-          <template v-if="level"> · {{ t('lbLevel') }} {{ level }}</template>
+          <template v-if="level"> · {{ t('lbLevel') }} {{ formatNumber(level) }}</template>
         </p>
       </div>
     </div>
@@ -197,19 +193,19 @@ function format(value: number): string {
     <div class="ml-auto flex flex-wrap items-center gap-x-6 gap-y-2">
       <div>
         <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ t('lbYouPlace') }}</p>
-        <p class="text-2xl font-extrabold leading-tight tabular-nums text-wow-goldLight">
-          <span v-if="known">{{ format(rank) }}</span>
+        <p class="text-2xl font-extrabold leading-tight tabular-nums whitespace-nowrap text-wow-goldLight">
+          <span v-if="known">{{ formatNumber(rank) }}</span>
           <span v-else>{{ DASH }}</span>
           <span v-if="known" class="ml-1.5 text-sm font-normal text-gray-400">
-            {{ t('lbYouOf', { total: format(total) }) }}
+            {{ t('lbYouOf', { total: formatNumber(total) }) }}
           </span>
         </p>
       </div>
 
       <div>
         <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ t('lbColScore') }}</p>
-        <p class="text-2xl font-extrabold leading-tight tabular-nums text-wow-goldLight">
-          {{ known ? format(score) : DASH }}
+        <p class="text-2xl font-extrabold leading-tight tabular-nums whitespace-nowrap text-wow-goldLight">
+          {{ known ? formatNumber(score) : DASH }}
         </p>
       </div>
 

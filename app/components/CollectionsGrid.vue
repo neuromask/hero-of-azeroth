@@ -1,6 +1,9 @@
 <script setup lang="ts">
 // The shelf the grid draws, and the section/item shapes it reads from.
 import type { CollectionItem, CollectionPage, CollectionSection } from '#shared/data/collectionsSchema'
+// Counts are written by the site's one rule (`#shared/utils/formatNumber`), so a section reads its
+// figures the way every other page prints them.
+import { formatNumber } from '#shared/utils/formatNumber'
 // The address a tile links to, and the one hook that makes the widget read the tiles it has not
 // seen: the grid asks once, however many links it has just added (see the composable).
 import { useWowheadPower, wowheadUrl } from '~/composables/wowheadPower'
@@ -278,10 +281,10 @@ function placeholderHeight(section: CollectionSection): string {
           <h3 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
             {{ section.label }}
           </h3>
-          <span class="hoa-tag text-gray-300">
-            <span class="tabular-nums text-wow-goldLight">{{ section.collected }}</span>
-            <span class="tabular-nums">/{{ section.total }}</span>
-            <span class="text-gray-500">({{ section.percent }}%)</span>
+          <span class="hoa-tag whitespace-nowrap text-gray-300">
+            <span class="tabular-nums text-wow-goldLight">{{ formatNumber(section.collected) }}</span>
+            <span class="tabular-nums">/{{ formatNumber(section.total) }}</span>
+            <span class="text-gray-500">({{ formatNumber(section.percent) }}%)</span>
           </span>
         </div>
 

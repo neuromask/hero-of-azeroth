@@ -129,6 +129,23 @@ flowchart LR
   CD --> V
 ```
 
+### How numbers are written
+
+Every figure on the site — and every figure drawn into the card — is written one way: thousands
+grouped by a space, never by a comma and never run together. `1 200` mounts, `44 720` achievement
+points, `2 997` M+.
+
+That is not a per-page decision, and it is not `toLocaleString`. The rule lives in exactly one place,
+[`shared/utils/formatNumber.ts`](shared/utils/formatNumber.ts), and both ends of the project call it:
+the Vue pages and the `resvg` card renderer. It is not the language's own separator on purpose — a
+comma in English, a non-breaking space in Russian — because the card is drawn by resvg in a font the
+site ships, where a glyph a face does not carry is a box, and because a count has to read the same in
+the picture as on the page it previews. A figure that must stay on one line is kept whole with
+`whitespace-nowrap` where it stands: a layout decision, not a formatting one.
+
+**A figure printed without it is the bug.** Add the `formatNumber` call rather than a local helper —
+a second implementation is a second answer.
+
 ### Endpoints
 
 | Endpoint | Answers |

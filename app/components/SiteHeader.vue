@@ -59,7 +59,7 @@ const localeUrl = useLocaleUrl()
           <h1 class="text-2xl font-extrabold tracking-wide text-white drop-shadow sm:text-4xl">
             {{ title }}
           </h1>
-          <p v-if="meta" class="mt-1.5 text-base text-gray-400 sm:text-lg">{{ meta }}</p>
+          <p v-if="meta" class="text-base text-gray-400 sm:text-lg">{{ meta }}</p>
         </div>
       </div>
 

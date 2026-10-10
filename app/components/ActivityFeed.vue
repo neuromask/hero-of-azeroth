@@ -9,6 +9,8 @@ import {
   type ActivityCategory,
   type ActivityItem
 } from '#shared/utils/activity'
+// How a figure is written on the site: one rule, shared with the card and the leaderboard.
+import { formatNumber } from '#shared/utils/formatNumber'
 
 const props = defineProps<{
   /** The most recently earned achievements, newest first. */
@@ -111,7 +113,7 @@ function accentOf(item: ActivityItem) {
       </h2>
       <span class="text-xs text-gray-400 sm:text-sm">
         {{ $t('achievements') }}:
-        <b class="text-white tabular-nums">{{ totalPoints }}</b>
+        <b class="whitespace-nowrap text-white tabular-nums">{{ formatNumber(totalPoints) }}</b>
       </span>
     </div>
 
@@ -140,12 +142,12 @@ function accentOf(item: ActivityItem) {
           <span aria-hidden="true">{{ filter.emoji }}</span>
           <span class="flex-1 text-left">{{ $t(filter.label) }}</span>
           <span
-            class="grid min-w-[1.5rem] place-items-center rounded-md border px-1 text-xs font-semibold tabular-nums"
+            class="grid min-w-[1.5rem] place-items-center rounded-md border px-1 text-xs font-semibold tabular-nums whitespace-nowrap"
             :class="active === filter.key
               ? 'border-wow-gold/40 bg-wow-gold/15 text-wow-goldLight'
               : 'border-white/15 bg-white/5 text-gray-300'"
           >
-            {{ counts[filter.key] }}
+            {{ formatNumber(counts[filter.key]) }}
           </span>
         </button>
       </nav>
@@ -226,10 +228,10 @@ function accentOf(item: ActivityItem) {
                 </h3>
                 <span
                   v-if="item.points"
-                  class="shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums"
+                  class="shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums whitespace-nowrap"
                   :class="accentOf(item).badge"
                 >
-                  +{{ item.points }}
+                  +{{ formatNumber(item.points) }}
                 </span>
               </div>
 

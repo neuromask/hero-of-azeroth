@@ -565,7 +565,7 @@ onBeforeUnmount(() => {
 
     <button
       type="submit"
-      class="w-full mt-2 bg-gradient-to-r from-amber-600 to-wow-gold text-black font-semibold py-3 rounded-lg hover:brightness-110 transition-all shadow-lg uppercase text-sm tracking-wider disabled:cursor-wait disabled:brightness-95"
+      class="w-full mt-2 bg-gradient-to-r from-amber-600 to-wow-gold text-black font-extrabold py-3 rounded-lg hover:brightness-110 transition-all shadow-lg uppercase text-sm tracking-wider disabled:cursor-wait disabled:brightness-95"
       :disabled="searching"
     >
       <!-- While the character page is fetching from Blizzard, the button becomes the wait:

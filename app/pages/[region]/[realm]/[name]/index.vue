@@ -3,18 +3,15 @@
 // card, which draws the same tiers into its own SVG: one table, so a page and its card can never
 // disagree.
 import { collectionPercent, mPlusQualityTextClass, wowQualityTextClass } from '#shared/utils/wow-quality'
+// Counts are written by the site's one rule (`#shared/utils/formatNumber`): thousands grouped by a
+// space, so a tile reads `1 200` here exactly as it does on the card drawn from it.
+import { formatNumber } from '#shared/utils/formatNumber'
 // The profile the shell fetched (see the composable). The tiles and the summary are the
 // overview's alone, so everything they draw is computed here.
 import { useCharacterView } from '~/composables/characterView'
 
 const { character } = useCharacterView()
 const { t } = useI18n()
-
-/**
- * Counts are written as plain digits - no thousands separator - so a number reads the same on the
- * page, on the card and in the game.
- */
-const formatCount = (value: number) => String(value)
 
 /**
  * The rating wears the tier it has reached, off the same Mythic+ bands the card colours the
@@ -75,7 +72,7 @@ const tileColumns = computed<StatTile[][]>(() => {
     ...tile,
     // The count wears the tier its collection has reached, the way the card's numbers do.
     color: wowQualityTextClass(tile.count, tile.total),
-    display: formatCount(tile.count),
+    display: formatNumber(tile.count),
     percent: collectionPercent(tile.count, tile.total)
   }))
 
@@ -128,7 +125,7 @@ const tileColumns = computed<StatTile[][]>(() => {
             <!-- Under the first row: whose numbers the tile shows, and how much of everything there
                  is to collect they cover. -->
             <span class="truncate text-[12px] uppercase px-10 font-normal text-gray-400">{{ tile.note }}</span>
-            <span class="whitespace-nowrap text-right text-[12px] font-normal text-gray-400 tabular-nums">{{ formatCount(tile.total) }} / {{ tile.percent }}%</span>
+            <span class="whitespace-nowrap text-right text-[12px] font-normal text-gray-400 tabular-nums">{{ formatNumber(tile.total) }} / {{ formatNumber(tile.percent) }}%</span>
           </div>
           <div class="w-full bg-black/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/5">
             <div class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-1000" :style="{ width: tile.percent + '%' }"></div>
@@ -150,17 +147,17 @@ const tileColumns = computed<StatTile[][]>(() => {
     <div class="hoa-panel hoa-panel-interactive flex w-full items-center justify-between gap-3 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 lg:w-auto">
       <div class="text-center">
         <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('itemLevel') }}</span>
-        <span class="text-2xl sm:text-3xl font-extrabold text-white inline-flex items-center justify-center gap-2">
+        <span class="text-2xl sm:text-3xl font-extrabold text-white inline-flex items-center justify-center gap-2 whitespace-nowrap">
           <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
-          {{ character?.ilvl }}
+          {{ formatNumber(character?.ilvl) }}
         </span>
       </div>
       <div class="h-8 w-[1px] bg-white/15"></div>
       <div class="text-center">
         <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('mPlus') }}</span>
-        <span class="text-2xl sm:text-3xl font-extrabold inline-flex items-center justify-center gap-2" :class="mPlusColor">
+        <span class="text-2xl sm:text-3xl font-extrabold inline-flex items-center justify-center gap-2 whitespace-nowrap" :class="mPlusColor">
           <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
-          {{ character?.mPlusScore }}
+          {{ formatNumber(character?.mPlusScore) }}
         </span>
       </div>
     </div>

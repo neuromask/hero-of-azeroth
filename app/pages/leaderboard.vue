@@ -19,12 +19,13 @@ definePageMeta({ alias: '/ru/leaderboard' })
 // character they belong to (see the composable for the shape and the limit). The key it keeps them
 // under is also what marks the reader's own row in the table below.
 import { useSearchHistory, searchHistoryKey } from '~/composables/searchHistory'
+import { formatNumber } from '#shared/utils/formatNumber'
 
 // The picture the page stands on: the hall of fame's own artwork (`app/assets/img`), which is part
 // of the build, so it costs no network request at all.
 import backdrop from '~/assets/img/hf-bg_01.webp'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const localeUrl = useLocaleUrl()
 
 const {
@@ -50,11 +51,6 @@ usePageSeo({
   description: () => t('lbSeoDescription')
 })
 
-/** A figure the way the language being read writes it, for the line under the table. */
-function format(value: number): string {
-  return value.toLocaleString(locale.value === 'ru' ? 'ru-RU' : 'en-US')
-}
-
 /** The first and the last rank on the page being drawn, for "showing 26–50 of 1 240". */
 const from = computed(() => (page.value && rows.value.length ? (page.value.page - 1) * page.value.perPage + 1 : 0))
 const to = computed(() => (page.value ? (page.value.page - 1) * page.value.perPage + rows.value.length : 0))
@@ -74,9 +70,9 @@ const meta = computed(() => {
   if (!current || !current.players) return ''
 
   return t('lbMeta', {
-    players: format(current.players),
-    realms: format(current.realms),
-    classes: format(current.classes)
+    players: formatNumber(current.players),
+    realms: formatNumber(current.realms),
+    classes: formatNumber(current.classes)
   })
 })
 
@@ -241,7 +237,7 @@ onMounted(loadHistory)
 
       <div v-if="page && page.total" class="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p class="text-xs text-gray-500">
-          {{ t('lbShowing', { from: format(from), to: format(to), total: format(page.total) }) }}
+          {{ t('lbShowing', { from: formatNumber(from), to: formatNumber(to), total: formatNumber(page.total) }) }}
           <span v-if="page.updatedAt"> · {{ t('lbUpdated', { date: page.updatedAt }) }}</span>
         </p>
 

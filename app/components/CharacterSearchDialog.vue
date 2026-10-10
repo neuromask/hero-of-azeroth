@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
           >&#10005;</button>
         </div>
 
-        <CharacterSearchForm autofocus />
+        <CharacterSearchForm />
       </div>
     </Transition>
   </div>

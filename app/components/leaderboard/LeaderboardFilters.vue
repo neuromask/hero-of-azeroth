@@ -13,6 +13,7 @@
  * control wears (see `main.css`), and the brand gold for whatever is currently chosen.
  */
 import { FILTERABLE_FACTIONS } from '#shared/utils/wow-faction'
+import { formatNumber } from '#shared/utils/formatNumber'
 // The multipliers the legend prints, read from the formula itself so the two can never drift apart.
 import { SCORE_WEIGHTS } from '#shared/utils/leaderboardScore'
 import type {
@@ -254,7 +255,7 @@ function clear() {
           aria-hidden="true"
         ></span>
         <span>{{ option.label }}</span>
-        <span class="text-gray-500">{{ factionCount(option.id) }}</span>
+        <span class="whitespace-nowrap text-gray-500">{{ formatNumber(factionCount(option.id)) }}</span>
       </button>
 
       <!-- The realm: a menu of the site's own rather than a native `<select>`, because a native one
@@ -316,7 +317,7 @@ function clear() {
             @click="pickRealm(option.realm)"
           >
             <span class="truncate">{{ option.label }}</span>
-            <span class="shrink-0 text-xs text-gray-500">{{ option.region.toUpperCase() }} · {{ option.count }}</span>
+            <span class="shrink-0 whitespace-nowrap text-xs text-gray-500">{{ option.region.toUpperCase() }} · {{ formatNumber(option.count) }}</span>
           </button>
         </div>
       </div>

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 // The shelf the endpoint serves, and the shape the view names it with.
 import type { CollectionKind } from '#shared/data/collectionsSchema'
+// Counts are written by the site's one rule (`#shared/utils/formatNumber`), as on the shelves the
+// grid below this heading draws.
+import { formatNumber } from '#shared/utils/formatNumber'
 
 /**
  * One shelf of a character's collections - mounts, pets or toys - with its heading, its switches and
@@ -67,9 +70,9 @@ usePageLoading().follow('character:collections', pending)
       <div class="hoa-panel mb-6 p-4 sm:p-5">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h2 class="text-lg font-bold text-white sm:text-xl">{{ $t(props.kind) }}</h2>
-          <span class="text-sm font-bold tabular-nums text-wow-goldLight">
-            {{ data.collected }}/{{ data.total }}
-            <span class="text-gray-400">({{ data.percent }}%)</span>
+          <span class="text-sm font-bold tabular-nums whitespace-nowrap text-wow-goldLight">
+            {{ formatNumber(data.collected) }}/{{ formatNumber(data.total) }}
+            <span class="text-gray-400">({{ formatNumber(data.percent) }}%)</span>
           </span>
         </div>
         <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full border border-white/10 bg-black/60 p-0.5">
