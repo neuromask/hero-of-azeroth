@@ -74,8 +74,8 @@ usePageLoading().follow('character:achievements', pending)
             @click="view.collected = !view.collected"
           >
             <span
-              class="relative h-4 w-7 shrink-0 rounded-full border transition-colors duration-200"
-              :class="view.collected ? 'border-wow-gold/60 bg-wow-gold/25' : 'border-white/15 bg-black/50'"
+              class="relative h-4 w-7 shrink-0 rounded-full border border-transparent shadow-[0_0_0_1px_var(--hoa-ring)] transition-colors duration-200"
+              :class="view.collected ? '[--hoa-ring:rgba(248,183,0,0.6)] bg-wow-gold/25' : '[--hoa-ring:rgba(255,255,255,0.15)] bg-black/50'"
             >
               <span
                 class="absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full transition-all duration-200"

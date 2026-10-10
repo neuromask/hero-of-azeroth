@@ -78,23 +78,23 @@ const filtered = computed(() => props.items.filter((item) => activityInCategory(
 const ACCENTS = {
   feat: {
     // A feat of strength is a proof rather than progress, so its card is warmed with gold.
-    card: 'border-amber-400/40 bg-gradient-to-br from-amber-500/[0.16] via-white/[0.04] to-fuchsia-500/[0.06]',
-    frame: 'border-amber-400/80 shadow-[0_0_18px_rgba(245,158,11,0.55)]',
+    card: '[--hoa-ring:rgba(245,158,11,0.4)] bg-gradient-to-br from-amber-500/[0.16] via-white/[0.04] to-fuchsia-500/[0.06]',
+    frame: 'border-transparent shadow-[0_0_0_2px_rgba(245,158,11,0.8),0_0_14px_rgba(245,158,11,0.6)]',
     node: 'bg-amber-400 shadow-[0_0_14px_rgba(245,158,11,0.9)]',
-    badge: 'border-amber-400/50 bg-amber-500/15 text-amber-200'
+    badge: 'border-transparent bg-amber-500/15 text-amber-200 shadow-[0_0_0_1px_rgba(245,158,11,0.5)]'
   },
   raid: {
     // A dungeon, a raid or a Mythic+ key wears the violet the game itself marks them with.
-    card: 'border-violet-400/40 bg-gradient-to-br from-violet-500/[0.16] via-white/[0.04] to-sky-500/[0.06]',
-    frame: 'border-violet-400/80 shadow-[0_0_18px_rgba(139,92,246,0.55)]',
+    card: '[--hoa-ring:rgba(139,92,246,0.4)] bg-gradient-to-br from-violet-500/[0.16] via-white/[0.04] to-sky-500/[0.06]',
+    frame: 'border-transparent shadow-[0_0_0_2px_rgba(139,92,246,0.8),0_0_14px_rgba(139,92,246,0.6)]',
     node: 'bg-violet-400 shadow-[0_0_14px_rgba(139,92,246,0.9)]',
-    badge: 'border-violet-400/50 bg-violet-500/15 text-violet-200'
+    badge: 'border-transparent bg-violet-500/15 text-violet-200 shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
   },
   plain: {
     card: '',
-    frame: 'border-wow-gold/50',
+    frame: 'border-transparent shadow-[0_0_0_2px_rgba(248,183,0,0.5)]',
     node: 'bg-wow-gold shadow-[0_0_10px_rgba(248,183,0,0.75)]',
-    badge: 'border-wow-gold/40 bg-wow-gold/10 text-wow-goldLight'
+    badge: 'border-transparent bg-wow-gold/10 text-wow-goldLight shadow-[0_0_0_1px_rgba(248,183,0,0.4)]'
   }
 } as const
 

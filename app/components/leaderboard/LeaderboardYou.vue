@@ -137,7 +137,7 @@ const broken = ref(false)
        tabs above the plate do. -->
   <div
     v-if="shows"
-    class="hoa-panel hoa-panel-layered relative z-0 flex flex-wrap items-center gap-x-6 gap-y-3 border-wow-gold/25 p-3 sm:p-3.5"
+    class="hoa-panel hoa-panel-layered hoa-ring-gold relative z-0 flex flex-wrap items-center gap-x-6 gap-y-3 p-3 sm:p-3.5"
   >
     <!-- The reader's own row, drawn as the table draws one: the portrait in the class colour, the
          name in it, the side beside the name, and the realm, class and level under it. -->

@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
          in it - the foot of the card, under the line the wheel is read by. -->
     <div
       v-if="shown"
-      class="hoa-liquid-glass hoa-liquid-glass-layered relative z-0 flex flex-col items-center gap-5 rounded-2xl border-wow-gold/25 px-8 py-7 pointer-events-none"
+      class="hoa-liquid-glass hoa-liquid-glass-layered hoa-ring-gold relative z-0 flex flex-col items-center gap-5 rounded-2xl px-8 py-7 pointer-events-none"
     >
       <LoadingWheel :label="$t('loading')" />
       <AppIcon name="hoa-logotype" alt="HeroOfAzeroth" class="h-6 w-auto" />

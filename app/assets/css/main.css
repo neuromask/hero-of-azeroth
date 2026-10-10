@@ -87,6 +87,27 @@
     border-radius: inherit;
   }
 
+  /* --- The contour of a surface: a rim drawn as a shadow, never as a border ---
+     A `1px` border on a rounded box is the one thing Chromium's rasterizer is least reliable about.
+     The outline is snapped to the layout box, so a box that lands on a half pixel - which every card
+     in a rounded grid and every chip of a fractional row does - gets its hairline split across two
+     device pixels or dropped altogether: the rim thins at the corners, breaks along one edge and
+     comes back as the page moves. A shadow is rasterized with antialiasing and composited, so the
+     same hairline survives a fractional position. Every surface below therefore keeps its `1px` of
+     border for the geometry (transparent, so the border itself draws nothing) and draws its rim with
+     `box-shadow: 0 0 0 1px`, read from one colour per surface: `--hoa-ring`.
+
+     Which box the rim is drawn on depends on what stands above it. A surface whose glass is a layer
+     draws its rim ON that layer: the layer's box is the padding box, so a ring spread by 1px lands
+     exactly in the band the border used to fill, it stays above the frost, and - being the layer's
+     own shadow - a rim that answers the pointer never touches the backdrop the frost samples. A
+     control without a layer (`.hoa-tab`, `.hoa-tag`, `.hoa-tile`) draws its rim on its own box,
+     which sits one pixel further out; that is only ever seen on an element standing on its own,
+     which is why the pair of merged tabs (`.hoa-tab.hoa-liquid-glass`) keeps the layer's rim. */
+  .hoa-ring-gold {
+    --hoa-ring: rgba(248, 183, 0, 0.25);
+  }
+
   /* The pinned bar - the header of every page (`app/components/SiteHeader.vue`) and of the character
      shell - is isolated from the page it hangs over: a stacking context of its own, so a repaint of
      the page under it cannot be measured as a change of the bar, and a frame the surfaces inside it
@@ -106,25 +127,23 @@
      every block at once. The frame is a box and a sheet (see the base above): the border, the
      rounding and the drop are the box's, the tint, the frost and the lit top edge are the layer's. */
   .hoa-panel {
-    @apply rounded-xl border border-white/10;
+    --hoa-ring: rgba(255, 255, 255, 0.1);
+    @apply rounded-xl border border-transparent;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   }
 
   .hoa-panel::before {
     background-color: rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(24px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
 
-  /* The same frame under the pointer, which is how the tiles and the summary answer it. The rim is
-     the box's own and the tint is the layer's, so the pointer only ever writes a colour and a
-     background - the `backdrop-filter` is not in the rule at all. */
-  .hoa-panel-interactive {
-    @apply transition-colors hover:border-wow-gold/60;
-  }
-
-  .hoa-panel-interactive::before {
-    transition: background-color 150ms ease;
+  /* The same frame under the pointer, which is how the tiles and the summary answer it. The pointer
+     only ever writes two cheap things: the rim's colour and the layer's flat tint. The rim is the
+     layer's own shadow, so changing it does not touch the backdrop the frost samples, and the tint is
+     the layer's own background, which is not part of it either - the frost is never re-measured. */
+  .hoa-panel-interactive:hover {
+    --hoa-ring: rgba(248, 183, 0, 0.6);
   }
 
   .hoa-panel-interactive:hover::before {
@@ -147,10 +166,15 @@
   }
 
   /* The block of a pinned bar - the header panel of every page: the one piece of the site's glass that
-     casts nothing and wears nothing lit, because the bar it stands in reads as the top of the page
-     rather than as a sheet laid on it. Both halves of that are the block's: the drop is the box's and
-     the lit top edge is the layer's, so the rule below writes to both. */
-  .hoa-panel-flush,
+     casts nothing, wears nothing lit and draws a plain border. It is the one surface whose rim has to
+     stop at the top edge (the bar stands flush against the window), and a spread shadow is a closed
+     loop that cannot be cut on one side - so this is also the one surface where the rim stays a
+     border, and the class says so out loud. */
+  .hoa-panel-flush {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+  }
+
   .hoa-panel-flush::before {
     box-shadow: none;
   }
@@ -173,9 +197,10 @@
      site is the same pane and a change to it reaches all of them at once; the layer in it is part of
      what it is, since a pane that hangs over the page is drawn over whatever it was opened from. */
   .hoa-pop {
-    @apply z-50 rounded-2xl border border-white/20;
-    /* The pane is a box and a sheet like every other surface: the drop is the box's, the tint, the
-       frost and the lit edges are the layer's (see the base at the top of this layer). */
+    --hoa-ring: rgba(255, 255, 255, 0.2);
+    @apply z-50 rounded-2xl border border-transparent;
+    /* The pane is a box and a sheet like every other surface: the drop is the box's, the rim, the tint,
+       the frost and the lit edges are the layer's (see the base at the top of this layer). */
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
     scrollbar-width: none;
   }
@@ -183,7 +208,7 @@
   .hoa-pop::before {
     background-color: rgba(8, 10, 15, 0.2);
     backdrop-filter: blur(40px) saturate(150%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
   }
 
   /* A pane is a paint box of its own: what it draws is held inside its own corners, so the damage rect
@@ -197,53 +222,19 @@
     contain: layout paint;
   }
 
-  /* A long pane - the realm list, the characters this browser looked at before - is scrolled without a
-     bar of its own, the way the list inside the rail of quick anchors is (`.hoa-anchors`): the rows are
-     wheeled, dragged and tapped, and a bar down the inside edge takes a strip of the pane that the band
-     a section is read by cannot reach. A heading that stops short of the pane it belongs to reads as a
-     heading that has come loose. The bar is left out of the pane and of whatever list inside it does
-     the scrolling - a pane that scrolls is a box with a list of its own, so that the sheet the pane is
-     drawn as never moves with the rows (`app/components/CharacterSearchForm.vue`). */
+  /* The marker a pane wears when it drops panes of its own - the sheet the search opens, in
+     `app/components/CharacterSearchDialog.vue`. Its glass is the recipe above (a pane's frost and its
+     tint are the same whether or not a pane hangs out of it), so the class has nothing of its own to
+     draw any more; what it still decides is the containment above, which reads it to leave this one
+     pane unclipped. */
 
-  .hoa-pop::-webkit-scrollbar,
-  .hoa-pop ::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* The glass of a pane that drops panes of its own, drawn by a layer of it instead of by the pane
-     itself: the same rearrangement `.hoa-panel-layered` makes of a block, made here for a second
-     reason that turns out to be the first one again. A `backdrop-filter` makes the pane a backdrop
-     root, so the lists hanging out of it - the realms under a field, the characters this browser looked
-     at before - could only sample the pane, which is the very glass they are opened onto the page for.
-     With the frost on a layer behind the content the pane is a plain box and the lists keep the page as
-     their backdrop: whichever of them is open is drawn over the page it was opened from, blurred and
-     left saturated, the way every other pane on the site is. Nothing else about the pane moves - the
-     tint, the hairline, the lit edges and the drop are still its own, and the layer is clipped to its
-     corners. The blur is written out here rather than taken from the pane because it belongs to the
-     layer now, and it is the pane's own: `2xl` is 40px. */
-  .hoa-pop-layered::before {
-    content: '';
-    @apply pointer-events-none absolute inset-0 -z-10;
-    border-radius: inherit;
-    backdrop-filter: blur(40px) saturate(150%);
-  }
-
-  /* The glass of a block a pane is opened from, drawn by a layer inside it instead of by the block
-     itself: the block carries the recipe named here, and the frost is that block's own `::before`, the
-     same sheet it would wear, laid behind everything the block shows. It is a rearrangement of one
-     material, not a second one, and it is written once because the reason for it is one reason. A
-     `backdrop-filter` makes the block a backdrop root, and a pane opened from inside that root cannot
-     blur the page: it can only sample what the block itself is made of, which Chromium paints as a
-     stretched copy of the block smeared over its own bottom edge - the stale strip of page a pinned bar
-     used to leave under it. With the frost on a layer behind the content, the block is a plain box with
-     no filter of its own, and a pane hanging out of it keeps the page as its backdrop. Nothing else
-     about the block moves: the tint, the hairline, the lit top edge and the drop are still its own, and
-     the layer is clipped to its corners. The block has to be a layer of its own for the sheet to sit
-     under its content (`relative` with a `z-index`), which every panel that holds a pane already is. */
+  /* What a block that opens a pane adds to the block above it: the frost, left saturated. The
+     arrangement itself - the glass on a layer rather than on the block - is now how every surface of
+     the site is cut, and it is what this spelling was invented for: a `backdrop-filter` makes a block
+     a backdrop root, so a pane opened from inside one could only sample the block and never the page.
+     The blocks that hold a pane still wear the class, and the one thing it has left to say is the
+     saturation a block standing over artwork wants. */
   .hoa-panel-layered::before {
-    content: '';
-    @apply pointer-events-none absolute inset-0 -z-10;
-    border-radius: inherit;
     backdrop-filter: blur(24px) saturate(150%);
   }
 
@@ -265,25 +256,33 @@
      black rather than in a pane's dark, and with a shallower frost, because a tip is read at a glance
      and stands over one card rather than over the page. */
   .hoa-tip {
-    @apply rounded-lg border border-white/15;
+    --hoa-ring: rgba(255, 255, 255, 0.15);
+    @apply rounded-lg border border-transparent;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
   }
 
   .hoa-tip::before {
     background-color: rgba(0, 0, 0, 0.9);
     backdrop-filter: blur(8px);
+    box-shadow: 0 0 0 1px var(--hoa-ring);
   }
 
   /* A tab of a page's own navigation: quiet until it is the one being read. A plain tab answers the
-     pointer with its own tint; a tab that wears the site's glass (`.hoa-liquid-glass`) does not,
-     because that tint is painted under the glass layer - and a `:hover` that changed it would change
-     the layer's backdrop and force its frost to be measured again, which is the very repaint the
-     glass is arranged to avoid. A glass tab is answered by its rim and by the layer itself. */
+     pointer with its own tint, and it shows its rim on its own box - its box is what the rim of an
+     isolated control is drawn on (see the note on the contour above). A tab that wears the site's
+     glass is answered by the rim and the tint of that glass's layer instead, which is the one rim
+     that lands in the band two merged tabs - a tab and its caret - share. */
   .hoa-tab {
-    @apply inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:border-white/25 hover:text-white sm:text-base;
+    --hoa-ring: rgba(255, 255, 255, 0.1);
+    @apply inline-flex items-center gap-2 rounded-xl border border-transparent bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white sm:text-base;
+  }
+
+  .hoa-tab:not(.hoa-liquid-glass) {
+    box-shadow: 0 0 0 1px var(--hoa-ring);
   }
 
   .hoa-tab:not(.hoa-liquid-glass):hover {
+    --hoa-ring: rgba(255, 255, 255, 0.25);
     @apply bg-white/[0.08];
   }
 
@@ -303,49 +302,46 @@
      the pinned bar above. The pointer only ever changes the box's rim and the layer's flat tint; the
      frost is a fixed recipe on the layer, and it is never written into a `transition`. */
   .hoa-liquid-glass {
-    @apply border-white/20;
+    --hoa-ring: rgba(255, 255, 255, 0.2);
+    @apply border-transparent;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
   .hoa-liquid-glass::before {
     background-color: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(24px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
     transition: background-color 150ms ease;
   }
 
   .hoa-liquid-glass:hover {
-    @apply border-white/35;
+    --hoa-ring: rgba(255, 255, 255, 0.35);
   }
 
   .hoa-liquid-glass:hover::before {
     background-color: rgba(255, 255, 255, 0.16);
   }
 
-  /* The same glass drawn by a layer of the surface instead of by the surface: the rearrangement the two
-     other materials of the site are already written twice in (`.hoa-panel-layered`, `.hoa-pop-layered`),
-     made here for the one surface of the site that is itself laid on another one. A `backdrop-filter`
-     makes a surface a backdrop root, and everything drawn inside it afterwards can only sample the
-     surface: a pane opened out of it, a control of the site's own glass, a second sheet. The layer keeps
-     that door open - the surface becomes a plain box and its glass is one sheet of its own, laid behind
-     everything the surface shows. It is worn by the wait every page is read through
-     (`app/components/PagePreloader.vue`), a card standing on the scrim that dims the page, and it is worn
-     there as the arrangement the rest of the site's panes are drawn with rather than as a promise about
-     what that card carries today. Nothing else about the surface moves: the tint, the hairline, the lit
-     edges and the drop are still its own, the layer is clipped to its corners, and the blur is written
-     out rather than taken from the surface because it belongs to the layer now - it is the surface's own,
-     and `xl` is 24px. As with the block that holds a pane, the surface has to be a layer of its own for
-     the sheet to sit under its content (`relative` with a `z-index`). */
-  .hoa-liquid-glass-layered::before {
-    content: '';
-    @apply pointer-events-none absolute inset-0 -z-10;
-    border-radius: inherit;
-    backdrop-filter: blur(24px);
+  /* The marker a surface wears when it is itself laid on another one - the wait every page is read
+     through, in `app/components/PagePreloader.vue`. Its glass is the recipe above, so there is nothing
+     left for the spelling to draw; it is kept because that card wears it, and because it is the name
+     the arrangement had before every surface of the site was built this way. */
+
+  /* The chosen tab, warmed with the brand gold the rest of the site accents with. Its rim warms from
+     the same variable every other rim reads, so it warms whichever box that rim is drawn on, and its
+     glow is the one thing a chosen control adds to its own box: tight and dense rather than wide and
+     faint, because a chip forty pixels across is smudged by a wide blur instead of lit by it. */
+  .hoa-tab-active {
+    --hoa-ring: rgba(248, 183, 0, 0.6);
+    @apply bg-wow-gold/10 text-wow-goldLight;
   }
 
-  /* The chosen tab, warmed with the brand gold the rest of the site accents with. */
-  .hoa-tab-active {
-    @apply border-wow-gold/60 bg-wow-gold/10 text-wow-goldLight shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_0_18px_rgba(248,183,0,0.25)];
+  .hoa-tab:not(.hoa-liquid-glass).hoa-tab-active {
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 14px rgba(248, 183, 0, 0.35);
+  }
+
+  .hoa-liquid-glass.hoa-tab-active {
+    box-shadow: 0 0 14px rgba(248, 183, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
   /* One square of a collections grid, drawn as a slot rather than a bare square.
@@ -356,7 +352,9 @@
      on the frosted glass these sections are cut from such a picture would otherwise dissolve into
      the pane. The dark well and its inner shadow are what keep every square a place in the grid. */
   .hoa-tile {
-    @apply grid aspect-square w-full place-items-center overflow-hidden rounded-md border border-white/10 bg-black/45;
+    --hoa-ring: rgba(255, 255, 255, 0.1);
+    @apply grid aspect-square w-full place-items-center overflow-hidden rounded-md border border-transparent bg-black/45;
+    box-shadow: 0 0 0 1px var(--hoa-ring);
   }
 
   /* An item the character has not collected: dimmed to grey, which is what tells it from the rest. */
@@ -366,7 +364,15 @@
 
   /* An item the character holds: bright, in the gold frame a collection is framed with. */
   .hoa-tile-collected {
-    @apply border-wow-gold/80 bg-black/40 hover:border-wow-gold hover:shadow-[0_0_12px_rgba(248,183,0,0.45)];
+    --hoa-ring: rgba(248, 183, 0, 0.8);
+    @apply bg-black/40;
+  }
+
+  /* The same square under the pointer: the frame goes to full gold and the well lights up - a tight,
+     dense glow, since a square of thirty-eight pixels is smudged by a wide one. */
+  .hoa-tile-collected:hover {
+    --hoa-ring: #f8b700;
+    box-shadow: 0 0 0 1px var(--hoa-ring), 0 0 10px rgba(248, 183, 0, 0.55);
   }
 
   .hoa-tile-collected > img {
@@ -400,7 +406,9 @@
   /* A tag: the small rounded frame a name is read in - the name of a source over its row of tiles,
      the count beside a group's heading. */
   .hoa-tag {
-    @apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1 text-[12px] font-semibold leading-none text-gray-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)];
+    --hoa-ring: rgba(255, 255, 255, 0.1);
+    @apply inline-flex items-center gap-1 rounded-full border border-transparent bg-white/[0.07] px-2.5 py-1 text-[12px] font-semibold leading-none text-gray-100;
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
   /* A tile inside a source is the size a square is drawn at, rather than filling the row it sits in. */
@@ -427,7 +435,8 @@
      bare. The list's own scrollbar is left out - it is dragged, wheeled and tapped, and a bar down the
      inside edge would read as a second progress bar. */
   .hoa-anchors {
-    @apply rounded-2xl border border-white/10;
+    --hoa-ring: rgba(255, 255, 255, 0.1);
+    @apply rounded-2xl border border-transparent;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     contain: layout paint;
     scrollbar-width: none;
@@ -436,9 +445,16 @@
   .hoa-anchors::before {
     background-color: rgba(8, 10, 15, 0.8);
     backdrop-filter: blur(24px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 
+  /* The boxes of the site that are wheeled, dragged and tapped rather than scrolled by a bar: the pane a
+     long list drops in (`.hoa-pop`) and the rail of quick anchors. A bar down the inside edge takes a
+     strip of the glass the rows are read through, and a heading that stops short of the surface it
+     belongs to reads as a heading that has come loose - so neither shows one, and neither does any
+     list drawn inside them (which a pane that scrolls has of its own). */
+  .hoa-pop::-webkit-scrollbar,
+  .hoa-pop ::-webkit-scrollbar,
   .hoa-anchors::-webkit-scrollbar,
   .hoa-anchors ::-webkit-scrollbar {
     display: none;

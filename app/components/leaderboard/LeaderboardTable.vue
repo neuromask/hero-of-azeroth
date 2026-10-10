@@ -198,8 +198,11 @@ function open(player: LeaderboardPlayer) {
 </script>
 
 <template>
+  <!-- The panel is the plain frame (`.hoa-panel`) and the rounding of the table is the scroller's own
+       (`rounded-xl` below): a block that clips its contents clips the layer its rim is drawn on, and a
+       rim is the one thing a block of the site's glass cannot lose (see `main.css`). -->
   <div
-    class="hoa-panel overflow-hidden"
+    class="hoa-panel"
     :class="pending ? 'opacity-70' : ''"
     :aria-busy="pending ? 'true' : undefined"
   >
@@ -207,7 +210,7 @@ function open(player: LeaderboardPlayer) {
       {{ t('lbEmpty') }}
     </p>
 
-    <div v-else class="overflow-x-auto">
+    <div v-else class="overflow-x-auto rounded-xl">
       <table class="w-full min-w-[60rem] table-fixed border-collapse text-sm">
         <!-- The width of every column, decided once here rather than by what each row happens to
              hold, so the figures are spread across the panel while the rows still line up down the
