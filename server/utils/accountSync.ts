@@ -141,15 +141,18 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
   const profile = await getCharacter(row.realm_slug, row.name_key, row.region, locale)
   // The portrait is not on the summary and the professions are a document of their own, so both are
   // read here - where a character is read in full - and kept on the row the tiles draw from.
-  const professions = await getCharacterProfessions(row.realm_slug, row.name_key, row.region, locale)
+  const professions = await getCharacterProfessions(row.realm_slug, row.name_key, row.region)
   const db = useDb()
   const now = nowSec()
   const dayStart = Math.floor(now / 86400) * 86400
 
+  // The row as the roster lists it, plus the moment its figures were read: the snapshot is keyed to
+  // the day (`taken_at` below), so this is the only place a page can learn when the reading actually
+  // happened - which is what a tile prints as "Updated 5 minutes ago" rather than "20 hours ago".
   db.prepare(
     `UPDATE characters
         SET realm_name = ?, display_name = ?, class_id = ?, level = ?, faction = ?,
-            avatar = ?, profession_1 = ?, profession_2 = ?, last_seen_at = ?
+            avatar = ?, profession_1 = ?, profession_2 = ?, last_seen_at = ?, stats_read_at = ?
       WHERE id = ?`
   ).run(
     profile.realm,
@@ -160,6 +163,7 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
     profile.avatarUrl || null,
     professions[0] || null,
     professions[1] || null,
+    now,
     now,
     row.id
   )
@@ -198,8 +202,10 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
   }
 
   // The professions ride along on the answer, so a tile that was just refreshed can draw them
-  // without a second request for the same character.
-  return { ...profile, professions }
+  // without a second request for the same character. `readAt` is the moment the read was stored,
+  // which the tile prints as its own update time: the client's clock is not the authority on when
+  // Blizzard was last asked.
+  return { ...profile, professions, readAt: now }
 }
 
 /** A character a stats read is due for, with the account it belongs to. */

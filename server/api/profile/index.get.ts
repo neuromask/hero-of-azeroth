@@ -27,6 +27,12 @@ export interface ProfileCharacter {
   professions: string[]
   isMain: boolean
   lastSeenAt: number
+  /**
+   * When this character's figures were last read, or `null` for one the background task has not
+   * reached yet. The day the reading belongs to lives on `latest.takenAt`; this is the moment itself,
+   * which is what a page prints.
+   */
+  statsReadAt: number | null
   /** The newest reading of this character, or `null` while the background task has not run yet. */
   latest: {
     takenAt: number
@@ -73,6 +79,7 @@ interface ProfileRow {
   profession_2: string | null
   is_main: number
   last_seen_at: number
+  stats_read_at: number | null
   taken_at: number | null
   ilvl: number | null
   mplus_score: number | null
@@ -97,6 +104,7 @@ export default defineEventHandler(async (event) => {
     .prepare(
       `SELECT c.id, c.region, c.realm_slug, c.realm_name, c.name, c.display_name, c.class_id, c.level,
               c.faction, c.avatar, c.profession_1, c.profession_2, c.is_main, c.last_seen_at,
+              c.stats_read_at,
               s.taken_at, s.ilvl, s.mplus_score, s.achievements, s.mounts, s.pets, s.toys, s.decor, s.reputations
          FROM characters c
          LEFT JOIN snapshots s ON s.id = (
@@ -121,6 +129,7 @@ export default defineEventHandler(async (event) => {
     professions: [row.profession_1, row.profession_2].filter(Boolean) as string[],
     isMain: row.is_main === 1,
     lastSeenAt: row.last_seen_at,
+    statsReadAt: row.stats_read_at,
     latest: row.taken_at === null
       ? null
       : {
@@ -178,7 +187,7 @@ export default defineEventHandler(async (event) => {
       bnetSub: user.bnetSub,
       battletag: user.battletag,
       mainCharacterId: user.mainCharacterId,
-      isPublic: user.isPublic
+      hideFromFame: user.hideFromFame
     },
     characters,
     totals

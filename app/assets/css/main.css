@@ -265,8 +265,13 @@
      band across the pane. What hides a row here is the fill, not the frost, so it wears the dark the
      quick anchors are read against (`.hoa-anchors`, `/85`) and nothing else. Which is why it is written
      here, beside the pane, and not in each of the menus that have sections. */
+  /* The title band of a menu pane: a sticky heading a long list scrolls under.
+     Its padding is a pixel deeper at the top than at the bottom on purpose. An uppercase label has no
+     descenders, so its ink sits a hair above the middle of its own line box, and a symmetric band
+     reads as if the title had floated up - which is what a reader notices and cannot name. The two
+     numbers add up to the `py-1.5` the band wore before, so nothing but the ink moved. */
   .hoa-pop-title {
-    @apply sticky top-0 z-10 border-b border-white/10 bg-wow-dark/85 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500;
+    @apply sticky top-0 z-10 border-b border-white/10 bg-wow-dark/85 px-4 pt-[7px] pb-[5px] text-[11px] font-semibold uppercase tracking-wider text-gray-500;
   }
 
   /* The tip a date in a feed raises under the pointer: a small plate of the site's glass - the same

@@ -73,7 +73,22 @@ CREATE TABLE IF NOT EXISTS users (
   refresh_token_enc TEXT,
   access_token_expires_at INTEGER,
   main_character_id INTEGER,
+  /**
+   * The column the profile's old Public/Private setting wrote. The setting is gone from the site with
+   * nothing reading the flag, and the column is left where it is: the migrations below only ever add
+   * (a build that is rolled back still finds every column it selects), so a value nothing asks for is
+   * cheaper than a schema change that breaks an older process.
+   */
   is_public INTEGER NOT NULL DEFAULT 1,
+  /**
+   * Whether the account keeps its row out of the Hall of Fame.
+   *
+   * The table is the one public surface this site has, and a reader who does not want their
+   * collections compared there asks for this rather than for privacy: the main is the only character
+   * of an account the table ever shows, so this is the switch that decides whether they are in it at
+   * all (see server/utils/leaderboardExclusions).
+   */
+  hide_from_fame INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   last_login_at INTEGER NOT NULL
 );
@@ -105,6 +120,15 @@ CREATE TABLE IF NOT EXISTS characters (
   profession_2 TEXT,
   is_main INTEGER NOT NULL DEFAULT 0,
   last_seen_at INTEGER NOT NULL,
+  /**
+   * When this character's figures were last read from Blizzard, to the second.
+   *
+   * The snapshots are keyed to the day on purpose (the taken_at column, see ./accountSync), so the
+   * day itself cannot say when a reading happened - and a page that printed the day would answer a
+   * reader who just pressed Refresh with "20 hours ago". This is that moment, and it is written only
+   * where a character is actually read.
+   */
+  stats_read_at INTEGER,
   UNIQUE (user_id, region, realm_slug, name_key)
 );
 CREATE INDEX IF NOT EXISTS idx_characters_user ON characters(user_id);
@@ -146,7 +170,11 @@ const ADDED_COLUMNS = [
   'ALTER TABLE snapshots ADD COLUMN reputations INTEGER',
   'ALTER TABLE characters ADD COLUMN avatar TEXT',
   'ALTER TABLE characters ADD COLUMN profession_1 TEXT',
-  'ALTER TABLE characters ADD COLUMN profession_2 TEXT'
+  'ALTER TABLE characters ADD COLUMN profession_2 TEXT',
+  // The moment a character's figures were read, which is not the day its snapshot is keyed to.
+  'ALTER TABLE characters ADD COLUMN stats_read_at INTEGER',
+  // The account's choice not to appear in the public table at all.
+  'ALTER TABLE users ADD COLUMN hide_from_fame INTEGER NOT NULL DEFAULT 0'
 ]
 
 /**

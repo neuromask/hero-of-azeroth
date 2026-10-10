@@ -13,6 +13,9 @@
  * one route with two addresses.
  */
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
+// The professions' own names: a row keeps whichever spelling Blizzard answered the read with, and
+// this is what turns it into the one the language being read uses (`server/utils/blizzard`).
+import { professionByName, professionLabel } from '#shared/utils/wow-professions'
 import { formatNumber } from '#shared/utils/formatNumber'
 // The Mythic+ ladder the character page colours the rating by, so a figure keeps its colour here.
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
@@ -52,11 +55,19 @@ interface ProfileCharacter {
   professions: string[]
   isMain: boolean
   lastSeenAt: number
+  /** When this character's figures were last read, or `null` while only the roster knows it. */
+  statsReadAt: number | null
   latest: LatestStats | null
 }
 
 interface ProfileResponse {
-  user: { bnetSub: string; battletag: string | null; mainCharacterId: number | null; isPublic: boolean } | null
+  user: {
+    bnetSub: string
+    battletag: string | null
+    mainCharacterId: number | null
+    /** Whether the account asked to be left out of the Hall of Fame. */
+    hideFromFame: boolean
+  } | null
   characters: ProfileCharacter[]
 }
 
@@ -90,7 +101,24 @@ const sort = ref<SortKey>('main')
 const factionFilter = ref<'all' | 'alliance' | 'horde'>('all')
 const classFilter = ref<number | 'all'>('all')
 const realmFilter = ref<string>('all')
+const professionFilter = ref<string>('all')
 const nameQuery = ref('')
+
+/**
+ * The key a stored profession is grouped and filtered by: the profession itself rather than the
+ * spelling a row happens to hold, so two characters who share a profession are one choice in the
+ * menu (`#shared/utils/wow-professions`).
+ */
+const professionKey = (profession: string) => professionByName(profession)?.slug || profession
+
+/**
+ * What a stored profession is called in the language being read.
+ *
+ * The pill and the row behind it disagree on purpose: the row keeps the canonical spelling (see
+ * `server/utils/blizzard`), and the name a reader is shown is the game's own for the language they
+ * are reading. A name the site's table does not know stands as it came rather than disappearing.
+ */
+const professionName = (profession: string) => professionLabel(profession, locale.value) || profession
 
 /** The classes actually present in the roster, which is all a filter may offer. */
 const classOptions = computed(() => {
@@ -113,6 +141,146 @@ const realmOptions = computed(() => {
   return [...seen.entries()].map(([slug, label]) => ({ slug, label })).sort((a, b) => a.label.localeCompare(b.label))
 })
 
+/**
+ * The professions present in the roster, which is all a filter may offer - the same rule the classes
+ * and the realms are offered by. A profession the table does not know is offered under the name the
+ * row came with rather than left out of its own filter.
+ */
+const professionOptions = computed(() => {
+  const seen = new Map<string, string>()
+
+  for (const character of characters.value) {
+    for (const profession of character.professions) {
+      const key = professionKey(profession)
+      if (seen.has(key)) continue
+      seen.set(key, professionName(profession))
+    }
+  }
+
+  return [...seen.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+})
+
+/**
+ * The highest level the roster holds, which is as far as the level slider reaches. A roster the
+ * account has not filled in yet reads as zero, and the slider is then not drawn at all.
+ */
+const maxLevel = computed(() => characters.value.reduce((max, character) => Math.max(max, character.level ?? 0), 0))
+
+/**
+ * The level window the roster is shown through: the two handles of the level slider, as levels.
+ *
+ * Two and not one, because a roster is read at both ends: an account of endgame characters wants
+ * everything below its main hidden, and an account of low-level alts wants the ceiling pulled down on
+ * the characters it is not playing yet. `from` is a floor and `to` is a ceiling, and the pair is the
+ * whole filter.
+ *
+ * The window follows the roster until a reader moves a handle (`maxLevel`), so a roster that arrives
+ * after the first paint - which is every roster, since the figures come from the API - is shown whole
+ * rather than through a ceiling of zero.
+ */
+const levelFrom = ref(0)
+const levelTo = ref(0)
+
+watch(maxLevel, (value) => {
+  levelFrom.value = Math.min(levelFrom.value, value)
+  levelTo.value = value
+}, { immediate: true })
+
+/** Where the two handles sit along the rail, as percentages of it. */
+const levelFromPercent = computed(() => (maxLevel.value ? (levelFrom.value / maxLevel.value) * 100 : 0))
+const levelToPercent = computed(() => (maxLevel.value ? (levelTo.value / maxLevel.value) * 100 : 100))
+
+/** The window in words: "All", "80+", "up to 60", "10-60". */
+const levelWindowLabel = computed(() => {
+  if (levelFrom.value <= 0 && levelTo.value >= maxLevel.value) return t('filterAll')
+  if (levelFrom.value <= 0) return t('levelUpTo', { level: levelTo.value })
+  if (levelTo.value >= maxLevel.value) return `${levelFrom.value}+`
+
+  return t('levelRange', { from: levelFrom.value, to: levelTo.value })
+})
+
+/** The rail the handles ride on, and the handle the pointer is holding, if any. */
+const levelTrack = ref<HTMLElement | null>(null)
+const levelDrag = ref<'from' | 'to' | null>(null)
+
+/** The level a pointer is standing over, as a whole number inside the roster's own range. */
+function levelAt(clientX: number): number {
+  const rect = levelTrack.value?.getBoundingClientRect()
+  if (!rect || !rect.width || !maxLevel.value) return 0
+
+  const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+  return Math.round(ratio * maxLevel.value)
+}
+
+/** Moves one handle, keeping the two the right way round: a floor never passes its own ceiling. */
+function moveLevel(handle: 'from' | 'to', value: number): void {
+  if (handle === 'from') levelFrom.value = Math.min(value, levelTo.value)
+  else levelTo.value = Math.max(value, levelFrom.value)
+}
+
+/**
+ * Takes hold of a handle: from its own grip, or from anywhere on the rail - which picks the nearer of
+ * the two, so a click on the empty part of a rail moves the end that is closest to the pointer.
+ */
+function startLevelDrag(handle: 'from' | 'to', event: PointerEvent): void {
+  event.preventDefault()
+  levelDrag.value = handle
+  moveLevel(handle, levelAt(event.clientX))
+}
+
+/** A press on the rail itself, which belongs to whichever handle is nearer the pointer. */
+function onLevelTrackPointerDown(event: PointerEvent): void {
+  const value = levelAt(event.clientX)
+  startLevelDrag(Math.abs(value - levelFrom.value) <= Math.abs(value - levelTo.value) ? 'from' : 'to', event)
+}
+
+/**
+ * The pointer is followed on the window rather than on the handle, so a drag that wanders off the rail
+ * - over the pill, over the tiles below - keeps moving the handle until it is let go. The listeners
+ * exist only while a handle is held, which is what `watch` below is for.
+ */
+function onLevelPointerMove(event: PointerEvent): void {
+  if (levelDrag.value) moveLevel(levelDrag.value, levelAt(event.clientX))
+}
+
+function stopLevelDrag(): void {
+  levelDrag.value = null
+}
+
+/** The keyboard drives the handles the way a slider is expected to: arrows, Home and End. */
+function onLevelKeydown(event: KeyboardEvent, handle: 'from' | 'to'): void {
+  const current = handle === 'from' ? levelFrom.value : levelTo.value
+  const step = event.shiftKey ? 5 : 1
+  let next: number | null = null
+
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next = current - step
+  if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next = current + step
+  if (event.key === 'Home') next = 0
+  if (event.key === 'End') next = maxLevel.value
+  if (next === null) return
+
+  event.preventDefault()
+  moveLevel(handle, Math.min(maxLevel.value, Math.max(0, next)))
+}
+
+watch(levelDrag, (handle) => {
+  if (handle) {
+    window.addEventListener('pointermove', onLevelPointerMove)
+    window.addEventListener('pointerup', stopLevelDrag)
+    window.addEventListener('pointercancel', stopLevelDrag)
+    return
+  }
+
+  window.removeEventListener('pointermove', onLevelPointerMove)
+  window.removeEventListener('pointerup', stopLevelDrag)
+  window.removeEventListener('pointercancel', stopLevelDrag)
+})
+
+// A page left while a handle is held would otherwise keep its window listeners.
+onBeforeUnmount(stopLevelDrag)
+
 /** The roster as the menu asked for it: filtered first, then ordered. */
 const visibleCharacters = computed(() => {
   const query = nameQuery.value.trim().toLowerCase()
@@ -121,6 +289,15 @@ const visibleCharacters = computed(() => {
     if (factionFilter.value !== 'all' && (character.faction || '') !== factionFilter.value) return false
     if (classFilter.value !== 'all' && character.classId !== classFilter.value) return false
     if (realmFilter.value !== 'all' && character.realmSlug !== realmFilter.value) return false
+    if (
+      professionFilter.value !== 'all' &&
+      !character.professions.some((profession) => professionKey(profession) === professionFilter.value)
+    ) {
+      return false
+    }
+    // The level window: a floor and a ceiling, either of which may be resting at its end.
+    const level = character.level ?? 0
+    if (level < levelFrom.value || level > levelTo.value) return false
     if (query && !(character.displayName || character.name).toLowerCase().includes(query)) return false
     return true
   })
@@ -148,6 +325,9 @@ const filtersActive = computed(
     factionFilter.value !== 'all' ||
     classFilter.value !== 'all' ||
     realmFilter.value !== 'all' ||
+    professionFilter.value !== 'all' ||
+    levelFrom.value > 0 ||
+    levelTo.value < maxLevel.value ||
     Boolean(nameQuery.value.trim())
 )
 
@@ -156,6 +336,9 @@ function resetFilters() {
   factionFilter.value = 'all'
   classFilter.value = 'all'
   realmFilter.value = 'all'
+  professionFilter.value = 'all'
+  levelFrom.value = 0
+  levelTo.value = maxLevel.value
   nameQuery.value = ''
 }
 
@@ -166,9 +349,9 @@ function resetFilters() {
  * the operating system's list into a dark page - the same choice, and the same look, the hall of
  * fame's filter bar makes (`app/components/leaderboard/LeaderboardFilters.vue`).
  */
-const openMenu = ref<'' | 'sort' | 'class' | 'realm'>('')
+const openMenu = ref<'' | 'sort' | 'class' | 'realm' | 'profession'>('')
 
-function toggleMenu(menu: 'sort' | 'class' | 'realm') {
+function toggleMenu(menu: 'sort' | 'class' | 'realm' | 'profession') {
   openMenu.value = openMenu.value === menu ? '' : menu
 }
 
@@ -204,10 +387,21 @@ const chosenRealmLabel = computed(
   () => realmOptions.value.find((entry) => entry.slug === realmFilter.value)?.label || t('filterAll')
 )
 
-/** The privacy switch, kept in step with the server on every change. */
-const isPublic = ref(false)
+/** The label the profession button wears: the chosen profession, or "all". */
+const chosenProfessionLabel = computed(
+  () => professionOptions.value.find((entry) => entry.value === professionFilter.value)?.label || t('filterAll')
+)
+
+/**
+ * The setting that leaves the browser: whether the account's row is published in the Hall of Fame.
+ *
+ * It is kept in step with the server on every change, and it is written before the answer that
+ * confirms it - a failed write puts the switch back rather than leaving the panel claiming a state
+ * the site does not hold.
+ */
+const hideFromFame = ref(false)
 watch(user, (value) => {
-  isPublic.value = value?.isPublic ?? true
+  hideFromFame.value = value?.hideFromFame ?? false
 }, { immediate: true })
 
 const accountName = computed(() => (user.value?.battletag || '').split('#')[0] || 'Battle.net')
@@ -268,15 +462,18 @@ const { formatRelative, formatAbsolute } = useRelativeTime()
 /**
  * When a tile's reading was taken, in words: "3 days ago", "just now".
  *
- * A character that has never been read in full has no snapshot, and the day the roster met it is the
- * only moment there is - so the row's own `lastSeenAt` stands in rather than the tile saying nothing.
+ * The moment itself is kept on the row (`statsReadAt`), because a snapshot is keyed to the day it
+ * belongs to and the day says nothing about when the read happened - printing it would answer a
+ * reader who has just pressed Refresh with "20 hours ago". A character the background task has not
+ * reached yet has no such moment, so the day of its newest snapshot stands in, and failing that the
+ * day the roster met it.
  */
 const updatedAt = (character: ProfileCharacter) =>
-  formatRelative((character.latest?.takenAt ?? character.lastSeenAt) * 1000)
+  formatRelative((character.statsReadAt ?? character.latest?.takenAt ?? character.lastSeenAt) * 1000)
 
 /** The exact moment behind those words, for the tooltip they stand on. */
 const updatedTitle = (character: ProfileCharacter) =>
-  formatAbsolute((character.latest?.takenAt ?? character.lastSeenAt) * 1000)
+  formatAbsolute((character.statsReadAt ?? character.latest?.takenAt ?? character.lastSeenAt) * 1000)
 
 /** A portrait that failed to load, which the monogram then stands in for. */
 const brokenAvatars = ref<Record<number, boolean>>({})
@@ -340,8 +537,15 @@ function applyLatest(id: number, profile: any) {
   const entry = data.value?.characters?.find((candidate) => candidate.id === id)
   if (!entry || !profile?.stats) return
 
+  // The moment the server stored the reading, which is what the tile prints: the client's clock is
+  // only a fallback for an answer that arrived without one, and it is never the authority on when
+  // Blizzard was last asked.
+  const readAt = Number(profile.readAt) || Math.floor(Date.now() / 1000)
+
+  entry.statsReadAt = readAt
   entry.latest = {
-    takenAt: Math.floor(Date.now() / 1000),
+    // The day the reading belongs to, which is what a snapshot is keyed by.
+    takenAt: Math.floor(readAt / 86400) * 86400,
     ilvl: profile.ilvl ?? null,
     mplus: profile.mPlusScore ?? null,
     achievements: profile.ap ?? null,
@@ -527,20 +731,25 @@ async function chooseMain(character: ProfileCharacter) {
   }
 }
 
-/** Opens or closes the roster to other readers. */
-async function setPrivacy(value: boolean) {
-  const previous = isPublic.value
-  isPublic.value = value
+/**
+ * Publishes the account's row in the Hall of Fame, or takes it out.
+ *
+ * The switch is written before the answer that confirms it, and put back if that answer never comes,
+ * so a failed write never leaves the panel claiming a state the site does not hold.
+ */
+async function setFame(value: boolean) {
+  const previous = hideFromFame.value
+  hideFromFame.value = value
   try {
-    await $fetch('/api/profile/privacy', { method: 'POST', body: { isPublic: value } })
+    await $fetch('/api/profile/fame', { method: 'POST', body: { hideFromFame: value } })
   } catch {
-    isPublic.value = previous
+    hideFromFame.value = previous
   }
 }
 
 usePageSeo({
   title: () => t('profileTitle'),
-  description: () => t('profilePrivacyHint'),
+  description: () => t('profileSeoDescription'),
   // An account page is nobody's search result: it carries a private roster and no public copy.
   noindex: true
 })
@@ -580,7 +789,7 @@ onMounted(() => {
             <span class="tabular-nums">{{ updateLabel }}</span>
           </button>
 
-          <!-- The account's settings: the privacy switch, and nothing else - the roster's order and
+          <!-- The account's settings: the one switch that leaves the browser - the roster's order and
                its filters live in the bar above the grid, where they act. The plate is the roster's
                own size, so the two controls in this corner read as one row. -->
           <button
@@ -672,7 +881,7 @@ onMounted(() => {
                   v-for="profession in main.professions"
                   :key="profession"
                   class="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] text-gray-300"
-                >{{ profession }}</span>
+                >{{ professionName(profession) }}</span>
               </p>
             </div>
 
@@ -748,9 +957,34 @@ onMounted(() => {
         <!-- The roster: everybody the filters kept, the main among them, so the grid carries the
              whole account - which is why the main's own tile wears the star already filled. -->
         <section class="mt-3">
-          <div class="flex flex-wrap items-baseline gap-3">
-            <h2 class="text-lg font-bold text-white">{{ t('profileAlts') }}</h2>
-            <p class="text-xs text-gray-500">{{ t('profileMainHint') }}</p>
+          <!-- The roster's own head: how many characters the account holds, and the one rule of the
+               table beside it - written as a notice rather than as a line of small print, because it
+               answers the question a reader asks the moment they see their alts here and not in the
+               public table. The notice stands at the right edge of the row, where the eye looking for
+               an explanation goes after the list itself. -->
+          <div class="flex flex-wrap items-center gap-3">
+            <h2 class="text-lg font-bold text-white">
+              {{ t('profileAlts') }} <span class="font-semibold text-gray-500">({{ characters.length }})</span>
+            </h2>
+
+            <p
+              class="ml-auto inline-flex max-w-full items-start gap-2 rounded-xl border border-[#00aeff]/30 bg-[#0074e0]/10 px-3 py-1.5 text-xs text-gray-200"
+              role="note"
+            >
+              <svg
+                class="mt-0.5 h-4 w-4 shrink-0 text-[#4dc8ff]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+              </svg>
+              {{ t('profileMainHint') }}
+            </p>
           </div>
 
           <!-- The order and the filters, above the grid they act on - the same bar the hall of fame
@@ -848,7 +1082,7 @@ onMounted(() => {
                   :aria-expanded="openMenu === 'class'"
                   @click.stop="toggleMenu('class')"
                 >
-                  <span>{{ chosenClassLabel }}</span>
+                  <span><span class="font-normal text-gray-400">{{ t('classLabel') }}:</span> {{ chosenClassLabel }}</span>
                   <svg
                     class="h-4 w-4 shrink-0 transition-transform duration-200"
                     :class="openMenu === 'class' ? 'rotate-180' : ''"
@@ -898,7 +1132,7 @@ onMounted(() => {
                   :aria-expanded="openMenu === 'realm'"
                   @click.stop="toggleMenu('realm')"
                 >
-                  <span>{{ chosenRealmLabel }}</span>
+                  <span><span class="font-normal text-gray-400">{{ t('realmLabel') }}:</span> {{ chosenRealmLabel }}</span>
                   <svg
                     class="h-4 w-4 shrink-0 transition-transform duration-200"
                     :class="openMenu === 'realm' ? 'rotate-180' : ''"
@@ -915,7 +1149,7 @@ onMounted(() => {
                   :class="openMenu === 'realm' ? 'opacity-100' : 'invisible opacity-0'"
                   role="menu"
                 >
-                  <p class="hoa-pop-title">{{ t('realm') }}</p>
+                  <p class="hoa-pop-title">{{ t('realmLabel') }}</p>
                   <div class="max-h-72 overflow-y-auto">
                     <button
                       type="button"
@@ -936,6 +1170,124 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
+
+              <!-- The professions, offered the way the classes and the realms are: only the ones the
+                   roster actually holds, and each named as the game names it in the language being
+                   read. A character holds two professions at most, and the filter keeps the ones who
+                   have taken up the chosen one - which is the question a reader with a roster full of
+                   engineers is asking. -->
+              <div v-if="professionOptions.length" class="relative">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-colors"
+                  :class="professionFilter !== 'all'
+                    ? 'border-wow-gold/60 bg-wow-gold/10 text-wow-goldLight'
+                    : 'border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/25 hover:text-white'"
+                  aria-haspopup="true"
+                  :aria-expanded="openMenu === 'profession'"
+                  @click.stop="toggleMenu('profession')"
+                >
+                  <span><span class="font-normal text-gray-400">{{ t('professionLabel') }}:</span> {{ chosenProfessionLabel }}</span>
+                  <svg
+                    class="h-4 w-4 shrink-0 transition-transform duration-200"
+                    :class="openMenu === 'profession' ? 'rotate-180' : ''"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+
+                <div
+                  class="hoa-pop absolute left-0 top-full mt-2 w-56 transition-opacity duration-150"
+                  :class="openMenu === 'profession' ? 'opacity-100' : 'invisible opacity-0'"
+                  role="menu"
+                >
+                  <p class="hoa-pop-title">{{ t('professionLabel') }}</p>
+                  <div class="max-h-72 overflow-y-auto">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class="flex w-full items-center px-4 py-2 text-left text-sm font-normal transition-colors"
+                      :class="professionFilter === 'all' ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
+                      @click="professionFilter = 'all'; closeMenus()"
+                    >{{ t('filterAll') }}</button>
+                    <button
+                      v-for="entry in professionOptions"
+                      :key="entry.value"
+                      type="button"
+                      role="menuitem"
+                      class="flex w-full items-center px-4 py-2 text-left text-sm font-normal transition-colors"
+                      :class="professionFilter === entry.value ? 'bg-wow-gold/10 text-wow-goldLight' : 'text-gray-200 hover:bg-white/10 hover:text-white'"
+                      @click="professionFilter = entry.value; closeMenus()"
+                    >{{ entry.label }}</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- The level window, which the chips cannot answer: a reader with a hundred characters
+                   wants the ones they actually play, and the pair of handles cuts the roster from both
+                   ends - everything below the left one is hidden, and everything above the right one
+                   with it. The rail is drawn here rather than by a native range, because a native one
+                   carries a single handle and this window has two ends; each is a `role="slider"` and
+                   both the pointer and the keyboard drive them. The window opens on the whole roster
+                   and the reader closes it, so nothing is filtered until a handle is moved. -->
+              <span
+                v-if="maxLevel > 0"
+                class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-colors"
+                :class="levelFrom > 0 || levelTo < maxLevel
+                  ? 'border-wow-gold/60 bg-wow-gold/10 text-wow-goldLight'
+                  : 'border-white/10 bg-white/[0.04] text-gray-300'"
+              >
+                <span class="font-normal text-gray-400">{{ t('levelLabel') }}:</span>
+
+                <span
+                  ref="levelTrack"
+                  class="relative h-4 w-36 shrink-0 cursor-pointer touch-none"
+                  :title="t('levelFilterHint')"
+                  @pointerdown="onLevelTrackPointerDown"
+                >
+                  <span
+                    class="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-white/15"
+                    aria-hidden="true"
+                  />
+                  <span
+                    class="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-wow-gold"
+                    :style="{ left: `${levelFromPercent}%`, right: `${100 - levelToPercent}%` }"
+                    aria-hidden="true"
+                  />
+
+                  <span
+                    role="slider"
+                    tabindex="0"
+                    :aria-label="t('levelFromLabel')"
+                    :title="t('levelFromLabel')"
+                    aria-valuemin="0"
+                    :aria-valuemax="maxLevel"
+                    :aria-valuenow="levelFrom"
+                    class="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/50 bg-wow-gold shadow-[0_0_0_1px_rgba(0,0,0,0.6)] focus:outline-none focus-visible:ring-2 focus-visible:ring-wow-gold/60"
+                    :style="{ left: `${levelFromPercent}%` }"
+                    @pointerdown.stop="startLevelDrag('from', $event)"
+                    @keydown="onLevelKeydown($event, 'from')"
+                  />
+                  <span
+                    role="slider"
+                    tabindex="0"
+                    :aria-label="t('levelToLabel')"
+                    :title="t('levelToLabel')"
+                    aria-valuemin="0"
+                    :aria-valuemax="maxLevel"
+                    :aria-valuenow="levelTo"
+                    class="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/50 bg-wow-gold shadow-[0_0_0_1px_rgba(0,0,0,0.6)] focus:outline-none focus-visible:ring-2 focus-visible:ring-wow-gold/60"
+                    :style="{ left: `${levelToPercent}%` }"
+                    @pointerdown.stop="startLevelDrag('to', $event)"
+                    @keydown="onLevelKeydown($event, 'to')"
+                  />
+                </span>
+
+                <span class="w-16 text-right tabular-nums">{{ levelWindowLabel }}</span>
+              </span>
 
               <button
                 v-if="filtersActive"
@@ -973,8 +1325,27 @@ onMounted(() => {
             <div
               v-for="character in visibleCharacters"
               :key="character.id"
-              class="hoa-panel flex items-center gap-3 rounded-2xl p-3"
+              class="hoa-panel flex flex-wrap items-center gap-3 rounded-2xl p-3"
             >
+              <!-- The tile's head: who this is at the left edge and when its figures were read at the
+                   right, with a hairline under them so the portrait, the figures and the controls below
+                   read as a row of their own. It is full width, so it takes its own line above them.
+                   Every tile of the grid carries one, the main's included: this is a list of characters,
+                   and the account's main is only the one the large card above the grid is drawn for. -->
+              <div class="flex w-full items-center justify-between gap-3 border-b border-white/10 pb-2">
+                <NuxtLink
+                  :to="characterUrl(character)"
+                  class="min-w-0 truncate text-[1.3rem] font-bold leading-snug"
+                  :style="{ color: hexOf(character) }"
+                >{{ character.displayName || character.name }}</NuxtLink>
+                <p
+                  class="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400"
+                  :title="updatedTitle(character)"
+                >
+                  {{ t('profileUpdated') }}: {{ updatedAt(character) }}
+                </p>
+              </div>
+
               <!-- The portrait Blizzard serves, framed in the character's own class; a character that
                    has not been read in full yet falls back to a monogram in that colour. -->
               <span
@@ -993,31 +1364,24 @@ onMounted(() => {
                 <span v-else>{{ character.name.charAt(0).toUpperCase() }}</span>
               </span>
 
+              <!-- What the character is: the realm and the level, then what it is worth, all on one
+                   line - and the professions under them, on a line of their own, because they are the
+                   one part of this that can run to two words. -->
               <div class="min-w-0">
-                <NuxtLink
-                  :to="characterUrl(character)"
-                  class="block truncate text-[1.3rem] font-bold leading-snug"
-                  :style="{ color: hexOf(character) }"
-                >{{ character.displayName || character.name }}</NuxtLink>
-                <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
-                  <span>
-                    {{ character.realmName || character.realmSlug }}<span v-if="character.level"> · {{ character.level }}</span>
-                  </span>
+                <p class="text-xs text-gray-400">
+                  {{ character.realmName || character.realmSlug }}<span v-if="character.level"> · {{ character.level }}</span>
+                  <template v-if="character.latest">
+                    · ilvl <span class="font-semibold text-white">{{ figure(character.latest.ilvl) }}</span>
+                    · M+ <span class="font-semibold text-white">{{ figure(character.latest.mplus) }}</span>
+                  </template>
+                  <template v-else>· {{ t('profileStatsPending') }}</template>
+                </p>
+                <p v-if="character.professions.length" class="mt-1 flex flex-wrap items-center gap-1.5">
                   <span
                     v-for="profession in character.professions"
                     :key="profession"
                     class="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] text-gray-300"
-                  >{{ profession }}</span>
-                </p>
-                <p class="truncate text-[11px] text-gray-400">
-                  <template v-if="character.latest">
-                    ilvl <span class="font-semibold text-white">{{ figure(character.latest.ilvl) }}</span>
-                    · M+ <span class="font-semibold text-white">{{ figure(character.latest.mplus) }}</span>
-                  </template>
-                  <template v-else>{{ t('profileStatsPending') }}</template>
-                </p>
-                <p class="truncate text-[13px] font-medium text-gray-400" :title="updatedTitle(character)">
-                  {{ t('profileUpdated') }}: {{ updatedAt(character) }}
+                  >{{ professionName(profession) }}</span>
                 </p>
               </div>
 
@@ -1091,7 +1455,7 @@ onMounted(() => {
       </template>
     </div>
 
-    <!-- The account's settings, sliding in from the right: the privacy switch, which is the one
+    <!-- The account's settings, sliding in from the right: the Hall of Fame switch, which is the one
          setting here that leaves the browser. The roster's order and its filters are not here - they
          live in the bar above the grid, where a reader can watch them act. -->
     <div v-if="settingsOpen" class="fixed inset-0 z-[60]" role="dialog" aria-modal="true" :aria-label="t('profileSettings')">
@@ -1109,23 +1473,25 @@ onMounted(() => {
           >{{ t('close') }}</button>
         </div>
 
-        <!-- The account's privacy: the one setting here that leaves the browser. -->
-        <section class="mt-5">
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ t('profilePrivacy') }}</p>
-          <p class="mt-1 text-xs text-gray-400">{{ t('profilePrivacyHint') }}</p>
-          <div class="mt-2 flex items-center gap-2">
+        <!-- The Hall of Fame, which is the one public surface this page feeds. The table draws a
+             single character per account - the main - so this switch decides whether the account is in
+             it at all. -->
+        <section class="mt-5 border-t border-white/10 pt-5">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ t('profileFame') }}</p>
+          <p class="mt-1 text-xs text-gray-400">{{ t('profileFameHint') }}</p>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
             <button
               type="button"
               class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs"
-              :class="{ 'hoa-tab-active': isPublic }"
-              @click="setPrivacy(true)"
-            >{{ t('profilePublic') }}</button>
+              :class="{ 'hoa-tab-active': !hideFromFame }"
+              @click="setFame(false)"
+            >{{ t('profileFamePublish') }}</button>
             <button
               type="button"
               class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs"
-              :class="{ 'hoa-tab-active': !isPublic }"
-              @click="setPrivacy(false)"
-            >{{ t('profilePrivate') }}</button>
+              :class="{ 'hoa-tab-active': hideFromFame }"
+              @click="setFame(true)"
+            >{{ t('profileFameHide') }}</button>
           </div>
         </section>
       </aside>

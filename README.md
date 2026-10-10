@@ -189,6 +189,7 @@ a second implementation is a second answer.
 | `shared/data/collectionsSchema.ts` | The collection types, the section shape, and the Russian label map |
 | `shared/data/leaderboardSchema.ts` | The hall of fame's record, query and payload types, shared by the server and the components |
 | `shared/utils/leaderboardScore.ts` | `calculatePlayerScore` and the weights it is made of |
+| `shared/utils/wow-{class,faction,professions}.ts` | The names the game's own UI uses, in both languages: the classes, the factions, and the professions (taken from Blizzard's profession index, so a pill reads as the game's profession pane spells it) |
 
 ---
 
@@ -387,7 +388,10 @@ character up still costs nothing and needs no account.
 - **Stats are filled in the background.** The sign-in writes names, not figures; the profile page
   reads a few characters on demand (`server/api/profile/sync.post.ts`) and a server plugin
   (`server/plugins/characterSync.ts`) does the same on a timer, so no page ever waits on a Blizzard
-  read per alt.
+  read per alt. Every read also stamps the moment it happened on the character
+  (`characters.stats_read_at`), because a snapshot is keyed to the day it belongs to - and a page that
+  printed that day would tell a reader who has just pressed Refresh that their character was read
+  "20 hours ago".
 - **The account pool is the source of every figure.** Mounts, pets, toys, decor and the factions
   driven to Exalted are shared across a whole Battle.net account, so the account's numbers are a
   **union of unique ids** (`account_pool`), filled from Blizzard's account collections
@@ -407,14 +411,18 @@ character up still costs nothing and needs no account.
   page cannot disagree because one of them was looked up before the pool grew. The main
   tile's **Download** draws the account
   card (`/api/profile/card`), **Update all** walks the roster sequentially (700 ms apart, with a
-  progress bar), each tile refreshes on its own with a 30-second cooldown, and the account menu (the
-  sliders button) holds the privacy switch, the roster order and the filters.
+  progress bar), each tile refreshes on its own with a 30-second cooldown, the settings panel (the
+  sliders button) holds the Hall of Fame switch, and the bar over the grid carries the roster's order,
+  its chips, the class / realm / profession menus, the level window (a rail with a floor and a ceiling,
+  which hides everyone outside it) and the search.
 - **One main per account.** A character the reader names as their main (`/api/profile/main`) is the
   only one the public leaderboard shows; every other character of the account stays a personal stat
   (`server/utils/leaderboardExclusions.ts`). The profile draws it twice: as the large card the page
   leads with, and in the roster grid among the others - where its star is the filled one, while every
-  other tile carries the same star left hollow, and pressing that is the promotion. A privacy switch
-  (`/api/profile/privacy`) decides whether the roster is visible to other readers or only the main is.
+  other tile carries the same star left hollow, and pressing that is the promotion. An account may
+  also leave the table altogether: the profile's **Hall of Fame** switch (`/api/profile/fame`,
+  `users.hide_from_fame`) keeps its main out of it, both from what the endpoint serves and from what
+  a later lookup writes.
 
 Register the callback in the Battle.net developer portal before the first sign-in:
 `https://heroofazeroth.com/api/auth/callback` (plus a localhost copy for development). It must match

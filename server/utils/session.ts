@@ -31,7 +31,8 @@ export interface SessionUser {
   bnetSub: string
   battletag: string | null
   mainCharacterId: number | null
-  isPublic: boolean
+  /** Whether the account asked to be left out of the public table entirely. */
+  hideFromFame: boolean
   accessToken: string | null
   refreshToken: string | null
   /** When the stored access token stops being usable, as seconds since the epoch. */
@@ -44,7 +45,7 @@ interface UserRow {
   bnet_sub: string
   battletag: string | null
   main_character_id: number | null
-  is_public: number
+  hide_from_fame: number
   access_token_enc: string | null
   refresh_token_enc: string | null
   access_token_expires_at: number | null
@@ -68,7 +69,7 @@ function toSessionUser(row: UserRow): SessionUser {
     bnetSub: row.bnet_sub,
     battletag: row.battletag,
     mainCharacterId: row.main_character_id,
-    isPublic: row.is_public === 1,
+    hideFromFame: row.hide_from_fame === 1,
     accessToken: decryptToken(row.access_token_enc),
     refreshToken: decryptToken(row.refresh_token_enc),
     expiresAt: row.access_token_expires_at
@@ -88,7 +89,7 @@ export async function getCurrentUser(event: H3Event): Promise<SessionUser | null
 
   const row = useDb()
     .prepare(
-      `SELECT u.id, u.bnet_sub, u.battletag, u.main_character_id, u.is_public,
+      `SELECT u.id, u.bnet_sub, u.battletag, u.main_character_id, u.hide_from_fame,
               u.access_token_enc, u.refresh_token_enc, u.access_token_expires_at
          FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.id = ? AND s.expires_at > ?`

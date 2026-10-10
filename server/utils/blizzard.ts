@@ -575,26 +575,23 @@ export async function getCharacterMountIds(
 }
 
 /**
- * The primary professions a character has taken up, as the game names them.
+ * The two primary professions a character has taken up, in the canonical English spelling.
  *
  * The profile summary does not carry them - a character's professions are a document of their own -
  * so this is one more call per character, made only where a character is read in full
- * (`server/utils/accountSync`). A character may hold two primaries, and a tile has room for two
- * pills, so the list is cut to two; the names arrive in the language the read was asked for.
+ * (`server/utils/accountSync`). It is always asked for in `en_US`, whatever language the page is
+ * read in: the row keeps one spelling, and the page translates it with the site's own table
+ * (`#shared/utils/wow-professions`) - which is what stops the same profession from being stored in
+ * two languages and printed in whichever one the background task happened to use.
  */
-export async function getCharacterProfessions(
-  realm: string,
-  name: string,
-  region: string,
-  locale = 'en_US'
-): Promise<string[]> {
+export async function getCharacterProfessions(realm: string, name: string, region: string): Promise<string[]> {
   try {
     const token = await getBlizzardToken(region)
     const data = await $fetch<any>(
       `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/professions`,
       {
         headers: { Authorization: `Bearer ${token}` },
-        query: { namespace: `profile-${region}`, locale }
+        query: { namespace: `profile-${region}`, locale: 'en_US' }
       }
     )
 

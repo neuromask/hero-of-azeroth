@@ -6,7 +6,12 @@
  * stat - it belongs on the profile, beside its siblings, not in the table of everybody - so this
  * module answers the keys the table has to leave out.
  *
- * It reads only the two tables an account owns, and it is deliberately the *only* place the
+ * And one choice of the reader's own, which is the only way out of the table there is: an account
+ * that asked not to be published (`users.hide_from_fame`) is left out entirely, its main included -
+ * the main being the only character of an account the table would ever have shown. The two are one
+ * query because they are one answer: who the table must not draw.
+ *
+ * It reads only the tables an account owns, and it is deliberately the *only* place the
  * leaderboard reaches into SQLite: the table's own storage (`./leaderboardStorage`) is otherwise a
  * JSON file, and keeping the dependency this small is what lets that storage be swapped later
  * without touching this rule.
@@ -35,11 +40,17 @@ export function leaderboardKey(region: string, realm: string, name: string): str
 }
 
 /**
- * The keys of characters that belong to an account but are not its main.
+ * The keys of the characters the table must not draw.
+ *
+ * Everybody of a roster but the one character that account leads with, and every character of an
+ * account that asked to be left out of the table altogether - the main included, since the main is
+ * the only one the table would have shown.
  *
  * Cached for a minute: setting a main is a rare act, and every leaderboard read asking SQLite would
- * be a query paid for a fact that almost never moves. `updateMainCharacter` clears the cache
- * outright, so the change is visible on the very next read rather than a minute later.
+ * be a query paid for a fact that almost never moves. Both writes that can move it - naming a main
+ * (`server/api/profile/main.post.ts`) and leaving the table (`server/api/profile/fame.post.ts`) -
+ * clear the cache outright, so the change is visible on the very next read rather than a minute
+ * later.
  */
 export function excludedLeaderboardKeys(): Set<string> {
   const now = Date.now()
@@ -49,7 +60,12 @@ export function excludedLeaderboardKeys(): Set<string> {
 
   try {
     const rows = useDb()
-      .prepare('SELECT region, realm_slug, name_key FROM characters WHERE is_main = 0')
+      .prepare(
+        `SELECT c.region, c.realm_slug, c.name_key
+           FROM characters c
+           JOIN users u ON u.id = c.user_id
+          WHERE c.is_main = 0 OR u.hide_from_fame = 1`
+      )
       .all() as { region: string; realm_slug: string; name_key: string }[]
 
     for (const row of rows) keys.add(leaderboardKey(row.region, row.realm_slug, row.name_key))
