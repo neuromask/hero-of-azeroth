@@ -4,10 +4,9 @@
  * the legal notice are all cut from.
  *
  * The pages differ in what they say and in nothing else, so the frame is written once here: the backdrop, the
- * header with the two links a document offers, one pane of the site's glass with the article in it, the
- * sign-off and the two floating controls. It is the same arrangement the hall of fame stands in, because a
- * reader who followed a link in the foot of that page should arrive somewhere that looks like the page they
- * left.
+ * header with the link a document offers, one pane of the site's glass with the article in it, the sign-off and
+ * the two floating controls. It is the same arrangement the hall of fame stands in, because a reader who
+ * followed a link in the foot of that page should arrive somewhere that looks like the page they left.
  *
  * What a page hands over is its title, its one line of meta, the date it was last edited - the policy
  * records one, the trademark notice does not - and the sections themselves. All of them are message keys
@@ -51,11 +50,10 @@ withDefaults(
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()
 
-/** The two pages a reader may have come from, offered as every page's own row offers its links. */
-const links = computed(() => [
-  { label: t('navHome'), to: localeUrl('/') },
-  { label: t('lbNav'), to: localeUrl('/leaderboard') }
-])
+/** The one page a reader may have come from, offered as every page's own row offers its links. It is the front
+ * door, which is the hall of fame, so the two links this row used to carry - the home page and the table - are
+ * one address now and are drawn once. */
+const links = computed(() => [{ label: t('lbNav'), to: localeUrl('/') }])
 
 /** The paragraphs of a section: its body is one message, split on the blank lines it carries. */
 const paragraphs = (body: string) => String(t(body)).split('\n\n')

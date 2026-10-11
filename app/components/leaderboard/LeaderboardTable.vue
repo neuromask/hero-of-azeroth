@@ -58,7 +58,16 @@ const props = defineProps<{
   online?: Set<string>
 }>()
 
-const emit = defineEmits<{ (event: 'update:sort', value: LeaderboardSort): void }>()
+const emit = defineEmits<{
+  (event: 'update:sort', value: LeaderboardSort): void
+  /**
+   * The reader wants somebody looked up: the table has told them that nobody in it matches what they asked
+   * for, and looking a character up is the one act the table cannot do for itself. The component owns the
+   * press and the page owns the search, so the two are joined by an event rather than by the table being
+   * told where the sheet that answers it stands.
+   */
+  (event: 'inspect'): void
+}>()
 
 const { locale, t } = useI18n()
 const localeUrl = useLocaleUrl()
@@ -242,9 +251,19 @@ function open(player: LeaderboardPlayer) {
     :class="pending ? 'opacity-70' : ''"
     :aria-busy="pending ? 'true' : undefined"
   >
-    <p v-if="!players.length" class="px-4 py-10 text-center text-sm text-gray-400">
-      {{ t('lbEmpty') }}
-    </p>
+    <!-- What an empty answer means. The table holds the characters the site has already rendered, so a name
+         it does not have is not a name the site does not know - it is one nobody has looked up yet, and the
+         way out is the search rather than a different filter. The button opens it on whatever the reader
+         typed above, so a name that matched nothing here is not a name that has to be typed again; the page
+         is the one that knows where the sheet is, which is why the press leaves the component as an event. -->
+    <div v-if="!players.length" class="px-4 py-10 text-center">
+      <p class="text-sm text-gray-400">{{ t('lbEmpty') }}</p>
+      <p class="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-gray-500">{{ t('lbEmptyHint') }}</p>
+
+      <button type="button" class="hoa-tab hoa-liquid-glass mt-4" @click="emit('inspect')">
+        {{ t('lbSearchCharacter') }}
+      </button>
+    </div>
 
     <div v-else class="overflow-x-auto rounded-xl">
       <table class="w-full min-w-[60rem] table-fixed border-collapse text-sm">

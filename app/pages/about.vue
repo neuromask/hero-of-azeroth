@@ -91,7 +91,7 @@ const SECTIONS = [{ body: 'aboutIntro' }]
     <template #references>
       <a :href="REPOSITORY" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href="https://t.me/neuromask" target="_blank" rel="noopener noreferrer">Telegram</a>
-      <NuxtLink :to="localeUrl('/leaderboard')">{{ t('lbNav') }}</NuxtLink>
+      <NuxtLink :to="localeUrl('/')">{{ t('lbNav') }}</NuxtLink>
     </template>
   </SiteDocument>
 </template>

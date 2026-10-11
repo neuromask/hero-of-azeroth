@@ -10,6 +10,11 @@
  * characters, the same progress - so adding somebody is looking them up, which is the act that reads
  * their profile and writes their row.
  *
+ * The button is not always the way in, though. A reader whose name matched nothing in the table is told so
+ * in the table itself, and the name they typed is offered to this sheet rather than left a dead end - the
+ * ask travels through `app/composables/characterLookup.ts`, which is what lets a page that does not hold
+ * the button open it anyway, with a name or with nothing.
+ *
  * It is a button of a page's own row - the row the hall of fame keeps its tabs and its collections
  * menu in - rather than a control beside the identity chip on the right: a second bar-shaped button
  * next to that chip read as a second call to action, and the row is where a page's controls live. It
@@ -46,12 +51,50 @@ const { t } = useI18n()
 const open = ref(false)
 const trigger = ref<HTMLButtonElement | null>(null)
 
+/**
+ * The search can also be asked for from outside this sheet's own button, and the pages that do are the ones
+ * that know a name the table has no row for: the front door's empty table offers the name the reader typed
+ * into the filter to the search rather than leaving it a dead end
+ * (`app/composables/characterLookup.ts`). The ask arrives as shared state rather than as a prop, because
+ * the control that makes it is not this component's - the table is not the row this sheet stands in.
+ */
+const { ask, clear: clearAsk } = useCharacterLookup()
+
+/** The name the sheet was asked for, which is what it opens the form on. */
+const askedName = ref('')
+
+/**
+ * Whether the sheet was asked for rather than pressed, which is the one difference between the two in this
+ * component: a reader who pressed the button is looking at the row and has not typed anything yet, while a
+ * reader who pressed "look this up" under the table has said which name they mean and wants that field.
+ */
+const asked = ref(false)
+
+// A fresh token is a fresh ask: the same name asked for twice opens the sheet twice, rather than the second
+// press doing nothing because the state already held that name.
+watch(
+  () => ask.value?.token,
+  () => {
+    const request = ask.value
+    if (!request) return
+
+    askedName.value = request.name
+    asked.value = true
+    open.value = true
+  }
+)
+
 /** The button and the sheet under it, which is what a click has to land outside of to shut it. */
 const root = ref<HTMLElement | null>(null)
 
 /** Shuts the sheet and leaves the cursor where the reader put it. */
 function hide() {
   open.value = false
+  // The ask has been answered, and a shut sheet must not answer it again: what is cleared here is the
+  // page's ask rather than this component's own flag, and clearing it is what keeps a later press of the
+  // button from reopening the sheet on a name nobody is asking for any more.
+  asked.value = false
+  clearAsk()
 }
 
 /** The way out a reader takes from the keyboard, which hands the cursor back to the button. */
@@ -160,7 +203,7 @@ onBeforeUnmount(() => {
           >&#10005;</button>
         </div>
 
-        <CharacterSearchForm />
+        <CharacterSearchForm :initial-name="askedName" :autofocus="asked" />
       </div>
     </Transition>
   </div>

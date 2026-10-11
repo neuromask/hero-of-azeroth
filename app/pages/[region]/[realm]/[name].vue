@@ -905,11 +905,12 @@ onBeforeUnmount(() => {
             >
               {{ $t('tabActivity') }}
             </NuxtLink>
-            <!-- The hall of fame, in the same row and wearing the same tab as the views beside it:
-                 it is not a view of this character, but it is where a reader who has just looked
-                 somebody up wants to go next, and it stands at the end of the row for that. -->
+            <!-- The hall of fame, in the same row and wearing the same tab as the views beside it: it is not a
+                 view of this character, but the site's front door and the table of everybody, which is where a
+                 reader who has just looked somebody up wants to go next. It stands at the end of the row for
+                 that, and it is the same address this tab carries on the front door itself. -->
             <NuxtLink
-              :to="localeUrl('/leaderboard')"
+              :to="localeUrl('/')"
               class="hoa-tab hoa-liquid-glass"
             >
               {{ $t('lbNav') }}

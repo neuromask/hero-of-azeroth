@@ -70,12 +70,15 @@ export function usePresenceHeartbeat(): void {
  * sends, and it is refreshed every minute while the tab is visible - the same beat, the other direction.
  */
 export async function usePresence() {
-  const { data } = await useAsyncData<LeaderboardPresence>(
-    'leaderboard-presence',
-    () => $fetch<LeaderboardPresence>('/api/leaderboard/presence'),
-    { default: () => ({ window: 0, keys: [] }) }
-  )
-
+  /**
+   * The re-read, registered before the list is asked for rather than after it.
+   *
+   * A composable that awaits and *then* registers a hook registers it with no component to belong to: the
+   * compiler's `withAsyncContext` restores the component across the awaits of a page's own script, not across
+   * an await inside a function that page called - so the hook used to be dropped with a Vue warning, and the
+   * dots it refreshes were never refreshed at all. That is the whole reason this block stands first: the
+   * minute and the tab-switch it arranges are the point of reading the list twice.
+   */
   if (import.meta.client) {
     const reRead = () => {
       if (visible()) void refreshNuxtData('leaderboard-presence')
@@ -86,6 +89,12 @@ export async function usePresence() {
       document.addEventListener('visibilitychange', reRead)
     })
   }
+
+  const { data } = await useAsyncData<LeaderboardPresence>(
+    'leaderboard-presence',
+    () => $fetch<LeaderboardPresence>('/api/leaderboard/presence'),
+    { default: () => ({ window: 0, keys: [] }) }
+  )
 
   return {
     /** The keys of the online mains, which a row is matched against by `searchHistoryKey`. */

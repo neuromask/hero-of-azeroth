@@ -28,8 +28,84 @@ const props = withDefaults(
      * because that is what they opened it for.
      */
     autofocus?: boolean
+    /**
+     * The name the field opens with, when the search was asked for on one rather than typed into - the
+     * reader pressed the way out of an empty table, or arrived from a page that has no row for the
+     * character they want. The caller owns the name and the form owns the field: it goes in exactly as a
+     * remembered character would, and nothing else about the form changes.
+     */
+    initialName?: string
+    /**
+     * Whether the two fields and the button stand in one row rather than stacked.
+     *
+     * The form is offered in two shapes and both are the same act: the card a page sets room aside for, and the
+     * bar of a page that has no room to set aside - the front door, where a reader who has never been here meets
+     * the search in the header and everything the search finds stands under it (`app/pages/index.vue`). Only the
+     * room each control takes changes. The shells a field drops, the remembered characters, the progress on the
+     * button and the address a search opens are the same ones, because a second implementation of any of them is
+     * the very thing this component exists to prevent.
+     */
+    compact?: boolean
   }>(),
-  { autofocus: false }
+  { autofocus: false, initialName: '', compact: false }
+)
+
+/**
+ * The room each control takes, in the two shapes the form is offered in.
+ *
+ * It is one object of whole class strings rather than a set of classes the compact form adds, because the two
+ * shapes are not additive: `px-4` does not stop applying because a second class says `px-3` - which utility wins
+ * is the order Tailwind emits them in, not the order they are written in the markup - so a field that is a
+ * column wide in one place and a row narrow in another has to be one string chosen per shape, not two strings
+ * stacked. What is shared is what the controls *are* (their colour, their border, their focus ring), and that
+ * stays in the markup where both shapes can be read against it.
+ */
+const layout = computed(() =>
+  props.compact
+    ? {
+        /** The three controls in one row, wrapping when the window is narrow. */
+        form: 'flex flex-wrap items-center gap-2',
+        /** The room a field takes in a bar: a fraction of a row rather than the whole of a card. */
+        cell: 'w-full sm:w-48',
+        /**
+         * The field itself, which draws no box of its own: its box is the glass under it (`hoa-liquid-glass`
+         * on the wrapper), because an `<input>` is a replaced element and never gets a `::before` - the layer
+         * the site's whole material is painted on. So the height, the room inside and the type size live here,
+         * and the colour, the rim and the frost live on the box around it.
+         */
+        input: 'h-10 px-3 text-sm',
+        /** Room kept inside the field for what stands at its right edge, and for the clear button. */
+        name: 'pr-9',
+        realm: 'pr-20',
+        clear: 'right-2',
+        badge: 'right-8',
+        /** The button in a row: as wide as its own word, and exactly as tall as the fields beside it. */
+        submit: 'h-10 shrink-0 px-4 text-xs'
+      }
+    : {
+        form: 'space-y-4',
+        cell: '',
+        input: 'h-11 px-4',
+        name: 'pr-10',
+        realm: 'pr-24',
+        clear: 'right-3',
+        badge: 'right-12',
+        submit: 'w-full mt-2 h-11 text-sm'
+      }
+)
+
+/**
+ * What the two fields say while they are empty.
+ *
+ * The card has room for the invitation the site has always written there ("Start typing a realm..."), and the bar
+ * of a page does not: a field of twelve rems shows about ten characters before it clips, so the bar asks for the
+ * same two things in the shortest words the site has for them. The realm's own list and the remembered characters
+ * are what tell a reader the rest, and both are one tap away (`focus`).
+ */
+const placeholders = computed(() =>
+  props.compact
+    ? { name: t('nameShort'), realm: t('realmShort') }
+    : { name: t('characterNamePlaceholder'), realm: t('realmPlaceholder') }
 )
 
 interface RealmOption {
@@ -337,6 +413,23 @@ const focusStart = () => {
 }
 
 /**
+ * Puts a name the caller asked for into the field.
+ *
+ * A search that is asked for rather than typed is the same act from the form's side: the field is filled
+ * and the reader presses the button, so the form keeps its own rules about what makes a search possible -
+ * a realm is still picked from the list, and the name is still the reader's to correct. It is applied on
+ * mount, because a sheet that was opened for the ask brings a fresh form with it, and watched as well,
+ * because a form that is already on screen can be asked a second time: another row of the table, or the
+ * same row of another page.
+ */
+const applyInitialName = () => {
+  const asked = props.initialName.trim()
+  if (asked) name.value = asked
+}
+
+watch(() => props.initialName, applyInitialName)
+
+/**
  * What the button reads while a search is in flight. The address being pushed renders a
  * character, and that page asks Blizzard for it before it can draw: the navigation is held on
  * that fetch, so this form - and its button - stays on screen for as long as the request takes.
@@ -408,6 +501,7 @@ onMounted(() => {
   // after hydration keeps the rendered page the same for everyone.
   restoreSession()
   loadHistory()
+  applyInitialName()
   focusStart()
   document.addEventListener('mousedown', onDocumentClick)
 })
@@ -420,19 +514,32 @@ onBeforeUnmount(() => {
 
 
 <template>
-  <!-- The name first, the realm under it, then the button: the field a reader has an opinion about
-       is the one they fill in first, and the realm is the one the form can remember for them. -->
-  <form class="space-y-4" @submit.prevent="handleSearch">
-    <div ref="nameRootEl" class="relative">
+  <!-- The name first, the realm under it, then the button: the field a reader has an opinion about is the one
+       they fill in first, and the realm is the one the form can remember for them. In the bar of a page that
+       has no room for a card the three stand in one row instead (`compact`), in the same order - a reader who
+       met the search once should not have to find where each field went the second time.
+
+       A field is the site's own glass (`hoa-liquid-glass`) on the box that carries it, with the input itself
+       transparent inside: the material is painted on a layer the box owns, and an `<input>` is a replaced
+       element that never gets one, so the box is the field's body and the input is its text. The rim warms to
+       the brand gold while the field holds the cursor (`focus-within`), which is what the box's own
+       `focus:border-wow-gold` used to do on the input. -->
+  <form :class="layout.form" @submit.prevent="handleSearch">
+    <div
+      ref="nameRootEl"
+      class="hoa-liquid-glass relative rounded-lg focus-within:[--hoa-ring:rgba(248,183,0,0.55)]"
+      :class="layout.cell"
+    >
       <input
         ref="nameInput"
         v-model="name"
         type="text"
         autocomplete="off"
         spellcheck="false"
-        :placeholder="$t('characterNamePlaceholder')"
+        :placeholder="placeholders.name"
         required
-        class="w-full bg-black/60 border border-white/10 rounded-lg px-4 py-2.5 pr-10 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
+        class="w-full rounded-lg bg-transparent text-white placeholder-gray-400 focus:outline-none"
+        :class="[layout.input, layout.name]"
         @focus="openName"
         @input="openName"
         @keydown.esc="nameOpen = false"
@@ -445,7 +552,8 @@ onBeforeUnmount(() => {
         type="button"
         :aria-label="$t('clearField')"
         :title="$t('clearField')"
-        class="absolute right-3 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+        class="absolute top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+        :class="layout.clear"
         @mousedown.prevent
         @click="clearName"
       >&#10005;</button>
@@ -496,16 +604,20 @@ onBeforeUnmount(() => {
 
 
     <div>
-      <div ref="rootEl" class="relative">
+      <div
+        ref="rootEl"
+        class="hoa-liquid-glass relative rounded-lg focus-within:[--hoa-ring:rgba(248,183,0,0.55)]"
+        :class="[layout.cell, realmError ? '[--hoa-ring:rgba(239,68,68,0.75)]' : '']"
+      >
         <input
           ref="realmInput"
           v-model="realmQuery"
           type="text"
           autocomplete="off"
           spellcheck="false"
-          :placeholder="$t('realmPlaceholder')"
-          class="w-full bg-black/60 border rounded-lg px-4 py-2.5 pr-24 text-white placeholder-gray-500 focus:outline-none focus:border-wow-gold transition-colors"
-          :class="realmError ? 'border-red-500/70' : 'border-white/10'"
+          :placeholder="placeholders.realm"
+          class="w-full rounded-lg bg-transparent text-white placeholder-gray-400 focus:outline-none"
+          :class="[layout.input, layout.realm]"
           @focus="open = true"
           @input="onRealmInput"
           @keydown.down.prevent="move(1)"
@@ -520,16 +632,17 @@ onBeforeUnmount(() => {
           type="button"
           :aria-label="$t('clearField')"
           :title="$t('clearField')"
-          class="absolute right-3 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+          class="absolute top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+          :class="layout.clear"
           @mousedown.prevent
           @click="clearRealm"
         >&#10005;</button>
         <span
           v-if="regionBadge"
-          class="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border"
-          :class="resolvedRealm?.region === 'eu'
+          class="pointer-events-none absolute top-1/2 -translate-y-1/2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border"
+          :class="[layout.badge, resolvedRealm?.region === 'eu'
             ? 'border-sky-400/40 bg-sky-400/10 text-sky-300'
-            : 'border-rose-400/40 bg-rose-400/10 text-rose-300'"
+            : 'border-rose-400/40 bg-rose-400/10 text-rose-300']"
         >{{ regionBadge }}</span>
 
         <!-- The realms, in the pane every menu on the site is drawn in (`hoa-pop`): the same glass
@@ -569,7 +682,8 @@ onBeforeUnmount(() => {
 
     <button
       type="submit"
-      class="w-full mt-2 bg-gradient-to-r from-amber-600 to-wow-gold text-black font-extrabold py-3 rounded-lg hover:brightness-110 transition-all shadow-lg uppercase text-sm tracking-wider disabled:cursor-wait disabled:brightness-95"
+      class="bg-gradient-to-r from-amber-600 to-wow-gold text-black font-extrabold rounded-lg hover:brightness-110 transition-all shadow-lg uppercase tracking-wider disabled:cursor-wait disabled:brightness-95"
+      :class="layout.submit"
       :disabled="searching"
     >
       <!-- While the character page is fetching from Blizzard, the button becomes the wait:

@@ -187,6 +187,22 @@ export default defineNuxtConfig({
     detectBrowserLanguage: false
   },
   /**
+   * The one redirect the site has: the hall of fame's old address.
+   *
+   * The front door and the hall of fame are one page (`app/pages/index.vue`), so `/leaderboard` names nothing
+   * of its own any more - and an address a crawler has indexed and a reader has bookmarked is not retired by
+   * deleting a file. It answers with a permanent redirect to the page that replaced it, which is what tells
+   * both where the content went; `/ru/leaderboard` is the same address in the other language and answers the
+   * same way. Nitro handles this before the app is rendered, so the redirect costs no render and the language
+   * middleware never sees it - which is why both languages are spelled out here rather than derived from the
+   * request. A query the old link carried (`?columns=decor`, which the tiles of a character page used to send)
+   * rides along, because Nitro keeps it.
+   */
+  routeRules: {
+    '/leaderboard': { redirect: { to: '/', statusCode: 301 } },
+    '/ru/leaderboard': { redirect: { to: '/ru', statusCode: 301 } }
+  },
+  /**
    * The character card draws the same SVGs the page shows from `~/assets/icons`.
    * A deployment ships `.output` alone, so there is no `app/` directory next to
    * the running server: Nitro bundles every `serverAssets` folder into the build,

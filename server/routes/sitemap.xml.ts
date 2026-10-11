@@ -1,12 +1,16 @@
 /**
  * The sitemap `robots.txt` points crawlers at.
  *
- * It lists two kinds of page: the few that are the site itself - the front door, the hall of fame, the about
- * page, the privacy policy and the legal notice, each of which exists whether or not anybody has been looked
- * up - and every character the site has rendered, which is the part that grows as the site is used. A character
- * page has no registry to be read from - the game has no list of its players - so the site keeps its own,
- * written the moment a lookup finds somebody (see `server/utils/characterIndex.ts`), and hands that list
+ * It lists two kinds of page: the few that are the site itself - the front door, which is the hall of fame,
+ * the about page, the privacy policy and the legal notice, each of which exists whether or not anybody has been
+ * looked up - and every character the site has rendered, which is the part that grows as the site is used. A
+ * character page has no registry to be read from - the game has no list of its players - so the site keeps its
+ * own, written the moment a lookup finds somebody (see `server/utils/characterIndex.ts`), and hands that list
  * to a crawler here.
+ *
+ * The hall of fame has no address of its own in this list because it has none in the site's own navigation:
+ * `/leaderboard` is a 301 to the front door (`nuxt.config.ts`, `routeRules`), and a map that named a
+ * redirecting address would be telling a crawler to read a page that only says where to go.
  *
  * A page is listed once, not once per language: the `<loc>` names it in the default language and
  * the languages it also exists in are `xhtml:link` alternates inside that same `<url>`, which is
@@ -78,15 +82,14 @@ export default defineEventHandler(async (event) => {
   const siteUrl = String(useRuntimeConfig(event).public.siteUrl || '').replace(/\/+$/, '')
 
   /**
-   * The pages to list, each with the day it was last seen when the site knows one. The front
-   * door never changes; a character page carries the day of the search that last reached it.
+   * The pages to list, each with the day it was last seen when the site knows one. The front door is the hall
+   * of fame (`app/pages/index.vue`), so it changes whenever a character is looked up - it is the same
+   * population the map below spells out - and it carries the day of the freshest lookup rather than one of
+   * its own. A character page carries the day of the search that last reached it.
    */
   const characters = (await readCharacterIndex()).slice(0, CHARACTER_LIMIT)
   const pages = [
-    { path: '/', lastmod: '', details: '' },
-    // The hall of fame changes whenever a character is looked up - it is the same population the
-    // map below spells out - so it carries the day of the freshest lookup rather than one of its own.
-    { path: '/leaderboard', lastmod: characters[0]?.updatedAt || '', details: '' },
+    { path: '/', lastmod: characters[0]?.updatedAt || '', details: '' },
     // The about page is the site's own introduction, and the policy and the notice beside it are its
     // documents: all three are edited when they are edited, which the policy's own date at the top records,
     // so none of them carries a `lastmod` here.

@@ -101,15 +101,15 @@ const tileColumns = computed<StatTile[][]>(() => {
 })
 
 /**
- * Where a tile leads: the hall of fame with this collection's chip already lit, in the language being
- * read.
+ * Where a tile leads: the hall of fame with this collection's chip already lit, in the language being read. The
+ * hall of fame is the site's front door (`app/pages/index.vue`), so this is the one link into the table that
+ * starts from a number a reader was looking at rather than from a menu.
  *
- * Every figure a tile prints is a figure the table has a column for, so the tile is the one way into
- * the hall of fame that starts from a number a reader was looking at rather than from a menu: the chip
- * they find switched on is the very tile they pressed, and the table is narrowed to it.
+ * Every figure a tile prints is a figure the table has a column for: the chip they find switched on is the very
+ * tile they pressed, and the table is narrowed to it.
  */
 function tileUrl(key: LeaderboardSort) {
-  return { path: localeUrl('/leaderboard'), query: leaderboardColumnsQuery([key]) }
+  return { path: localeUrl('/'), query: leaderboardColumnsQuery([key]) }
 }
 </script>
 

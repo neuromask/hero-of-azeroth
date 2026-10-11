@@ -67,15 +67,18 @@ the size a social network wants, with the character's own render and class artwo
 
 | Address | What it shows |
 | --- | --- |
-| `/` | Front door: region switch, realm autocomplete, character name, recent searches, and the Battle.net sign-in under the search button behind a hairline |
+| `/` | Front door *and* hall of fame: the ranking of every character the site has looked up — sorted, filtered and searched — with the search itself in the header bar (region, realm autocomplete, character name, recent searches) while this browser knows no character and nobody is signed in |
 | `/region-eu/<realm>/<name>` | Overview: the stat tiles, the render, download / share / refresh |
 | `/region-eu/<realm>/<name>/collections` | Collections summary: a tile per shelf and the running total |
 | `/region-eu/<realm>/<name>/collections/mounts` | A shelf: sections with bars, sources side by side, the three switches, the note |
 | `/region-eu/<realm>/<name>/achievements` | Achievements summary: a tile per category and the running total |
 | `/region-eu/<realm>/<name>/achievements/dungeons` | One achievement category: sections with bars, subcategories side by side, the tile grid |
 | `/region-eu/<realm>/<name>/activity` | The achievement feed with its category filters |
-| `/leaderboard` | The hall of fame: every character the site has looked up, ranked, filtered and searched |
 | `/ru/…` | The very same pages in Russian |
+
+The hall of fame's old address, `/leaderboard`, is a 301 to `/` (`nuxt.config.ts`, `routeRules`): the two are one
+page now, and only the address that no longer names anything redirects - every other page of the site still
+refuses to.
 
 ## 🚀 Quick start
 
@@ -179,16 +182,15 @@ a second implementation is a second answer.
 
 | Where | What lives there |
 | --- | --- |
-| `app/pages/index.vue` | The front door and its search |
-| `app/pages/leaderboard.vue` | The hall of fame |
+| `app/pages/index.vue` | The front door, which is the hall of fame: the search block above the table |
 | `app/pages/privacy.vue` | The privacy policy: what is collected, what a sign-in stores, and what the counters are |
 | `app/pages/about.vue` | About the site: what it is, the four things it does, and the fact that it is free |
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
 | `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
-| `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable`, `LeaderboardYou` (the reader's own place in the table) |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
@@ -203,9 +205,9 @@ a second implementation is a second answer.
 
 ## 🏆 The hall of fame
 
-`/leaderboard` is a public ranking of every character the site has ever rendered — the same population
-the sitemap is built from — with the community's own totals above it. It is built so that opening it
-costs the rest of the site nothing:
+The site's front door *is* its hall of fame: `/` is a public ranking of every character the site has ever
+rendered — the same population the sitemap is built from — with the search on top of it and the community's own
+totals between the two. It is built so that opening it costs the rest of the site nothing:
 
 - **Nothing is aggregated per request.** One file, `server/data/leaderboard.json`, holds a record per
   character, and the overall rating is computed when a profile is *written* rather than when the table
@@ -244,13 +246,25 @@ several at once — and a `?` beside them opens the legend of the score, whose m
 the formula itself so the panel cannot promise something the server does not compute. The realm names
 come from the site's realm list rather than from whichever language the record happened to be written
 in, and an item level is printed only for a character at the current level cap, a figure that says
-nothing among characters still climbing. The row under the page's name also carries the one thing this
-page cannot do for itself - add somebody who is not in the table yet: the button that closes that row
-opens the front page's own two fields as a plate (`app/components/CharacterSearchDialog.vue`), because
-looking a character up is what reads their profile and writes their row. And the bar itself carries the
-site's own sign-in state in place of an account: the character this browser opened last
-(`app/components/MyProfile.vue`), read from the same history the search field suggests from - the chip
-alone, since the way to get one is the row's button.
+nothing among characters still climbing.
+
+The page carries the site's one search in three places, and every one of them is the same two fields
+(`app/components/CharacterSearchForm.vue`) - the site's own glass, with the rim of a field warming to the brand
+gold while it holds the cursor: in the header bar, as one row, while this browser knows no character and nobody is
+signed in (`compact` - the shape the front door wears on a first visit); the sheet the row drops
+(`app/components/CharacterSearchDialog.vue`, on `Ctrl`/`⌘`+`K` as well); and the button under an empty table -
+because a name the table does not hold is not a name the site does not know, it is one nobody has looked up yet,
+and looking somebody up is what writes their row. That last one asks for the search instead of holding it
+(`app/composables/characterLookup.ts`) and hands over the name the reader typed into the filter, so the field is
+not a dead end.
+
+The character the page is *about* is the one this browser opened last, or - for a reader who is signed in and has
+looked nobody up on this device - the main of their account: `/api/profile` is read for the row's own badge in any
+case, so the main costs the page no second request, and a reader who signed in somewhere else finds their
+character waiting in the bar instead of a pair of empty fields. The row under the page's name carries that
+character's own views - profile, collections, achievements, reputations, feed - and draws them only once there is
+one; the bar carries their place in place of the account chip
+(`app/components/leaderboard/LeaderboardYou.vue`).
 
 ## 🎯 Collections: where the numbers come from
 
@@ -403,8 +417,8 @@ switches with no JavaScript at all.
 - Every character page is `og:image`d with its own card (`summary_large_image`), and `/api/card/` is
   deliberately left crawlable in `robots.txt`: a blocked preview path would leave every shared link
   blank.
-- `/sitemap.xml` lists the pages of the site itself — the front door, the hall of fame, the about page, the
-  policy and the legal notice — and the characters the site has actually rendered (kept in `server/data/`,
+- `/sitemap.xml` lists the pages of the site itself — the front door (which is the hall of fame), the about
+  page, the policy and the legal notice — and the characters the site has actually rendered (kept in `server/data/`,
   capped at 50,000 URLs) with `xhtml:link` alternates per language. A browser opening it gets the page the map
   doubles as (`public/sitemap.xsl`): who has been looked up and what they were — level, class, item
   level, rating — plus the breakdowns worth reading (level, class, realm, the last two weeks, the
