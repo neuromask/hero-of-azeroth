@@ -46,10 +46,13 @@ const activityPath = computed(() => `${overviewPath.value}/activity`)
 const collectionsPath = computed(() => `${overviewPath.value}/collections`)
 /** The achievements subtree, which opens on the summary (see the `achievements/` folder). */
 const achievementsPath = computed(() => `${overviewPath.value}/achievements`)
+/** The reputation journal, which is one page rather than a menu of shelves (see `.../reputations.vue`). */
+const reputationsPath = computed(() => `${overviewPath.value}/reputations`)
 /** The view the address names, which is what the tabs are lit by. */
 const onActivityTab = computed(() => /\/activity\/?$/.test(route.path))
 const onCollectionsTab = computed(() => /\/collections(?:\/|$)/.test(route.path))
 const onAchievementsTab = computed(() => /\/achievements(?:\/|$)/.test(route.path))
+const onReputationsTab = computed(() => /\/reputations\/?$/.test(route.path))
 /** Whether `kind` is the shelf being read, which is the entry the collections menu lights. */
 const onShelf = (kind: string) => new RegExp(`/collections/${kind}/?$`).test(route.path)
 
@@ -160,6 +163,7 @@ const seoTitle = computed(() => {
     : (seoName.value ? `${c.name} - ${seoName.value} (${regionCode.value})` : `${c.name} (${regionCode.value})`)
   if (onActivityTab.value) return `${base} - ${t('tabActivity')}`
   if (onCollectionsTab.value) return `${base} - ${t('tabCollections')}`
+  if (onReputationsTab.value) return `${base} - ${t('tabReputations')}`
   return base
 })
 
@@ -868,8 +872,10 @@ onBeforeUnmount(() => {
             <NuxtLink
               :to="localeUrl(overviewPath)"
               class="hoa-tab hoa-liquid-glass"
-              :class="{ 'hoa-tab-active': !onActivityTab && !onCollectionsTab && !onAchievementsTab }"
-              :aria-current="!onActivityTab && !onCollectionsTab && !onAchievementsTab ? 'page' : undefined"
+              :class="{ 'hoa-tab-active': !onActivityTab && !onCollectionsTab && !onAchievementsTab && !onReputationsTab }"
+              :aria-current="
+                !onActivityTab && !onCollectionsTab && !onAchievementsTab && !onReputationsTab ? 'page' : undefined
+              "
             >
               {{ $t('tabOverview') }}
             </NuxtLink>
@@ -881,6 +887,16 @@ onBeforeUnmount(() => {
             <!-- The achievements are fifteen categories, chosen the same way: the menu is part of this
                  navigation (`app/components/AchievementMenu.vue`), right after the collections. -->
             <AchievementMenu :path="achievementsPath" :active="onAchievementsTab" />
+            <!-- The reputations are one journal rather than a menu of shelves - every expansion is drawn
+                 on the one page (`app/components/ReputationShelf.vue`) - so the tab is a plain link. -->
+            <NuxtLink
+              :to="localeUrl(reputationsPath)"
+              class="hoa-tab hoa-liquid-glass"
+              :class="{ 'hoa-tab-active': onReputationsTab }"
+              :aria-current="onReputationsTab ? 'page' : undefined"
+            >
+              {{ $t('tabReputations') }}
+            </NuxtLink>
             <NuxtLink
               :to="localeUrl(activityPath)"
               class="hoa-tab hoa-liquid-glass"

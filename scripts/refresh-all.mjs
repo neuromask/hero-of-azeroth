@@ -2,11 +2,10 @@
  * Every refresh a patch wants, in the order their outputs are read.
  *
  * A patch moves two kinds of number: the ones the site pays for once and ships with the build - the
- * collections and achievements atlases, the achievement catalogue, the reputation and total snapshots
- * - and the ones it reads live for whoever is being looked at. Only the first kind is refreshed here,
- * and every step is the same script `package.json` exposes on its own: this runs them in order,
- * reports what each one wrote, and names the headings a new patch brought that the Russian label map
- * has not got yet.
+ * collections and achievements atlases, the achievement catalogue, the reputation atlas - and the ones it
+ * reads live for whoever is being looked at. Only the first kind is refreshed here, and every step is the
+ * same script `package.json` exposes on its own: this runs them in order, reports what each one wrote, and
+ * names the headings a new patch brought that the Russian label map has not got yet.
  *
  * The character the Armoury is read with is the one the snapshot already records, so a second run needs
  * no arguments at all; `region realm name` changes it.
@@ -67,7 +66,7 @@ const STEPS = [
   { key: 'armoury', script: 'refresh-armoury-totals.mjs', args: [REGION, REALM, NAME] },
   { key: 'meta', script: 'refresh-achievement-meta.mjs', args: [REGION, '8', ...FRESH] },
   { key: 'points', script: 'refresh-achievement-points.mjs', args: [REGION, ...FRESH] },
-  { key: 'reputations', script: 'refresh-reputation-totals.mjs', args: [REGION, ...FRESH] }
+  { key: 'reputations', script: 'refresh-reputations.mjs', args: [REGION, ...FRESH] }
 ].filter((step) => !WANTED.length || WANTED.includes(step.key))
 
 /** Every heading a shelf draws - the group and the sources under it - as the atlas has it right now. */

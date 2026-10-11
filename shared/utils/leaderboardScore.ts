@@ -31,7 +31,7 @@ export const SCORE_WEIGHTS = {
   /** ~1500 pets, counted by species. */
   pets: 5,
   /**
-   * ~230 factions reachable by a character of one side (`server/utils/reputation-totals.json`),
+   * ~230 factions reachable by a character of one side (`server/utils/reputations-data.json`),
    * counted only where they are finished - `isReputationMaxed`, so a renown faction at its last level
    * and a delve companion at its hundredth count the same as a classic ladder at Exalted.
    */

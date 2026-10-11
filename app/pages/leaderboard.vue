@@ -168,9 +168,11 @@ const characterPath = computed(() => {
   return entry ? `/${regionPath(entry.region)}/${entry.realm}/${entry.name}` : ''
 })
 
-/** The two views of the row that are plain addresses, each falling back to the front door. */
+/** The plain addresses of the row, each falling back to the front door. */
 const overviewUrl = computed(() => localeUrl(current.value ? characterPath.value : '/'))
 const activityUrl = computed(() => localeUrl(current.value ? `${characterPath.value}/activity` : '/'))
+/** The reputation journal of that character, which is one page rather than a menu of shelves. */
+const reputationsUrl = computed(() => localeUrl(current.value ? `${characterPath.value}/reputations` : '/'))
 
 /** The collections subtree of that character, which the menu's entries hang from. */
 const collectionsPath = computed(() => `${characterPath.value}/collections`)
@@ -228,6 +230,10 @@ onMounted(loadHistory)
            the collections, so a reader who came from a character has the whole log a click away. -->
       <AchievementMenu v-if="current" :path="achievementsPath" :active="false" />
       <NuxtLink v-else :to="localeUrl('/')" class="hoa-tab hoa-liquid-glass">{{ t('tabAchievements') }}</NuxtLink>
+
+      <!-- The reputations are one journal rather than a menu of shelves, so the tab is a plain link into
+           the character this reader came from. -->
+      <NuxtLink :to="reputationsUrl" class="hoa-tab hoa-liquid-glass">{{ t('tabReputations') }}</NuxtLink>
 
       <NuxtLink :to="activityUrl" class="hoa-tab hoa-liquid-glass">{{ t('tabActivity') }}</NuxtLink>
 

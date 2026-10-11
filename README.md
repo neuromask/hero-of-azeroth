@@ -133,7 +133,7 @@ flowchart LR
 
   N -->|"profile, achievements,<br/>collections, media, M+"| BL["Blizzard API"]
   N -->|"mount journal<br/>of this character"| AR["Blizzard Armoury"]
-  N -->|"character's ids laid over<br/>the shipped tree"| AT[("Atlas & catalogues<br/>collections-data.json<br/>achievement-meta.json<br/>reputation-totals.json")]
+  N -->|"character's ids laid over<br/>the shipped tree"| AT[("Atlas & catalogues<br/>collections-data.json<br/>achievement-meta.json<br/>reputations-data.json")]
   N -->|"SVG → resvg"| CD["Card JPEG<br/>1200×630"]
 
   BL --> SW["SWR caches<br/>10 min profile · 2 h shelf/card"]
@@ -166,6 +166,7 @@ a second implementation is a second answer.
 | `/api/character/<region>/<realm>/<name>` | The entire profile the overview draws (`?force=true` re-reads Blizzard) |
 | `/api/collections/<region>/<realm>/<name>?kind=mounts` | One shelf, laid over the character's ids — `kind` is `mounts`, `pets`, `toys` or `decors`, and `?unobtainable=1` / `?upcoming=1` are the two switches; without `kind` it answers the summary |
 | `/api/achievements/<region>/<realm>/<name>` | The achievements summary, laid over the character's log (omit `?category=` for the summary, add it for one category's shelf) |
+| `/api/reputations/<region>/<realm>/<name>` | The character's own reputation journal, laid over the shipped faction tree — this character only, never the account's union (see below) |
 | `/api/activity/<region>/<realm>/<name>` | The recent-achievement feed |
 | `/api/card/<region>/<realm>/<name>?locale=ru_RU` | The shareable JPEG, 1200×630 |
 | `/api/realms` | The realm list the search box completes from |
@@ -179,14 +180,15 @@ a second implementation is a second answer.
 | `app/pages/index.vue` | The front door and its search |
 | `app/pages/leaderboard.vue` | The hall of fame |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
-| `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
+| `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
 | `shared/data/collectionsSchema.ts` | The collection types, the section shape, and the Russian label map |
+| `shared/data/reputationsSchema.ts` | The reputation journal's types, the stage message keys, and the synthetic group's name |
 | `shared/data/leaderboardSchema.ts` | The hall of fame's record, query and payload types, shared by the server and the components |
 | `shared/utils/leaderboardScore.ts` | `calculatePlayerScore` and the weights it is made of |
 | `shared/utils/wow-{class,faction,professions}.ts` | The names the game's own UI uses, in both languages: the classes, the factions, and the professions (taken from Blizzard's profession index, so a pill reads as the game's profession pane spells it) |
@@ -291,6 +293,45 @@ the tree is its tree.
 
 ---
 
+## 🎖 Reputations: the journal of one character
+
+`/…/reputations` is the faction journal of the character whose page is open — the tab beside Collections
+and Achievements. It is drawn from `server/utils/reputations-data.json`, the atlas
+`npm run refresh:reputations` builds: Blizzard's own reputation-faction tree (the expansions, the headings
+under them — a side, a garrison, a cluster of city factions — and the factions in those), the side that may
+raise each one, and the steps of every ladder (the classic eight, a renown faction's levels, a delve
+companion's hundred ranks). The twelve factions no heading of that tree reached — the Shattrath and
+Steamwheedle reputations of the Burning Crusade — are collected under one group of the shelf's own.
+
+A row *is* the measure: one block, the faction's name set into its left and the stage it stands at — with
+the numbers inside that stage (`Почтение · 751 / 21 000`) — set into its right, and the fill standing behind
+the words. Two hundred of them therefore read down the page as one column of measures rather than a wall of
+stripes, and hovering one names the stage and the span that stage covers (`Honored · 9 000 – 21 000`) — the
+steps of every ladder travel with the journal as a ledger, read once per ladder and shared by every faction
+standing on it. The fills are translucent and muted by state rather than bright everywhere: emerald where a
+faction is finished, gold while a reputation is being raised, sky while a renown ladder is being climbed, and
+a finished stage prints no numbers at all — which is what keeps a journal that is mostly done from turning
+into a rash. The search box and the two switches — the factions not started, the factions finished — filter
+rows the journal already holds, so none of them spends a request or moves a count.
+
+The journal wears the collections shelf's own furniture: the pinned rail of quick anchors down its left
+(one chip per expansion, the one being read lit, a click gliding the page to it) and the same blocks a
+subcategory is drawn in, so the two shelves are walked the same way. A journal narrowed to a single
+expansion drops the rail and takes the whole width.
+
+Blizzard's own placeholders are left out of the atlas entirely: `[PH]` names a patch has not shipped and
+`[DNT]` marks a test entry (`[DNT] AC Major Faction Child Renown Test` was filed under the Maruuk Centaur),
+and neither is a reputation a player can raise — neither is drawn, and neither is counted in a total.
+
+### Why this page and the tile above it disagree
+
+The journal is the character's own and the tile is the account's, on purpose. The shelf is read by somebody
+standing in the game on that character: the factions the other side may raise are not on it at all, and no
+other character of the account adds to a counter in it. The tile and the hall of fame's rows answer the other
+question — what the whole roster has finished — and are fed from the account's pool
+(`server/utils/accountPool`). The journal may therefore count fewer reputations than the tile above it, and
+the note the shelf folds out says exactly that in the reader's own words.
+
 ## 🔄 Keeping the data current
 
 Everything a character *is* — collections, achievements, item level, reputations, the artwork — is read
@@ -314,7 +355,7 @@ npm run deploy                          # nothing is live until this runs
 | `armoury` | `server/utils/armoury-totals.json` | the two fallbacks (a mount tile is normally measured against the live Armoury journal of that character) |
 | `meta` | `server/utils/achievement-meta.json` | the feed cards' wording, points and icons — a new achievement is read live, so it is slower rather than wrong |
 | `points` | `server/utils/achievement-points.json` | the fallback total for achievement points |
-| `reputations` | `server/utils/reputation-totals.json` | how many factions each side can work on, and the top of every ladder |
+| `reputations` | `server/utils/reputations-data.json` | how many factions each side can work on, the tree the reputation pane is organized by, and the top and steps of every ladder |
 
 The three walks (`meta`, `points`, `reputations`) run with `--fresh`, which drops the progress cache each
 of them keeps in the OS temp directory and re-reads every achievement and faction: minutes rather than

@@ -87,6 +87,13 @@ function reveal(index: number): void {
  * it, so the group comes to rest below the header rather than under it. The panel takes none of that
  * room: it stands beside the shelf, and a group is never under it.
  */
+/**
+ * Whether the rail beside the shelf is drawn. A shelf of a single group is walked by scrolling, and the
+ * grid is laid out by this as well: a two-column grid whose first column holds nothing would draw the
+ * shelf itself in the width of a rail, which is what a shelf of one group did before.
+ */
+const anchored = computed(() => props.page.sections.length > 1)
+
 const railEl = ref<HTMLElement | null>(null)
 const stickyTop = ref(0)
 const anchorOffset = ref(128)
@@ -232,7 +239,8 @@ function placeholderHeight(section: CollectionSection): string {
 
 <template>
   <div
-    class="space-y-5 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-x-6 lg:gap-y-5 lg:space-y-0"
+    class="space-y-5 lg:grid lg:items-start lg:gap-x-6 lg:gap-y-5 lg:space-y-0"
+    :class="anchored ? 'lg:grid-cols-[13rem_minmax(0,1fr)]' : 'lg:grid-cols-[minmax(0,1fr)]'"
     :style="{ '--hoa-anchor-offset': `${anchorOffset}px`, '--hoa-sticky-top': `${stickyTop}px` }"
   >
     <!-- The quick anchors: a chip for every group of this shelf, so a shelf of twenty-odd groups can
@@ -246,7 +254,7 @@ function placeholderHeight(section: CollectionSection): string {
          below `lg`): a screen that narrow belongs to the shelf, and a group of it is reached by
          scrolling a shelf a phone can hold. -->
     <div
-      v-if="page.sections.length > 1"
+      v-if="anchored"
       class="hoa-anchors sticky z-30 hidden lg:flex lg:max-h-[calc(100vh-var(--hoa-sticky-top)-2rem)] lg:w-52 lg:shrink-0"
       :style="{ top: `${stickyTop}px` }"
     >

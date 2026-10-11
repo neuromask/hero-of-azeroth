@@ -123,7 +123,7 @@ export interface LeaderboardPlayer {
   /**
    * Factions driven to the top of their own ladder, which is what the reputation tile counts and what
    * the table's own column prints. A character of one side can finish about 230 of them
-   * (`server/utils/reputation-totals.json`); a renown faction at its last level counts like a classic
+   * (`server/utils/reputations-data.json`); a renown faction at its last level counts like a classic
    * ladder at Exalted.
    */
   reputations: number
