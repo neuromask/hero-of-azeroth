@@ -64,7 +64,11 @@ const url = computed(
  * absent, and the request goes out.
  */
 const { data: standing, status } = useFetch<LeaderboardStanding | null>(url, {
-  key: `hoa-leaderboard-standing:${searchHistoryKey(props.character)}`
+  // The key follows the character, and it has to: the plate is created once - before the browser has read its own
+  // history, so at first it stands for the main - and is then re-pointed at whoever the reader is looking at. A key
+  // written out as one string froze that first fetch under the main's key and served the main's place and name
+  // back for every character after it, while the plate's own link already led to the right one.
+  key: () => `hoa-leaderboard-standing:${searchHistoryKey(props.character)}`
 })
 
 /** The row the table draws for the character, or `null` until the answer lands. */

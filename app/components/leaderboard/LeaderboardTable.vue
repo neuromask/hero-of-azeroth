@@ -50,6 +50,14 @@ const props = defineProps<{
    */
   owner?: string
   /**
+   * The row the plate in the bar walks to, written the same way: the character that plate stands for - a
+   * signed-in reader's main, or the last character a guest looked up (`app/pages/index.vue`). It is a row's
+   * *address* rather than a badge, which is why it is passed beside `highlight` and `owner` instead of being
+   * derived from them: the button scrolls to the row of the character the plate is about, and reading it off the
+   * "selected" mark walked to whoever this browser happened to leaf through last.
+   */
+  you?: string
+  /**
    * The mains whose account is on the site right now, keyed the way `searchHistoryKey` writes a row
    * (`app/composables/presence.ts`). A row whose character is in it wears the green dot on its portrait;
    * an absent set - a page that never asked, a request that failed - draws no dot at all, which is the
@@ -111,6 +119,16 @@ function profileUrl(player: LeaderboardPlayer): string {
  */
 function isSelected(player: LeaderboardPlayer): boolean {
   return !!props.highlight && props.highlight === searchHistoryKey(player)
+}
+
+/**
+ * Whether this row is the one the plate in the bar stands for, which is what the button under that plate
+ * scrolls to (`data-you`). It is not the same question as either badge: a guest's row is their last lookup,
+ * while a signed-in reader's is their main - and a reader who looked somebody up carries both marks on two
+ * different rows.
+ */
+function isYou(player: LeaderboardPlayer): boolean {
+  return !!props.you && props.you === searchHistoryKey(player)
 }
 
 /**
@@ -333,7 +351,7 @@ function open(player: LeaderboardPlayer) {
           <tr
             v-for="(player, index) in players"
             :key="searchHistoryKey(player)"
-            :data-you="isSelected(player) ? 'true' : undefined"
+            :data-you="isYou(player) ? 'true' : undefined"
             class="cursor-pointer border-b border-white/5 transition-colors last:border-b-0"
             :class="isSelected(player) ? 'bg-wow-gold/[0.08] hover:bg-wow-gold/15' : 'hover:bg-white/[0.05]'"
             @click="open(player)"

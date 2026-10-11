@@ -60,7 +60,7 @@ usePageLoading().follow('character:achievements', pending)
 
         <div class="h-2 w-full overflow-hidden rounded-full border border-white/5 bg-black/60 p-0.5">
           <div
-            class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"
+            class="h-full rounded-full bg-gradient-to-r from-wow-gold to-amber-300 transition-[width] duration-700"
             :style="{ width: `${data.percent}%` }"
           />
         </div>

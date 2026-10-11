@@ -122,7 +122,12 @@ const nameClass = computed(() => (props.row.started ? 'text-gray-100' : 'text-gr
       aria-hidden="true"
     />
 
-    <span class="relative min-w-0 truncate text-[13px] font-medium" :class="nameClass">{{ row.name }}</span>
+    <!-- The mark of a ladder another character of the account has finished stands ahead of the name: the site's
+         own star, so a row is read from its left edge (`ReputationRow.account`). -->
+    <span class="relative flex min-w-0 items-center gap-1.5">
+      <AppIcon v-if="row.account" name="star" class="h-3 w-3" :title="$t('reputationsAccountMark')" />
+      <span class="truncate text-[13px] font-medium" :class="nameClass">{{ row.name }}</span>
+    </span>
 
     <span class="relative flex shrink-0 items-baseline gap-2 whitespace-nowrap text-[11px]">
       <span :class="stageClass">{{ stage }}</span>

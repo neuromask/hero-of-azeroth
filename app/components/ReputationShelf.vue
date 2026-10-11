@@ -14,11 +14,12 @@ import { formatNumber } from '#shared/utils/formatNumber'
  * A character's reputation journal: the factions the game tracks, filed by expansion the way its own
  * reputation pane files them, each with the stage the character stands on and the scale of its ladder.
  *
- * The shelf is the character's own and says so: it is folded against the payload of the character whose
- * page is open and never against the account's union across the roster, so it may count fewer factions
- * than the reputations tile above it - which answers the account's question - and the note the reader can
- * fold out explains exactly that. Nothing here is the account's; the numbers a heading reads are the
- * numbers of the rows drawn under it.
+ * The journal is read two ways, which the switch under the heading asks for and remembers
+ * (`app/composables/reputationView.ts`): the character's own payload, or the account's union across the
+ * roster, where a row only another character has finished is marked with the site's star. Either way the
+ * numbers a heading reads are the numbers of the rows drawn under it, and the note under the heading
+ * spells out which reading is on - the character's own counter, or the account's maxima with this
+ * character's own share of them.
  *
  * A row *is* the measure: one block with the faction's name set into its left and the stage it stands at,
  * with the numbers inside that stage, set into its right (`Почтение · 751 / 21 000`), and the fill standing
@@ -39,7 +40,21 @@ import { formatNumber } from '#shared/utils/formatNumber'
  * a heading whose every row was filtered away is not drawn at all - and the rail follows what is drawn, so a
  * chip is never a link to nothing.
  */
-const { data, pending, error, refresh } = await useReputationJournal()
+/**
+ * Whose journal this is, which the shelf's own switch asks for and remembers
+ * (`app/composables/reputationView.ts`): the account's reading marks the rows only another character of the
+ * account has finished, and the endpoint gives it only where the site holds such a pool at all.
+ */
+const view = useReputationView()
+
+const { data, pending, error, refresh } = await useReputationJournal(view)
+
+/**
+ * Whether the journal on screen is the account's reading. The note under the heading is written for it alone -
+ * the endpoint names the account's maxima and this character's own share of them only there - so this is what
+ * picks its first two lines, while the one naming the ladders under way is the same in both readings.
+ */
+const accountReading = computed(() => Boolean(data.value?.account && data.value.accountFinished !== undefined))
 
 // The journal is read again only when the character or the language changes, which is a navigation the
 // preloader already follows; the wait for the first read is registered here all the same, so the shelf
@@ -302,7 +317,9 @@ const LEGEND = [
 
     <template v-else-if="data">
       <!-- The heading of the journal: how many factions the character has finished, over the whole of what
-           they can raise, and the two switches that narrow the list without touching a count. -->
+           they can raise, and the two switches that narrow the list without touching a count. Its bar is the
+           brand gold every section's own total is drawn in, while the groups below keep the shelves'
+           emerald. -->
       <section class="hoa-panel mb-6 p-4 sm:p-5">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h2 class="text-lg font-bold text-white sm:text-xl">{{ $t('reputationsOverall') }}</h2>
@@ -314,21 +331,73 @@ const LEGEND = [
 
         <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full border border-white/10 bg-black/60 p-0.5">
           <div
-            class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"
+            class="h-full rounded-full bg-gradient-to-r from-wow-gold to-amber-300 transition-[width] duration-700"
             :style="{ width: `${data.percent}%` }"
           />
         </div>
 
-        <p class="mt-2 text-xs text-gray-400">
-          {{
-            $t('reputationsFinishedHint', {
-              finished: formatNumber(data.finished),
-              total: formatNumber(data.total),
-              started: formatNumber(data.started),
-              renown: formatNumber(data.renown)
-            })
-          }}
-        </p>
+        <!-- What the numbers above are, in one box, on the notice sheet the site's own explanations stand on
+             (`app/pages/profile.vue`'s main hint), because this is the one block on the page that explains rather
+             than counts. The icon stands on the first line and is there in either reading: the account's, which
+             names the account's maxima and this character's own share of them, and the character's own, which
+             names what it counts as closed. The last line is the same in both, because the ladders still under
+             way are what is left of the figure above. Each sentence reads the reading that is on, so it agrees
+             with the figure. -->
+        <div class="mt-2 rounded-xl border border-[#00aeff]/30 bg-[#0074e0]/10 px-3 py-2 text-xs text-gray-200">
+          <div class="flex items-start gap-2" role="note">
+            <svg
+              class="mt-0.5 h-4 w-4 shrink-0 text-[#4dc8ff]"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+            </svg>
+
+            <div class="min-w-0">
+              <template v-if="accountReading">
+                <p>
+                  {{
+                    $t('reputationsAccountMaxed', {
+                      account: formatNumber(data.accountFinished ?? 0),
+                      total: formatNumber(data.total)
+                    })
+                  }}
+                </p>
+
+                <p class="mt-1.5">
+                  {{
+                    $t('reputationsAccountOwn', {
+                      own: formatNumber(data.characterFinished ?? 0),
+                      allies: formatNumber((data.accountFinished ?? 0) - (data.characterFinished ?? 0))
+                    })
+                  }}
+                </p>
+              </template>
+
+              <template v-else>
+                <p>
+                  {{ $t('reputationsCharacterFinished', { finished: formatNumber(data.finished) }) }}
+                </p>
+
+                <p class="mt-1.5 text-gray-400">{{ $t('reputationsCharacterFinishedNote') }}</p>
+              </template>
+
+              <p class="mt-1.5">
+                {{
+                  $t('reputationsInProgress', {
+                    progress: formatNumber(data.inProgress ?? 0),
+                    renown: formatNumber(data.inProgressRenown ?? 0)
+                  })
+                }}
+              </p>
+            </div>
+          </div>
+        </div>
 
         <!-- The search box, the switch and the note: the switch is the same track-with-a-knob the
              collections carry, and the note is a button carrying an arrow, because what it opens lands
@@ -345,6 +414,12 @@ const LEGEND = [
               class="w-40 bg-transparent text-xs text-gray-100 placeholder:text-gray-500 focus:outline-none sm:w-52"
             />
           </label>
+
+          <!-- Whose journal this is, where the site holds the account's own pool of finished factions at all
+               (`ReputationJournal.accountAvailable`): the same pair of chips a collection shelf carries, in the
+               same words (`ScopeSwitch.vue`), because it is the same question - and the lines under the heading
+               say what the account's reading adds to the character's own numbers. -->
+          <ScopeSwitch v-if="data.accountAvailable" v-model="view.byAccount" :label="$t('reputationsViewScope')" />
 
           <button
             type="button"
@@ -492,7 +567,8 @@ const LEGEND = [
             </div>
 
             <!-- How much of the expansion is finished, drawn as a collections shelf draws a group's own
-                 bar: the same emerald fill under the same heading, so the two read alike. -->
+                 bar: the same emerald fill under a heading, so the two read alike - the gold above is the
+                 journal's own total rather than a group's. -->
             <div class="h-2 w-full overflow-hidden rounded-full border border-white/5 bg-black/60 p-0.5">
               <div
                 class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"

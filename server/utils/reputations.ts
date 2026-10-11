@@ -426,7 +426,14 @@ function toGroup(
 export function buildReputationJournal(
   locale: string,
   standings: Map<number, CharacterStanding>,
-  faction?: string | null
+  faction?: string | null,
+  /**
+   * The factions some character of the account has finished (`server/utils/accountPool`), when the journal is
+   * being read as the account's rather than as this character's: every row the pool holds is marked
+   * (`ReputationRow.account`) and counted (`ReputationJournal.accountFinished`). `null` - the default - leaves
+   * the journal as the character's own, which is what it has always been.
+   */
+  accountFinished: ReadonlySet<number> | null = null
 ): ReputationJournal {
   const russian = locale.startsWith('ru')
   const side = FACTION_SIDE[String(faction || '').toUpperCase()] || null
@@ -441,14 +448,48 @@ export function buildReputationJournal(
   }
 
   const rows = groups.flatMap((group) => group.sections.flatMap((section) => section.rows))
-  const finished = rows.filter((row) => row.finished).length
+
+  // Marked here rather than while a row is built, because the pool holds faction ids and the tree is where the
+  // ids live: one set, one pass over the finished journal. The mark goes on the rows the account has and *this*
+  // character has not - the ones that tell a collector something.
+  const accountRows = accountFinished ? rows.filter((row) => accountFinished.has(row.id)) : []
+  for (const row of accountRows) {
+    if (!row.finished) row.account = true
+  }
+
+  /**
+   * The numbers above the journal follow the reading that was asked for, exactly as a collection shelf's do.
+   *
+   * `finished` is the account's own count of finished ladders - the number the tile above the journal prints -
+   * when the journal was read as the account's, and this character's otherwise. `started` is the rows either
+   * reading has something to say about: the pool holds maxima and nothing else, so "under way" can only be read
+   * for the account as "this character has touched it, or the account has finished it". The character's own count
+   * travels beside them (`characterFinished`), because the sentence under the numbers names both.
+   */
+  const characterFinished = rows.filter((row) => row.finished).length
+  const finished = accountFinished ? accountRows.length : characterFinished
+  const started = accountFinished
+    ? rows.filter((row) => row.started || row.account).length
+    : rows.filter((row) => row.started).length
+
+  /**
+   * The ladders still under way, which is the number the note under the heading names: rows something has touched
+   * and nothing has finished. In the account's reading a row the account has closed is finished even when this
+   * character has only started it, so those are left out too.
+   */
+  const inProgress = accountFinished
+    ? rows.filter((row) => row.started && !row.finished && !row.account)
+    : rows.filter((row) => row.started && !row.finished)
 
   return {
     total: rows.length,
-    started: rows.filter((row) => row.started).length,
+    started,
     finished,
     percent: rows.length ? Math.round((finished / rows.length) * 100) : 0,
     renown: rows.filter((row) => row.renown).length,
+    inProgress: inProgress.length,
+    inProgressRenown: inProgress.filter((row) => row.renown).length,
+    ...(accountFinished ? { accountFinished: accountRows.length, characterFinished } : {}),
     groups,
     ledgers: Object.fromEntries(ledgers),
     generatedAt: Date.now()

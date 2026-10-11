@@ -50,7 +50,8 @@ function accountWide(row: CollectionShelfSummary): boolean {
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
     <!-- The running total: what the character holds of everything it could, drawn as one bar over
-         the whole collection. -->
+         the whole collection - the brand gold a section's own heading carries, while the shelves below
+         keep the emerald their own group bars are drawn in. -->
     <section class="hoa-panel p-4 sm:p-5">
       <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
@@ -79,14 +80,14 @@ function accountWide(row: CollectionShelfSummary): boolean {
 
       <div class="h-2.5 w-full overflow-hidden rounded-full border border-white/5 bg-black/60 p-0.5">
         <div
-          class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"
+          class="h-full rounded-full bg-gradient-to-r from-wow-gold to-amber-300 transition-[width] duration-700"
           :style="{ width: `${props.summary.percent}%` }"
         />
       </div>
     </section>
 
-    <!-- The shelves, as tiles: one frosted block per shelf, its own count and its own bar, each a
-         link into that shelf. -->
+    <!-- The shelves, as tiles: one frosted block per shelf, its own count and its own bar in the
+         collections' emerald, each a link into that shelf. -->
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <NuxtLink
         v-for="row in props.summary.shelves"

@@ -180,13 +180,16 @@ const accountMain = computed(() => {
  * The character this page is about for this reader: the one the plate in the bar and the row of links belong to.
  *
  * The hall of fame is not a character, so the profile, the shelves and the feed it offers have to belong to
- * somebody - to the character this browser opened last (`useSearchHistory`), or, for a reader who has never looked
- * anybody up *on this device*, to the main of the account they are signed in as. The two are one answer to one
- * question, which is why they are read as one value: a reader who looked somebody up here is never overruled by a
- * login, and a reader who signed in somewhere else - or on a fresh phone - finds their own character in the bar
- * instead of a search box. Nothing is written into the browser's history for it, because the main is derived from
- * the account rather than remembered as a lookup: signing out leaves the browser exactly as knowledgeable as it
- * was.
+ * somebody - and for a reader who is signed in that somebody is **the main their account leads with**: the plate
+ * is about *them*, its link leads to *their* character page, and the button that finds them in the table walks to
+ * the row of the main it just printed. A character this browser looked up last, on the other hand, is somebody
+ * else's page being read: it is remembered as one lookup among others (`useSearchHistory`) and it is *not* what
+ * the plate stands for. Reading a visitor's last lookup as "you" was how a reader signed in as themselves came to
+ * see their main in the plate and be sent to an alt by the link under it.
+ *
+ * A reader with no account has only the browser to go on, and there the last character looked at is exactly the
+ * right answer: it is their own page coming back, which is what the plate and the row of links have always been
+ * (`MyProfile.vue` reads the same history for the same reason).
  *
  * Before either is known - a first visit with no session, a crawler, a reader who followed a link - there is no
  * such character at all: the row below the header draws no character links and the bar offers the search instead
@@ -194,33 +197,85 @@ const accountMain = computed(() => {
  */
 const { history, load: loadHistory } = useSearchHistory()
 
-const current = computed<SearchHistoryEntry | null>(() => {
-  const remembered = history.value[0]
-  if (remembered) return remembered
-
+/** The account's main, written as an entry the plate and the row marks are read against (`useSearchHistory`). */
+function mainEntry(): SearchHistoryEntry | null {
   const main = accountMain.value
   if (!main) return null
 
-  // The shape the plate and the row marks are written against, as the history writes it. The realm's *name* is
-  // left as the slug on purpose: the plate prints a realm through the site's own list (`realmLabel`), and the
-  // account stores only the slug, so there is nothing here for a language to spell differently.
+  // The realm's *name* is left as the slug on purpose: the plate prints a realm through the site's own list
+  // (`realmLabel`), and the account stores only the slug, so there is nothing here for a language to spell
+  // differently.
   return {
     name: main.name,
     realm: main.realmSlug,
     region: main.region === 'us' ? 'us' : 'eu',
     realmName: main.realmSlug
   }
+}
+
+/**
+ * The character this browser is reading: the last one looked up here, or the main when it has looked up nobody.
+ *
+ * This is what the row of links under the header belongs to - the profile, the shelves and the feed it offers are
+ * the character a reader is standing on, whoever that is - so a reader who looked somebody else up and came here
+ * finds *that* character's links rather than their own account's.
+ */
+const reading = computed<SearchHistoryEntry | null>(() => history.value[0] || mainEntry())
+
+/**
+ * The reader's own character in the table, which is what the plate in the bar stands for.
+ *
+ * It is the last character this browser was reading - the one the plate then aims its own link and its button at
+ * - with one exception, and the exception is the table's own rule: a character of the reader's account that is
+ * not its main has no row in the hall of fame at all (`server/utils/leaderboardExclusions`: an account appears
+ * with the character it leads with), so reading one of your own alts stands for the main, which is the row that
+ * account really has. A stranger's character *is* in the table - looking them up is what put them there - so the
+ * plate is about them, and a reader with no account has no such exception either: whatever they last looked at
+ * is what the plate shows, exactly as it always did.
+ */
+const you = computed<SearchHistoryEntry | null>(() => {
+  const read = reading.value
+  const main = mainEntry()
+
+  if (!main) return read
+  if (!read) return main
+
+  return rosterKeys.value.has(searchHistoryKey(read)) ? main : read
 })
 
 /**
- * The identity of the character being read, which is what one of the table's rows is marked by.
+ * The account's own characters, keyed the way the history keys them, which is what says whether the character
+ * being read is one of the reader's own - the question `you` turns on. The roster arrives with the same payload
+ * the main is read from, so this costs no second request.
+ */
+const rosterKeys = computed(
+  () =>
+    new Set(
+      (account.value?.characters || []).map((character) =>
+        searchHistoryKey({ region: character.region, realm: character.realmSlug, name: character.name })
+      )
+    )
+)
+
+/**
+ * The identity of the character this browser was reading, which is what one of the table's rows is marked by.
  *
  * The mark is about the character the page is about rather than about who owns it: the page is a table of
- * characters, and this reader's own character is exactly one of them - so that is the row it can point at. The
- * badge on that row says "selected", which is what it is, rather than claiming the row is the reader's own. For a
- * signed-in reader who has looked nobody up it is their main, and that row then carries both badges (see below).
+ * characters, and the character a reader looked up here is exactly one of them - so that is the row it can point
+ * at. The badge on that row says "selected", which is what it is, rather than claiming the row is the reader's
+ * own. A reader who has looked nobody up on this device carries no such mark at all, and for a reader who is
+ * signed in the plate stands for their main: the row *that* walks to is the one the account badge marks
+ * (`ownerKey`), not this one.
  */
-const meKey = computed(() => (current.value ? searchHistoryKey(current.value) : ''))
+const meKey = computed(() => (history.value[0] ? searchHistoryKey(history.value[0]) : ''))
+
+/**
+ * The row the plate in the bar stands for, keyed the way a row is keyed, which is what its button walks to
+ * (`LeaderboardTable`'s `you`): the character `current` names - a signed-in reader's main, or a guest's last
+ * lookup. It is deliberately a value of its own rather than one of the two badges: the plate is about one
+ * character, and the badges are about two different questions.
+ */
+const plateKey = computed(() => (you.value ? searchHistoryKey(you.value) : ''))
 
 /**
  * The reader's own row, written the way a row is keyed, which the table marks with its second badge.
@@ -243,7 +298,10 @@ const ownerKey = computed(() => {
  * asked for. Turning it into a page is the page's own step (`revealRank`), and then the row has to be *seen*:
  * it is drawn one request later, so the scroll to it waits for the answer rather than looking for a row that
  * is not on the screen yet. The row marks itself (`data-you`) for that scroll, which is what keeps a row's
- * address inside the table where rows are drawn.
+ * address inside the table where rows are drawn - and it is the row of the character the *plate* stands for,
+ * which is this page's `current`: a signed-in reader's main, or a guest's last lookup. Looking for the
+ * character this browser leafed through instead was how the button came to walk to somebody else's row, or to
+ * no row at all.
  */
 const scrollToMe = ref(false)
 
@@ -254,9 +312,12 @@ function scrollToRow() {
 
 /** Answers the plate's button: the reader's place, turned into the page that holds their row. */
 function revealRow(rank: number) {
+  // The row the plate stands for, keyed the way a row is keyed.
+  const key = plateKey.value
+
   // A row already drawn is a scroll rather than a request: the reader is looking at the table they asked for,
   // and reordering it would move the very row they just found.
-  if (meKey.value && rows.value.some((player) => searchHistoryKey(player) === meKey.value)) {
+  if (key && rows.value.some((player) => searchHistoryKey(player) === key)) {
     scrollToRow()
     return
   }
@@ -284,7 +345,7 @@ watch(pending, (busy) => {
  * language being read.
  */
 const links = computed(() => {
-  const entry = current.value
+  const entry = reading.value
   if (!entry) return null
 
   const base = `/${regionPath(entry.region)}/${entry.realm}/${entry.name}`
@@ -336,9 +397,9 @@ onMounted(loadHistory)
            fields. -->
       <template #actions>
         <LeaderboardYou
-          v-if="current"
+          v-if="you"
           class="before:hidden !border-wow-gold/40 !bg-black/25 !shadow-none"
-          :character="current"
+          :character="you"
           @reveal="revealRow"
         />
 
@@ -413,6 +474,7 @@ onMounted(loadHistory)
         :pending="pending"
         :highlight="meKey"
         :owner="ownerKey"
+        :you="plateKey"
         :online="online"
         @update:sort="setSort"
         @inspect="lookUp(search)"

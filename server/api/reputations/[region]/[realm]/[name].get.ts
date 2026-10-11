@@ -2,14 +2,15 @@
  * A character's reputation journal: every faction they can work on, filed the way the game's reputation
  * pane files them, with the stage the character stands on and the scale of each ladder.
  *
- * **This endpoint answers for one character and one character alone.** The journal is folded against the
- * payload of the very character named in the address - `/profile/wow/character/{realm}/{name}/reputations`,
- * one call to Blizzard - and the account's union across the roster (`server/utils/accountPool`,
- * `bestFigures`) is deliberately *not* applied to it, unlike the reputations tile and the hall of fame's
- * rows above the shelf. A visitor opening this page is standing in the game on that character, comparing
- * themselves against what *that* character can raise - which is also why the profile is read for the
- * faction, so the other side's factions are not on the journal at all. The shelf therefore counts fewer
- * factions than the account-wide tile beside it, and says so in the reader's own words.
+ * **The journal is one character's**, and the account's reading of it (`?byAccount=1`, which the shelf's own
+ * switch sends) adds the one thing the site really knows about an account's reputations: which ladders *some*
+ * character of it has finished (`server/utils/accountPool`, the pool the reputations tile and the site's score
+ * are read from). Those rows are marked and counted, while every stage and every figure stays the character's -
+ * a ladder is a character's, and the site holds no other character's (it would cost a Blizzard read per alt to
+ * know them). The journal is folded against the payload of the character named in the address -
+ * `/profile/wow/character/{realm}/{name}/reputations`, one call to Blizzard - and the profile is read for the
+ * faction as well, so the other side's factions are not on the journal at all. The shelf therefore counts
+ * fewer factions than the account-wide tile beside it, and says so in the reader's own words.
  *
  * The catalogue it is folded against is static and shipped with the build (`server/utils/reputations-data.json`,
  * built by `scripts/refresh-reputations.mjs`), so the only thing paid for per request is that one call and
@@ -18,11 +19,13 @@
  * store the profile, the card, a collection shelf and the feed are served from - while a `?force=true`
  * request waits for a freshly assembled one.
  *
- * The switches a reader flips on the shelf - the search box and the switch that hides the factions the
- * character has not started - are the view's own and never reach this endpoint: they filter rows the
- * journal already holds, so the counters a heading reads cannot change under a filter. What the endpoint
- * takes from the query is the language only.
+ * The switches a reader flips on the shelf - the search box and the two that hide the factions the character
+ * has not started, or has already finished - are the view's own and never reach this endpoint: they filter
+ * rows the journal already holds, so the counters a heading reads cannot change under a filter. What the
+ * endpoint takes from the query is the language and the scope (`?byAccount=1`), where the scope decides which
+ * of the two readings the rows are folded for.
  */
+import { accountOwnerId, readAccountIds } from '~~/server/utils/accountPool'
 import type { ReputationJournal } from '#shared/data/reputationsSchema'
 
 const journals = createSwrCache<ReputationJournal>(2 * 60 * 60 * 1000, 256)
@@ -44,9 +47,23 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
 
+  /**
+   * The account's pool of finished factions, and whether the site holds one for this character's account.
+   *
+   * `accountAvailable` is that fact on its own, which is what a page draws the switch from - offered wherever
+   * pressing it can do something - and `accountFinished` is the same pool read *because the reader asked for
+   * the account's journal* (`?byAccount=1`), which is what the rows are marked from. The pool belongs to the
+   * account that holds the character, not to whoever is reading: the collections endpoint is answered on the
+   * same terms (`server/api/collections/[region]/[realm]/[name].get.ts`).
+   */
+  const poolOwner = accountOwnerId(region, realm, name)
+  const poolIds = poolOwner !== null ? readAccountIds(poolOwner, 'reputations') : null
+  const accountAvailable = Boolean(poolIds && poolIds.size)
+  const accountFinished = isOn(query.byAccount) && accountAvailable ? poolIds : null
+
   try {
     return await journals(
-      `${region}:${locale}:${realm}:${name}`,
+      `${region}:${locale}:${realm}:${name}${accountFinished ? `:a${poolOwner}` : ''}`,
       async () => {
         // The character is read for its faction as well as for its reputations: a faction only the other
         // side may raise is not on this journal at all. It is the same profile the shell above the view
@@ -56,7 +73,11 @@ export default defineEventHandler(async (event) => {
           getReputationStandings(region, realm, name, locale)
         ])
 
-        return buildReputationJournal(locale, standings, character.faction)
+        return {
+          ...buildReputationJournal(locale, standings, character.faction, accountFinished),
+          account: accountFinished !== null,
+          accountAvailable
+        }
       },
       force
     )

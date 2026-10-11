@@ -48,6 +48,17 @@ const { t } = useI18n()
 const view = useCollectionView()
 
 /**
+ * The choice itself, as `ScopeSwitch` reads and writes it: the state behind the chips is the shared, remembered
+ * one (`useCollectionView`), so a reader who picked the account on one shelf finds it picked on the next.
+ */
+const byAccount = computed({
+  get: () => Boolean(view.value.byAccount),
+  set: (value: boolean) => {
+    view.value.byAccount = value
+  }
+})
+
+/**
  * Whether there is a choice here at all: a shelf Blizzard serves no account-wide list for is never one
  * (decorations), and neither is a character whose account the site holds no list for - the switch would have
  * nothing to read.
@@ -59,40 +70,10 @@ const offersScope = computed(
 
 <template>
   <template v-if="offersScope">
-    <!-- The pair: the chosen half wears the brand gold, the way the account page draws its publish switch -
-         so which collection the numbers above belong to is read at a glance rather than from the words. -->
-    <span
-      role="group"
-      :aria-label="t('collectionsViewScope')"
-      class="inline-flex shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/[0.04] p-0.5"
-    >
-      <button
-        type="button"
-        :aria-pressed="!view.byAccount"
-        class="rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors"
-        :class="
-          !view.byAccount
-            ? 'bg-wow-gold/15 text-wow-goldLight shadow-[0_0_0_1px_rgba(248,183,0,0.45)]'
-            : 'text-gray-400 hover:text-white'
-        "
-        @click="view.byAccount = false"
-      >
-        {{ t('perCharacter') }}
-      </button>
-      <button
-        type="button"
-        :aria-pressed="Boolean(view.byAccount)"
-        class="rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors"
-        :class="
-          view.byAccount
-            ? 'bg-wow-gold/15 text-wow-goldLight shadow-[0_0_0_1px_rgba(248,183,0,0.45)]'
-            : 'text-gray-400 hover:text-white'
-        "
-        @click="view.byAccount = true"
-      >
-        {{ t('accountWide') }}
-      </button>
-    </span>
+    <!-- The pair of chips, which the reputation journal carries in the same words (`ScopeSwitch.vue`): the
+         chosen half wears the brand gold, so which collection the numbers above belong to is read at a glance
+         rather than from the words. -->
+    <ScopeSwitch v-model="byAccount" :label="t('collectionsViewScope')" />
 
     <!-- What a switch that could not be honoured says: the account's own shelf is only readable once the site
          has the account's list of that collection, and a reader whose decorations Blizzard refuses (the one

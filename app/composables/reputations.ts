@@ -11,15 +11,25 @@
 import type { ReputationJournal } from '#shared/data/reputationsSchema'
 import { useCharacterView } from './characterView'
 
-export function useReputationJournal() {
+export function useReputationJournal(view?: Ref<{ byAccount?: boolean }>) {
   const { region, realm, name, apiLocale } = useCharacterView()
 
+  /**
+   * Whether the account's reading of the journal was asked for, which is the one flag this read carries: the
+   * search box and the two switches on the shelf filter rows the journal already holds, so they never reach the
+   * endpoint and cannot change a count.
+   */
+  const byAccount = computed(() => Boolean(view?.value.byAccount))
+
   return useAsyncData<ReputationJournal | null>(
-    () => `reputations:${region}:${realm}:${name}:${apiLocale.value}`,
-    () => $fetch<ReputationJournal>(`/api/reputations/${region}/${realm}/${name}?locale=${apiLocale.value}`),
+    () => `reputations:${region}:${realm}:${name}:${apiLocale.value}${byAccount.value ? ':a' : ''}`,
+    () =>
+      $fetch<ReputationJournal>(
+        `/api/reputations/${region}/${realm}/${name}?locale=${apiLocale.value}${byAccount.value ? '&byAccount=1' : ''}`
+      ),
     {
       default: () => null,
-      watch: [apiLocale]
+      watch: [apiLocale, byAccount]
     }
   )
 }

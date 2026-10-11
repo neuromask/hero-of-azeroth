@@ -144,6 +144,14 @@ export interface ReputationRow {
    * (`Honored · 9 000 – 21 000`), which is what a bar without divisions is still read by.
    */
   position: number
+  /**
+   * Whether another character of this character's account has taken this ladder to the top of it, which is the
+   * account's own pool of finished factions (`server/utils/accountPool`) and is what the reputations tile above
+   * the journal counts. Set only on a row the account has finished and this character has not - the ones that
+   * tell a reader something - and only when the journal was read as the account's; the row's own stage and
+   * figures stay this character's, because the site holds no other character's ladder.
+   */
+  account?: boolean
 }
 
 /**
@@ -176,9 +184,12 @@ export interface ReputationGroup {
  * The whole reputation journal of one character, ready to draw: the expansions in the order the game's
  * pane lists them, and the running total over everything they hold.
  *
- * The totals are the character's own - this journal is never the account's union, which is what the
- * reputations tile above it prints (see `server/api/reputations/[region]/[realm]/[name].get.ts`) - and
- * `finished` is the counter the game itself shows, Exalted factions and maxed renown ladders together.
+ * The totals are the reading that was asked for: this character's own by default, and the account's when the
+ * journal was read as the account's (`CollectionPage.account`, one shelf over). `finished` is the counter the
+ * game itself shows - Exalted factions and maxed renown ladders together - and in the account's reading it is how
+ * many of these ladders *some* character of the account has finished, which is the number the tile above the
+ * journal prints; `characterFinished` carries this character's own count beside it, because the sentence under the
+ * numbers names both.
  */
 export interface ReputationJournal {
   /** How many reputations the character can work on at all: their own side's plus the neutral ones. */
@@ -200,4 +211,38 @@ export interface ReputationJournal {
   ledgers: Record<string, ReputationStep[]>
   /** When the journal was assembled, so a caller can tell a fresh copy from a revalidated one. */
   generatedAt: number
+  /**
+   * Whether the journal was read as the account's rather than as this character's: `true` only for a reader
+   * whose account holds the character and who asked for it (`?byAccount=1`), and only when the site has the
+   * account's own pool of finished factions at all. What the account's reading adds to the rows is the mark
+   * behind `ReputationRow.account` - the stages and the figures below every heading stay this character's,
+   * because a ladder is a character's and the site holds only this one.
+   */
+  account?: boolean
+  /**
+   * Whether the site holds an account-wide pool for this character's account at all, which is what the
+   * character/account switch is drawn from - a fact about the data rather than about the reader, exactly as a
+   * collection shelf reports it (`CollectionPage.accountAvailable`).
+   */
+  accountAvailable?: boolean
+  /**
+   * How many of the rows drawn here the account has finished, whoever finished them: the same number the tile
+   * above the journal prints and the site's score counts. Present only in the account's reading, where it is also
+   * what `finished` holds - except when `finished` is not the account's: see `characterFinished`.
+   */
+  accountFinished?: number
+  /**
+   * How many of the rows drawn here *this character* has finished, present only in the account's reading, where
+   * `finished` is the account's own count. The sentence under the numbers names both, so the reader can tell the
+   * character's share of the account's maxima from the maxima themselves.
+   */
+  characterFinished?: number
+  /**
+   * How many of the rows drawn here are still under way: something has touched them and nothing has finished. It
+   * is the number the note under the heading prints, and what the character's own journal read as its started
+   * ladders less the ones it has finished.
+   */
+  inProgress?: number
+  /** How many of those are renown ladders, which the note names in brackets. */
+  inProgressRenown?: number
 }

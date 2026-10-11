@@ -20,6 +20,10 @@ export default defineEventHandler(async (event) => {
   const locale = (getQuery(event).locale as string) || 'en_US'
   const result = await upsertAccountCharacters(user.id, region, accessToken, locale)
 
+  // A roster that moved changes who the table must not draw - an account appears in the hall of fame with the
+  // character it leads with - so the exclusions are dropped for the next read rather than when their minute is up.
+  clearLeaderboardExclusions()
+
   // The account's own collections ride along: they are what the totals block is read from, and a
   // refresh that only re-read the roster would leave those numbers on the best character.
   let collections: Record<string, number | null> | null = null
