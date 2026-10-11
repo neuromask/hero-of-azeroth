@@ -3,14 +3,16 @@
  * pane files them, with the stage the character stands on and the scale of each ladder.
  *
  * **The journal is one character's**, and the account's reading of it (`?byAccount=1`, which the shelf's own
- * switch sends) adds the one thing the site really knows about an account's reputations: which ladders *some*
- * character of it has finished (`server/utils/accountPool`, the pool the reputations tile and the site's score
- * are read from). Those rows are marked and counted, while every stage and every figure stays the character's -
- * a ladder is a character's, and the site holds no other character's (it would cost a Blizzard read per alt to
- * know them). The journal is folded against the payload of the character named in the address -
- * `/profile/wow/character/{realm}/{name}/reputations`, one call to Blizzard - and the profile is read for the
- * faction as well, so the other side's factions are not on the journal at all. The shelf therefore counts
- * fewer factions than the account-wide tile beside it, and says so in the reader's own words.
+ * switch sends) is the account's: the pool of ladders *some* character of it has finished
+ * (`server/utils/accountPool`, the same pool the reputations tile and the site's score are read from) is what
+ * the rows are marked and counted from, and the reading draws *both sides* for it - a faction an alt of the
+ * other faction finished is part of the account, and a figure the reader cannot find on the list below would
+ * be no figure at all. Its `total` is therefore every ladder of the atlas
+ * (`reputationReachableTotal`) rather than the one side a character can raise, which is the same pair of
+ * numbers the tile above the shelf prints. Every stage and every span stays the character's own: a ladder is
+ * a character's, and the site holds no other character's (it would cost a Blizzard read per alt to know
+ * them). The journal is folded against the payload of the character named in the address -
+ * `/profile/wow/character/{realm}/{name}/reputations`, one call to Blizzard.
  *
  * The catalogue it is folded against is static and shipped with the build (`server/utils/reputations-data.json`,
  * built by `scripts/refresh-reputations.mjs`), so the only thing paid for per request is that one call and

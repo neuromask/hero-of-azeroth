@@ -38,8 +38,9 @@ Item level · M+ score · achievements · mounts · pets · toys · decor · rep
   the game has not shipped yet. A short note under the bar says where every number comes from.
 - 📜 **Activity feed** — the hundred achievements a character earned most recently, with icons and
   filters for all / achievements / PvE / collections / PvP.
-- 🏆 **Achievements & reputations** — the account-wide Exalted counter the game's own pane shows, plus
-  the ladders this character has finished on its own.
+- 🏆 **Achievements & reputations** — reputations counted the way the game counts them (an Exalted faction, the
+  last renown level, the highest companion rank), and as the account's own union of finished factions across the
+  roster, the number the journal and the tile both print, with this character's own ladders beside it.
 - 🌍 **Bilingual** — English at the plain address, Russian under `/ru`: pages, SEO alternates, the
   card image, and the collection headings themselves.
 - ⚡ **Built to be fast** — Blizzard is read once per character and answered from a stale-while-
@@ -338,6 +339,15 @@ raise each one, and the steps of every ladder (the classic eight, a renown facti
 companion's hundred ranks). The twelve factions no heading of that tree reached — the Shattrath and
 Steamwheedle reputations of the Burning Crusade — are collected under one group of the shelf's own.
 
+The journal has two readings, which the switch under its bar asks for. This character's own is the one it opens
+on: the factions their side may raise, counted against what that side can reach. The account's reading is the
+account's journal rather than this character's — the pool of ladders *some* character of the account has finished
+(`server/utils/accountPool`) marks and counts the rows, and **both sides are drawn** for it, because a faction an
+alt of the other faction finished is part of the account and a number the reader could not find on the list below
+would be no number at all. Its total is then every ladder of the atlas, which is the same pair of figures the
+tile above the shelf prints, so the shelf and the tile agree. Every stage and every span stays the character's
+own: the pool holds maxima and nothing else.
+
 A row *is* the measure: one block, the faction's name set into its left and the stage it stands at — with
 the numbers inside that stage (`Почтение · 751 / 21 000`) — set into its right, and the fill standing behind
 the words. Two hundred of them therefore read down the page as one column of measures rather than a wall of
@@ -360,12 +370,14 @@ and neither is a reputation a player can raise — neither is drawn, and neither
 
 ### Why this page and the tile above it disagree
 
-The journal is the character's own and the tile is the account's, on purpose. The shelf is read by somebody
-standing in the game on that character: the factions the other side may raise are not on it at all, and no
-other character of the account adds to a counter in it. The tile and the hall of fame's rows answer the other
-question — what the whole roster has finished — and are fed from the account's pool
-(`server/utils/accountPool`). The journal may therefore count fewer reputations than the tile above it, and
-the note the shelf folds out says exactly that in the reader's own words.
+The journal is read two ways, and the tile is the account's. With the character's own reading on, the shelf is
+what somebody standing in the game on that character sees: the factions the other side may raise are not on it at
+all, and no other character of the account adds to it - so it counts fewer factions than the tile, and the note
+under its bar says so in the reader's own words. Flip the switch to the account's reading and the two agree: the
+account's pool of finished factions is what the rows are marked and counted from, both sides are drawn for it
+(a faction an alt of the other faction finished is part of the account), and the shelf's total becomes every
+ladder of the atlas - the very numbers the tile prints (`reputationReachableTotal`,
+`server/utils/reputations`).
 
 ## 🔄 Keeping the data current
 
@@ -501,7 +513,10 @@ character up still costs nothing and needs no account.
   **union of unique ids** (`account_pool`), filled from Blizzard's account collections
   (`/profile/user/wow/collections/*`) and from each character as the roster is read - its own mount
   journal (a mount can belong to a side or a race, so it only ever shows up for a character who can
-  use it) and the factions it has driven to Exalted - never a `SUM` over alts
+  use it) and the factions it has driven to Exalted - never a `SUM` over alts. The reputation figure is that
+  pool's alone: a stored per-character count is deliberately not merged into it, because until the site counted
+  factions for itself that number was Blizzard's account-wide Exalted counter rather than the union
+  (`server/utils/blizzard`, `server/utils/reputations`)
   (`server/utils/accountPool.ts`). The pool is what the profile tiles, the
   character pages, the card and the main's row in the hall of fame all read; a character that
   belongs to **no** account - a stranger's lookup - keeps Blizzard's per-character numbers, and

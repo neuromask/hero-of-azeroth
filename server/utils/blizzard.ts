@@ -1,6 +1,6 @@
 import { armouryMountJournal, resolveArmoryBackground } from './armory'
 import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
-import { isExalted, isReputationMaxed, reputationTotal } from './reputations'
+import { isReputationMaxed, reputationTotal } from './reputations'
 import { mountTotal } from './mounts'
 
 let cachedToken: { access_token: string; expires_at: number } | null = null
@@ -212,83 +212,21 @@ const FALLBACK_REGIONS = ['eu', 'us']
 /**
  * Blizzard reports mounts and reputations per character: measured on one account, its
  * characters come back with 1201 to 1214 mounts and 82 to 195 reputations each, while
- * toys, decor and pets are identical for all of them. The mount tile therefore reports
- * the character the way the API returns it, and the reputation tile does the same
- * whenever the counters below are out of reach.
+ * toys, decor and pets are identical for all of them. The mount tile therefore reports the
+ * character the way the API returns it, and the reputation tile does the same: the
+ * character's own factions, counted exactly as the journal beside it counts them
+ * (`isReputationMaxed`, `server/utils/reputations`).
  *
- * The account-wide equivalents (`/profile/user/wow/collections/mounts`) answer 403 to a
- * client-credentials token and need a user OAuth login, which a public page cannot have,
- * so the account's own journal cannot be read from here. The one account-wide number
- * that is reachable rides along with the character's achievements - see
- * `getAccountExaltedCount`.
+ * The account's figures are the site's own, not Blizzard's: they are the union of unique
+ * ids in `server/utils/accountPool`, laid over this reading before a page prints it
+ * (`overlayPool`). Blizzard's account-wide counter - the `amount` of the "N Exalted
+ * Reputations" achievement family, the only account-wide number a public page can reach,
+ * seen in the character's achievements - is deliberately not used as the account's figure:
+ * it counts entries the site's atlas has no row for (measured on one account: 185 against
+ * the 174 unique factions that account's characters had actually finished), so a tile read
+ * from it could never agree with the journal below it, and reading it costs the character's
+ * whole achievement document - about 2 MB - on every page.
  */
-
-/**
- * Achievements are account-wide, and the "5 Exalted Reputations" ... "110 Exalted
- * Reputations" family carries the account's live number of Exalted factions in the
- * `amount` of its criterion. That is the counter the game's own achievement pane shows
- * and the one players compare against other sites, so it is the base of what the tile
- * reports. It counts every character of the account, which makes it run ahead of this
- * character's own reputation list by however many factions the account's other characters
- * brought to Exalted - 129 against 105 on the account this was measured on. Ladders that
- * have no Exalted tier at all - a renown faction, a delve companion, the brokers of
- * K'aresh - are missing from it, and `isReputationMaxed` catches those on top.
- */
-const EXALTED_REPUTATIONS = /exalted reputations/i
-
-/** The counter moves a few times per character lifetime, so a read is worth keeping. */
-const EXALTED_COUNT_SECONDS = 60 * 30
-
-const cachedExaltedCounts = new Map<string, { count: number; expires_at: number }>()
-
-/**
- * Reads the account-wide Exalted Reputations counter, or null when the achievement list
- * does not come back - the caller then falls back to the character's own factions. The
- * list is by far the largest document a page fetches (about 2 MB), so the answer is kept
- * per character for `EXALTED_COUNT_SECONDS`.
- */
-async function getAccountExaltedCount(baseUrl: string, headers: Record<string, string>, ns: string): Promise<number | null> {
-  const now = Math.floor(Date.now() / 1000)
-  const cached = cachedExaltedCounts.get(baseUrl)
-
-  if (cached && cached.expires_at > now) {
-    return cached.count
-  }
-
-  try {
-    const data = await $fetch<any>(`${baseUrl}/achievements?${ns}`, { headers })
-    const amounts: number[] = []
-
-    // The counters sit in the criterion of each threshold achievement, and the tree nests
-    // them under `achievements` in leaves and under `categories`/`child_categories` above.
-    const visit = (node: any) => {
-      for (const entry of node?.achievements || []) {
-        const amount = entry?.criteria?.amount
-
-        if (typeof amount === 'number' && EXALTED_REPUTATIONS.test(entry?.achievement?.name || '')) {
-          amounts.push(amount)
-        }
-      }
-
-      for (const child of node?.categories || []) visit(child)
-      for (const child of node?.child_categories || []) visit(child)
-    }
-
-    visit(data)
-
-    if (!amounts.length) {
-      return null
-    }
-
-    // Every threshold reports the same live number, so any of them answers the question.
-    const count = Math.max(...amounts)
-    cachedExaltedCounts.set(baseUrl, { count, expires_at: now + EXALTED_COUNT_SECONDS })
-
-    return count
-  } catch {
-    return null
-  }
-}
 
 /**
  * Loads a character from a single region. Throws a 404 when the character does
@@ -300,7 +238,7 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
   const baseUrl = `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}`
   const ns = `namespace=profile-${region}&locale=${locale}`
 
-  const [summary, media, mounts, pets, toys, decor, reps, mplus, totals, accountExalted] = await Promise.allSettled([
+  const [summary, media, mounts, pets, toys, decor, reps, mplus, totals] = await Promise.allSettled([
     $fetch<any>(`${baseUrl}?${ns}`, { headers }),
     $fetch<any>(`${baseUrl}/character-media?${ns}`, { headers }),
     $fetch<any>(`${baseUrl}/collections/mounts?${ns}`, { headers }),
@@ -309,8 +247,7 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
     $fetch<any>(`${baseUrl}/collections/decor?${ns}`, { headers }),
     $fetch<any>(`${baseUrl}/reputations?${ns}`, { headers }),
     $fetch<any>(`${baseUrl}/mythic-keystone-profile?${ns}`, { headers }),
-    getCollectionTotals(region, token),
-    getAccountExaltedCount(baseUrl, headers, ns)
+    getCollectionTotals(region, token)
   ])
 
   if (summary.status === 'rejected') {
@@ -326,7 +263,6 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
   const repsData = reps.status === 'fulfilled' ? reps.value : null
   const mplusData = mplus.status === 'fulfilled' ? mplus.value : null
   const totalsData = totals.status === 'fulfilled' && totals.value ? totals.value : CHARACTER_DEFAULT_TOTALS
-  const accountExaltedCount = accountExalted.status === 'fulfilled' ? accountExalted.value : null
 
   const rawAssets = mediaData?.assets || []
   const mainRaw = rawAssets.find((a: any) => a.key === 'main-raw')?.value
@@ -357,12 +293,12 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
   /**
    * The reputations this character has driven to the top of their own ladder: the Exalted
    * ones, the renown factions at their last renown level, the delve companions at their
-   * last level, the brokers of K'aresh at Mastermind. The Exalted ones are already inside
-   * the account-wide counter the achievements carry, so only the rest are added to it.
+   * last level, the brokers of K'aresh at Mastermind - the count the journal below the tile
+   * reads as this character's own, and the lower bound the account's union is measured
+   * against (`overlayPool`).
    */
   const maxedReputations = (repsData?.reputations || [])
     .filter((rep: any) => isReputationMaxed(rep.faction?.id, rep.standing))
-  const maxedBeyondExalted = maxedReputations.filter((rep: any) => !isExalted(rep.standing)).length
 
   const mPlusScore = mplusData?.current_mythic_rating?.rating
     ? Math.round(mplusData.current_mythic_rating.rating)
@@ -405,15 +341,15 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
       toys: { count: toysData?.toys?.length || 0, total: totalsData.toys },
       decor: { count: decorData?.decor_collected?.length || 0, total: totalsData.decor },
       reputations: {
-        // The account-wide Exalted counter plus the ladders of this character that have no
-        // Exalted tier; without the counter, what this character has maxed on its own.
-        count: accountExaltedCount === null
-          ? maxedReputations.length
-          : accountExaltedCount + maxedBeyondExalted,
+        // What this character alone has taken to the top of its ladder. The account's own
+        // figure is the union of finished factions across the roster and is laid over this
+        // one where the site holds such a pool (`server/utils/accountPool`).
+        count: maxedReputations.length,
         // What a character of this faction can reach: Blizzard's index minus the other
         // side's factions and minus the entries that only group the rest.
         total: reputationTotal(charData.faction?.type || 'NEUTRAL', totalsData.reputations, repsData?.reputations?.length || 0),
-        accountWide: accountExaltedCount !== null
+        // Set by the pool: on its own the reading is this character's, and says so.
+        accountWide: false
       },
       achievements: { count: achievementPoints, total: ACHIEVEMENT_POINTS_TOTAL }
     }

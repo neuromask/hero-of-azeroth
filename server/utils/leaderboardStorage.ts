@@ -639,8 +639,9 @@ function byRating(a: LeaderboardPlayer, b: LeaderboardPlayer): number {
  * So the totals are laid over the row on the way out instead, which is what makes the table and the
  * character's own page one number by construction rather than by timing.
  *
- * Nothing is lowered. The pool counts unique ids, and where it has nothing to say the best reading
- * of the account - or the row's own figure, which is a live Blizzard read - stands.
+ * Nothing is lowered, with the one deliberate exception the merge itself names: a reputation figure the pool
+ * holds is the account's own (`bestFigures`), because the number a stored row carries for reputations can
+ * still be the account-wide counter Blizzard used to be read for.
  */
 function withAccountTotals(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
   const accounts = accountTotalsByCharacterKey()

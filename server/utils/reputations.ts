@@ -10,17 +10,20 @@
  * request time: a request pays for one thing only, the character's own reputation document, a single call
  * to Blizzard's profile endpoint.
  *
- * The journal a request assembles is the character's *own*. It is folded against the payload of the
- * character whose page is open, and the account's union across the roster (`server/utils/accountPool`,
- * `bestFigures`) is deliberately not applied to it: a visitor standing in the game on one character reads
- * what *that* character can raise and has raised, so the shelf may count fewer factions than the
- * reputations tile above it, which answers the account's question. The shelf carries a legend saying as
- * much in the reader's own words (see `app/components/ReputationShelf.vue`).
+ * The journal a request assembles is one character's. It is folded against the payload of the character whose
+ * page is open, and the account's union across the roster (`server/utils/accountPool`, `bestFigures`) is not
+ * applied to what its rows *say*: a visitor standing in the game on one character reads what *that* character
+ * can raise and has raised. The account's reading of it (`?byAccount=1`) is the one exception, and it is the
+ * account's journal rather than this character's: the pool of finished factions marks and counts the rows, and
+ * both sides are drawn for it - a faction an alt of the other faction finished is part of the account, so it is
+ * on the list the count is read from, and the shelf's own total becomes every ladder of the atlas. That is what
+ * makes the shelf's figure and the tile above it the same number when the account's reading is on, and it is
+ * what the note under the shelf's heading explains to the reader.
  *
- * The three figures the tile and the hall of fame read live here as well - `reputationTotal`,
- * `isExalted`, `isReputationMaxed` - so that "a finished reputation" has one reading across the site:
- * an Exalted faction, a renown ladder at its last level and a delve companion at its hundredth rank all
- * count the same, which is what the game's own counter does.
+ * The figures the tile and the hall of fame read live here as well - `reputationTotal`,
+ * `reputationReachableTotal`, `isExalted`, `isReputationMaxed` - so that "a finished reputation" has one
+ * reading across the site: an Exalted faction, a renown ladder at its last level and a delve companion at its
+ * hundredth rank all count the same, and the accounts's own figure is measured against the same atlas.
  */
 import { getBlizzardToken } from './blizzard'
 import {
@@ -86,6 +89,24 @@ export function reputationTotal(side: string, listed: number, recorded: number):
   const known = reachable[side] ?? Math.max(reachable.ALLIANCE, reachable.HORDE)
 
   return Math.max(known + Math.max(0, listed - atlas.listed), recorded)
+}
+
+/** Every faction the atlas gives a ladder, both sides together, each id counted once. */
+const REACHABLE_TOTAL = Object.keys(tops).length
+
+/**
+ * How many reputations the account behind a character can reach at all: every laddered faction of the atlas,
+ * both sides together and each id once - the denominator the account's reading of the journal and the tile
+ * beside it are measured against.
+ *
+ * It is the size of the atlas's `tops` rather than of Blizzard's index, because the atlas is what the journal
+ * can draw: a faction it has no row for can never become a marked row, so counting it would print a figure the
+ * list below cannot account for. The two sides are not disjoint - most factions serve both - which is why this
+ * is the union rather than `reachable.ALLIANCE` plus `reachable.HORDE`; both are written by
+ * `scripts/refresh-reputations.mjs`.
+ */
+export function reputationReachableTotal(): number {
+  return REACHABLE_TOTAL
 }
 
 /** "Exalted" is tier 7; the name is the fallback for a faction on a shorter tier table. */
@@ -422,6 +443,12 @@ function toGroup(
  * of it. `standings` is the character's own document, and the factions missing from it are the ones they
  * have never touched: their rows are drawn empty rather than left out, because a journal is a list of what
  * can be done, not only of what has been.
+ *
+ * The account's reading (`accountFinished`) is the account's journal rather than this character's, and the
+ * side is what it gives up first: a faction an alt of the other faction finished is part of the account's
+ * `accountFinished`, and a figure the reader cannot find on the list below would be no figure at all, so
+ * both sides are drawn and `total` becomes every ladder of the atlas (`reputationReachableTotal`). Every
+ * stage stays the character's own - the pool holds maxima and nothing else.
  */
 export function buildReputationJournal(
   locale: string,
@@ -436,7 +463,7 @@ export function buildReputationJournal(
   accountFinished: ReadonlySet<number> | null = null
 ): ReputationJournal {
   const russian = locale.startsWith('ru')
-  const side = FACTION_SIDE[String(faction || '').toUpperCase()] || null
+  const side = accountFinished ? null : FACTION_SIDE[String(faction || '').toUpperCase()] || null
 
   /** The ladders the rows are measured against, built as they are asked for and shared between them. */
   const ledgers = new Map<string, ReputationStep[]>()

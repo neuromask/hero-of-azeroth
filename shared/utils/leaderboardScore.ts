@@ -31,9 +31,12 @@ export const SCORE_WEIGHTS = {
   /** ~1500 pets, counted by species. */
   pets: 5,
   /**
-   * ~230 factions reachable by a character of one side (`server/utils/reputations-data.json`),
-   * counted only where they are finished - `isReputationMaxed`, so a renown faction at its last level
-   * and a delve companion at its hundredth count the same as a classic ladder at Exalted.
+   * Reputations taken to the top of their ladder, counted as the journal counts them
+   * (`isReputationMaxed`, `server/utils/reputations`): a renown faction at its last renown level and a
+   * delve companion at its hundredth rank weigh exactly as much as a classic ladder at Exalted. A
+   * character reading their own journal is measured against the factions their side can reach; an account
+   * is measured by the union over the roster - both sides, every ladder of the atlas, which is the figure
+   * the tile and the account's journal both print.
    */
   reputations: 50
 } as const

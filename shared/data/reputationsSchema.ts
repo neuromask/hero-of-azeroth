@@ -184,15 +184,21 @@ export interface ReputationGroup {
  * The whole reputation journal of one character, ready to draw: the expansions in the order the game's
  * pane lists them, and the running total over everything they hold.
  *
- * The totals are the reading that was asked for: this character's own by default, and the account's when the
- * journal was read as the account's (`CollectionPage.account`, one shelf over). `finished` is the counter the
- * game itself shows - Exalted factions and maxed renown ladders together - and in the account's reading it is how
- * many of these ladders *some* character of the account has finished, which is the number the tile above the
- * journal prints; `characterFinished` carries this character's own count beside it, because the sentence under the
- * numbers names both.
+ * The totals are the reading that was asked for. This character's own by default: their side's factions
+ * only, counted against `reputationTotal`, which is what the journal has always been. The account's when
+ * the journal was read as the account's (`account`): both sides are drawn then - the pool of finished
+ * factions spans the roster's characters, and a count the reader could not find on the list below would be
+ * no count - so `total` becomes every ladder of the atlas (`reputationReachableTotal`). That is the pair of
+ * numbers the tile above the journal prints, so the shelf and the tile agree. `finished` is the counter the
+ * game itself shows - Exalted factions and maxed renown ladders together - and in the account's reading it
+ * is how many of these ladders *some* character of the account has finished; `characterFinished` carries
+ * this character's own count beside it, because the sentence under the numbers names both.
  */
 export interface ReputationJournal {
-  /** How many reputations the character can work on at all: their own side's plus the neutral ones. */
+  /**
+   * How many reputations the listing covers: this character's own side's plus the neutral ones, or - in the
+   * account's reading - every ladder of the atlas, both sides put together.
+   */
   total: number
   /** How many of them they have any progress on. */
   started: number

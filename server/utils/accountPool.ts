@@ -24,6 +24,10 @@ import { readCharacterReading } from './characterReading'
 import { ACCOUNT_COLLECTION_KINDS } from './bnetOAuth'
 import type { BlizzardRegion } from './params'
 import type { CharacterData } from './blizzard'
+// The atlas the reputations are counted against, for the one figure an account's reading is measured by
+// (`reputationReachableTotal`): an account's union spans both sides, while a character's own tile is
+// one-sided, and both figures are read from that module so the two cannot drift apart.
+import { reputationReachableTotal } from './reputations'
 // The overall rating, and the one place it is computed: the account's own figure, the table's column and
 // every page's tile are one number because they are one call (`server/utils/playerScore`).
 import { calculatePlayerScore, scoreFigures, type ScoreInput } from './playerScore'
@@ -214,7 +218,14 @@ export function bestFigures(live: AccountFigures, account: AccountTotals): Accou
     pets: Math.max(of(live.pets), of(account.pets)),
     toys: Math.max(of(live.toys), of(account.toys)),
     decor: Math.max(of(live.decor), of(account.decor)),
-    reputations: Math.max(of(live.reputations), of(account.reputations))
+    // Reputations are the one figure where the account's own number wins outright rather than merging: it is
+    // the pool's union and nothing else (`readAccountTotals`), while a stored per-character count can still
+    // be the account-wide counter Blizzard used to be read for - a number no page prints any more. Taking
+    // the higher of the two would leave that stale figure standing on the profile's own rows and in the hall
+    // of fame, which is exactly the drift the tile, the journal and the table were printing at each other.
+    // With no pool behind the account at all (`0`) the reading stands as it is, which is the stranger's
+    // answer every page has always given.
+    reputations: account.reputations > 0 ? account.reputations : of(live.reputations)
   }
 }
 
@@ -246,7 +257,6 @@ interface AccountMaxes {
   pets: number | null
   toys: number | null
   decor: number | null
-  reputations: number | null
 }
 
 /**
@@ -258,6 +268,14 @@ interface AccountMaxes {
  * pool of one and a reading of one are two views of the same mount rather than two mounts. The item level
  * and the rating are not folded like that at all: they really are one character's, so the roster's best
  * stands for the account without being merged with anything.
+ *
+ * Reputations are the one figure the pool answers alone, and the reason is in the readings: until the site
+ * counted factions for itself, a stored reputation count was Blizzard's account-wide Exalted counter
+ * (`server/utils/blizzard`), so mixing the two would keep an old, larger number alive in the totals - the
+ * very drift the tile and the journal printed at each other. The pool's figure is the union of finished
+ * factions, which is what the tile and the account's journal both print
+ * (`reputationReachableTotal`, `server/utils/reputations`), and where the pool has nothing at all the
+ * character's own live reading still stands in for it (`bestFigures`).
  */
 export function readAccountTotals(userId: number): AccountTotals {
   const maxes = useDb()
@@ -269,10 +287,9 @@ export function readAccountTotals(userId: number): AccountTotals {
          (SELECT MAX(s.mounts)       FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mounts,
          (SELECT MAX(s.pets)         FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS pets,
          (SELECT MAX(s.toys)         FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS toys,
-         (SELECT MAX(s.decor)        FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS decor,
-         (SELECT MAX(s.reputations)  FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS reputations`
+         (SELECT MAX(s.decor)        FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS decor`
     )
-    .get(userId, userId, userId, userId, userId, userId, userId, userId) as AccountMaxes
+    .get(userId, userId, userId, userId, userId, userId, userId) as AccountMaxes
 
   const pool = readAccountPool(userId)
   const accountWide = POOL_KINDS.filter((kind) => pool[kind] > 0)
@@ -304,7 +321,8 @@ export function readAccountTotals(userId: number): AccountTotals {
     pets: pick('pets', maxes.pets),
     toys: pick('toys', maxes.toys),
     decor: pick('decor', maxes.decor),
-    reputations: pick('reputations', maxes.reputations)
+    // The pool alone: see the note above the function for why no stored reading is merged into it.
+    reputations: pool.reputations || 0
   }
 
   return {
@@ -521,7 +539,19 @@ export function overlayPool(
       pets: { ...profile.stats.pets, count: figures.pets },
       toys: { ...profile.stats.toys, count: figures.toys },
       decor: { ...profile.stats.decor, count: figures.decor },
-      reputations: { ...profile.stats.reputations, count: figures.reputations }
+      // The reputation figure is the union of finished factions across the roster, so its denominator is
+      // what those characters could finish between them: every ladder of the atlas, both sides put
+      // together (`reputationReachableTotal`), rather than the one-sided total this reading carries. The
+      // tile then reads the same pair of numbers as the account's own journal (`server/utils/reputations`),
+      // which draws both sides for the same reason.
+      reputations: {
+        ...profile.stats.reputations,
+        count: figures.reputations,
+        total: account.accountWide.includes('reputations')
+          ? reputationReachableTotal()
+          : profile.stats.reputations.total,
+        accountWide: account.accountWide.includes('reputations')
+      }
     }
   }
 }
