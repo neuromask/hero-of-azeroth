@@ -501,6 +501,16 @@ export interface CollectionPage {
   percent: number
   sections: CollectionSection[]
   /**
+   * Whether the site holds an account-wide list for the account this character belongs to, which is what the
+   * character/account switch is drawn from.
+   *
+   * It is a fact about the data rather than about the reader: the account's own ids are on the site for every
+   * account that has signed in (`server/utils/accountPool`), and a page offers the switch wherever there is
+   * something to read with it. The answer above says which of the two the numbers came from
+   * (`CollectionPage.account`), which the server decides per shelf.
+   */
+  accountAvailable?: boolean
+  /**
    * Whether these numbers are the whole account's rather than this character's: `true` only for a reader
    * whose account holds the character and who asked for it (`CollectionViewOptions.byAccount`), and only
    * when the account's own list of that collection has actually been read. Absent, or `false`, means the
@@ -540,6 +550,8 @@ export interface CollectionSummary {
   shelves: CollectionShelfSummary[]
   /** When the summary was assembled, so a caller can tell a fresh copy from a revalidated one. */
   generatedAt: number
+  /** Whether the site holds an account-wide list for this character's account, as a shelf reports it. */
+  accountAvailable?: boolean
   /**
    * Whether these numbers are the whole account's rather than this character's: `true` when at least one of
    * the four shelves was read from the account's own ids, which is as much as one flag over four shelves can

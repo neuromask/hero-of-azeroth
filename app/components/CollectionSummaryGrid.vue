@@ -24,13 +24,12 @@ const props = defineProps<{
 const localeUrl = useLocaleUrl()
 
 /**
- * The scope the cards below are read in, and whether the reader is the one who may choose it: the switch is
- * the same control a shelf carries (`CollectionScopeSwitch`), and the tag on each card says which of the two
- * that card's numbers came from. It is drawn only while the account's view is the one being read - a reader
- * who has not asked for it is looking at this character's collections, which needs no label.
+ * The scope the cards below are read in: the switch is the same control a shelf carries
+ * (`CollectionScopeSwitch`), and the tag on each card says which of the two that card's numbers came from. It
+ * is drawn only while the account's view is the one being read - a reader who has not asked for it is looking
+ * at this character's collections, which needs no label - and only where the site has such a list to read.
  */
 const view = useCollectionView()
-const mine = useOwnCharacter()
 
 /**
  * Whether a card's numbers are the account's, which is what its label says.
@@ -66,13 +65,13 @@ function accountWide(row: CollectionShelfSummary): boolean {
 
       <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <!-- The scope switch a shelf carries, drawn here too: the root page's totals are the same kind of
-             number, so they answer to the same control (`CollectionScopeSwitch.vue`). -->
-        <CollectionScopeSwitch :account="props.summary.account" />
+             number, so they answer to the same control (`CollectionScopeSwitch.vue`) - and it stands wherever
+             the site holds an account-wide list for this character's account. -->
+        <CollectionScopeSwitch :account="props.summary.account" :available="Boolean(props.summary.accountAvailable)" />
 
-        <!-- Whose numbers these are, in one line: the choice is the shelf pages' own switch
-             (`useCollectionView`), and which reading came back is the server's answer
-             (`CollectionSummary.account`) - so a reader whose account has no such list yet is told the
-             figures are this character's rather than shown a total belonging to nobody. -->
+        <!-- And which reading the numbers came back as, in one line: the switch is the reader's request and
+             this is the server's answer (`CollectionSummary.account`), so a reader whose account has no such
+             list yet is told the figures are this character's rather than shown a total belonging to nobody. -->
         <p class="text-xs text-gray-400">
           {{ props.summary.account ? $t('collectionsScopeAccount') : $t('collectionsScopeCharacter') }}
         </p>
@@ -109,7 +108,7 @@ function accountWide(row: CollectionShelfSummary): boolean {
              so beside the three the site read the account's own ids for, and a shelf whose account list has
              not been read yet says that it is still this character's (`accountWide`). -->
         <p
-          v-if="mine && view.byAccount"
+          v-if="view.byAccount && Boolean(props.summary.accountAvailable)"
           class="text-[11px] font-semibold uppercase tracking-wide"
           :class="accountWide(row) ? 'text-wow-goldLight' : 'text-gray-500'"
         >

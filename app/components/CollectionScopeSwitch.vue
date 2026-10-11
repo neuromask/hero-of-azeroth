@@ -4,10 +4,13 @@
  * Battle.net account's - the pair of chips every collections page carries above its numbers.
  *
  * A WoW collection is shared across every character of an account, so the account's own list is the truer
- * unit for a shelf, and it is the one the site's pool holds (`server/utils/accountPool`). Only the account's
- * own reader may ask for it - the ids were read with their token, and the roster behind them is private - so
- * the control exists only while the character being read is the reader's own (`useOwnCharacter`), and a guest
- * or a stranger's page simply reads a character's shelf with no control offering anything else.
+ * unit for a shelf, and it is the one the site's pool holds (`server/utils/accountPool`). That pool belongs to
+ * the account that holds the character, not to whoever happens to be reading, so the control is drawn wherever
+ * the site has the list at all - `CollectionPage.accountAvailable`, a fact the server reports beside its
+ * answer. Anyone may look at any character's collections, and the account-wide figure is printed on that page
+ * for everybody already (the tiles above a shelf are overlaid with the pool), so the switch offers the account
+ * view to whoever asks for it; where the site has no such list, it is not drawn, because there is nothing the
+ * switch could ask for.
  *
  * It is one component because the choice is one choice and it is drawn in two places: under a shelf's heading
  * (`CollectionShelf`) and in the head of the summary the root collections page opens on
@@ -26,6 +29,14 @@ const props = defineProps<{
    */
   account?: boolean
   /**
+   * Whether the site holds an account-wide list for the account that holds this character at all
+   * (`CollectionPage.accountAvailable`). It is a fact about the data and not about the reader: where there is
+   * such a list, the switch is drawn for whoever opens the page - the account-wide figure is already printed
+   * on the page for everybody - and where there is none, no control is drawn, because a switch that can only
+   * ever be turned back is worse than no switch at all.
+   */
+  available?: boolean
+  /**
    * The shelf this control stands over, when it stands over one: a shelf whose account-wide list Blizzard
    * does not serve draws no control at all (`ACCOUNT_SHELF_KINDS`). The summary leaves it out, because it
    * speaks for four shelves at once - three of which can be read as the account's.
@@ -36,19 +47,18 @@ const props = defineProps<{
 const { t } = useI18n()
 const view = useCollectionView()
 
-/** Whether this character is the reader's own, which is the only case the account's shelf may be read in. */
-const mine = useOwnCharacter()
-
 /**
- * Whether there is a choice here at all: only a shelf Blizzard serves an account-wide list for can be read as
- * the account's, and a switch over decorations - which the account endpoint refuses, today and by design -
- * would be a control that can only ever be turned back.
+ * Whether there is a choice here at all: a shelf Blizzard serves no account-wide list for is never one
+ * (decorations), and neither is a character whose account the site holds no list for - the switch would have
+ * nothing to read.
  */
-const offersScope = computed(() => !props.kind || ACCOUNT_SHELF_KINDS.includes(props.kind))
+const offersScope = computed(
+  () => Boolean(props.available) && (!props.kind || ACCOUNT_SHELF_KINDS.includes(props.kind))
+)
 </script>
 
 <template>
-  <template v-if="mine && offersScope">
+  <template v-if="offersScope">
     <!-- The pair: the chosen half wears the brand gold, the way the account page draws its publish switch -
          so which collection the numbers above belong to is read at a glance rather than from the words. -->
     <span

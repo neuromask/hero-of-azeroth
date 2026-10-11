@@ -16,22 +16,26 @@
  * fewer items than the account-wide tile above it, and the legend every shelf page carries says as much in
  * the reader's own words (`collectionsLegendAvailableText`, `collectionsLegendGameText`).
  *
- * A reader who is signed in may read their own character's shelf as the *account's* instead (`?byAccount=1`,
- * which the shelf page's own switch sends): a WoW collection is shared across every character of a Battle.net
- * account, and the account's own ids were read into the site's pool when that reader signed in. Three rules
- * make that safe and honest:
+ * A reader may read any character's shelf as the *account's* instead (`?byAccount=1`, which the shelf page's own
+ * switch sends): a WoW collection is shared across every character of a Battle.net account, and the account's
+ * own ids were read into the site's pool when that account signed in - the same pool for every reader. Two
+ * rules make that safe and honest:
  *
- *   1. **Only the owner.** The flag is honoured for the reader whose account holds the character being viewed
- *      (`accountOwnerId`) and for nobody else: the pool is a private roster of alts, and the ids in it were
- *      read with that reader's own Blizzard token. For everybody else the flag is ignored and the answer is
- *      the character's own shelf - a link copied out of a signed-in browser opens the usual shelf for
- *      whoever it reaches.
+ *   1. **The account's list has to be on the site.** The flag is honoured for a character whose account the
+ *      site holds a pool for (`accountOwnerId`), whoever is reading: the account-wide figure is already
+ *      printed on every character page for everybody - the tiles above a shelf are overlaid with the pool - so
+ *      a shelf showing which items that figure is made of tells a reader nothing the page has not said. A
+ *      character whose account has never signed in, or whose account holds no list of that collection, is
+ *      answered with the character's own shelf; the page draws no switch where there is nothing to read with
+ *      it (`CollectionPage.accountAvailable`).
  *   2. **The answer says which it is.** The `account` flag in the payload is `true` only when the account's
  *      ids were really used; a collection the site has never read for that account - Blizzard refuses the
  *      account's decorations today - falls back to the character's journal and says `false`, so a page can
  *      tell "nought collected" from "nothing known".
- *   3. **The cache is the reader's.** An account's shelf is cached under a key carrying that account's user
- *      id, so the two views of one character can never be served to each other's readers.
+ *
+ * An account's shelf is cached under a key carrying that account's user id, so the two views of one character
+ * can never be served to each other's readers - and the key names the *account*, not the reader, because the
+ * answer is the same for both.
  *
  * Two switches go into a shelf's key as well, because they change what the shelf holds:
  * `?unobtainable=1` draws the items the game has done away with and `?upcoming=1` the ones it has not
@@ -76,16 +80,18 @@ export default defineEventHandler(async (event) => {
   }
 
   /**
-   * Whose ids this request may be answered with: the reader's own account's, or this character's.
+   * Whose account-wide list this request may be answered with, when the site holds one.
    *
-   * Both halves are read here rather than taken from the address - the session is the reader's, and the
-   * roster row is the site's - and a reader who asks for an account they do not own is simply answered with
-   * the character's shelf. `null` therefore means "this is not your account's shelf to read", which is the
-   * answer for every guest, every stranger's character, and every collection the account's pool has nothing
-   * for.
+   * The row is the site's own (`accountOwnerId`): a pool belongs to the account that holds the character being
+   * read, and it is the same pool for every reader. `accountAvailable` is that fact on its own, which is what a
+   * page is told so it draws the switch only where pressing it can do something; `accountView` is the same row
+   * read *because the reader asked for it* (`?byAccount=1`), which is what the ids are actually taken from - a
+   * request without the flag is this character's shelf whoever it is from, and `null` there is what makes the
+   * answer say so.
    */
-  const reader = view.byAccount ? await getCurrentUser(event) : null
-  const accountView = reader !== null && accountOwnerId(region, realm, name) === reader.id ? reader.id : null
+  const poolOwner = accountOwnerId(region, realm, name)
+  const accountAvailable = poolOwner !== null
+  const accountView = view.byAccount ? poolOwner : null
 
   try {
     // Without a `kind` the request is for the summary: every shelf at once, under the default view.
@@ -113,7 +119,8 @@ export default defineEventHandler(async (event) => {
 
           return {
             ...buildCollectionSummary(locale, collectedByKind, character?.faction ?? null, accountKinds),
-            account
+            account,
+            accountAvailable
           }
         },
         force
@@ -137,7 +144,8 @@ export default defineEventHandler(async (event) => {
 
         return {
           ...buildCollectionPage(kind, locale, region, collected, character?.faction ?? null, view),
-          account
+          account,
+          accountAvailable
         }
       },
       force

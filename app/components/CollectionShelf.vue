@@ -111,8 +111,13 @@ usePageLoading().follow('character:collections', pending)
                control and it is drawn on two pages - under this heading and in the head of the summary the
                collections root opens on - so the pair lives in one component, and the sentence under it is
                written from the server's answer rather than from the switch (`CollectionScopeSwitch.vue`).
-               A shelf Blizzard serves no account-wide list for carries no switch at all. -->
-          <CollectionScopeSwitch :kind="props.kind" :account="Boolean(data.account)" />
+               It stands wherever the site holds an account-wide list for this character's account, and not
+               at all where it does not - or over a shelf Blizzard serves no such list for. -->
+          <CollectionScopeSwitch
+            :kind="props.kind"
+            :account="Boolean(data.account)"
+            :available="Boolean(data.accountAvailable)"
+          />
 
           <button
             v-for="item in SWITCHES"
