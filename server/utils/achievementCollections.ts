@@ -17,6 +17,12 @@
  *     the collections shelves treat a retired mount;
  *   - a `subcat` or a `cat` left with nothing is dropped with it, so the grid shows only rows that
  *     genuinely hold something.
+ *
+ * And none of it is the account's. A shelf answers for the character whose page it is, exactly as a
+ * collections shelf does (`server/utils/collections`): the account's own figures are what the tiles and the
+ * hall of fame's rows print (`server/utils/accountPool`), where the achievement points are the account's
+ * because the game makes them so - and this shelf, which is about what this character has earned, is the
+ * one place that figure is not read.
  */
 import { getBlizzardToken } from './blizzard'
 import {
@@ -140,6 +146,10 @@ export async function getEarnedAchievementIds(
  *
  * A row the file marks for the other faction is dropped; a row the game has retired is dropped unless
  * the character already holds it. Everything else is drawn, held or not.
+ *
+ * What it asks is what *this* character can earn, exactly as a collections shelf asks what it can get
+ * (`server/utils/collections`). The account's union across the roster is never applied here: it is the
+ * figure for the tiles and for the hall of fame's rows (`server/utils/accountPool`).
  */
 function keeps(entry: AtlasItem, collected: Set<number>, side: 'A' | 'H' | null): boolean {
   if (entry.side && side && entry.side !== side) return false

@@ -174,6 +174,11 @@ export type AccountFigures = ScoreInput
  * (`server/utils/swrCache`) while the account's own snapshots have moved on. Taking the higher of the two
  * can only understate a figure by what the other source does not know yet, and it never lowers a number a
  * reader has already been shown.
+ *
+ * What it is the figure *for* is worth saying, because it is not every question the site asks about a
+ * collection: it is the number the tiles and the hall of fame's rows print. A collections shelf and an
+ * achievements shelf answer a different one - what *this* character can get, earn and use - and are
+ * deliberately not built from this union (`server/utils/collections`, `server/utils/achievementCollections`).
  */
 export function bestFigures(live: AccountFigures, account: AccountTotals): AccountFigures {
   const of = (value: number | null | undefined) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0)

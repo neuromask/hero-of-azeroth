@@ -7,6 +7,13 @@
  * pages need: with a `?category=` it assembles that category's shelf, without one the summary - the
  * running total and a row per category - which is what the root page draws.
  *
+ * Achievements are built exactly the way the collections shelves are (`server/utils/collections`): the
+ * character's own log over the static atlas, filtered by the side the profile names. What they are not is
+ * the account's - a merged roster would answer a question nobody standing in the game on this character is
+ * asking, and the shelf and the tile beside it would be two answers to one question. The account's figures
+ * belong to the tiles and to the hall of fame's rows (`server/utils/accountPool`), and even there it is the
+ * achievement *points* that are the account's, because in the game they are.
+ *
  * A shelf or a summary that has just been assembled is handed straight to the next caller for two
  * hours and revalidated behind the request that finds it stale - the same window and the same store
  * the profile, the card and the shelves are served from - while a `?force=true` request, which the

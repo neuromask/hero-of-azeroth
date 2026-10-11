@@ -167,6 +167,12 @@ const FACTION_SIDE: Record<string, 'A' | 'H'> = { ALLIANCE: 'A', HORDE: 'H' }
  * own is dropped, an item the game has not shipped is drawn only for a visitor who asked for the
  * upcoming stock, and a retired item only for a character who holds it - or for a visitor who asked
  * for the hidden ones, and the item is not one the game has still to ship.
+ *
+ * What it asks is what *this* character can get and use, which is the question a reader standing in the
+ * game on them is asking - so the account's union across the roster is never applied here, and a shelf may
+ * count fewer things than the account-wide tile beside it. That union is a figure for the tiles and the
+ * hall of fame's rows (`server/utils/accountPool`), and the achievements shelves filter their own atlas by
+ * this same rule (`server/utils/achievementCollections`).
  */
 function kept(
   entry: AtlasItem,

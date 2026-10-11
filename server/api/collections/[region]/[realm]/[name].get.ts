@@ -9,6 +9,13 @@
  * profile, the card and the feed are served from - while a `?force=true` request, which the header's
  * Refresh button sends, waits for a freshly assembled one.
  *
+ * What a shelf holds is the character's own journal, and deliberately not the account's union of
+ * collections that the tiles and the hall of fame's rows print (`server/utils/accountPool`, `bestFigures`).
+ * A shelf is read by somebody standing in the game on that character, comparing themselves against what
+ * *that* character can get and use - which is what the profile's faction is read for - so a shelf may hold
+ * fewer items than the account-wide tile above it, and the legend every shelf page carries says as much in
+ * the reader's own words (`collectionsLegendAvailableText`, `collectionsLegendGameText`).
+ *
  * Two switches go into a shelf's key as well, because they change what the shelf holds:
  * `?unobtainable=1` draws the items the game has done away with and `?upcoming=1` the ones it has not
  * shipped yet, which are SimpleArmory's own two settings under the same names. A request without a
