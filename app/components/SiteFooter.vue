@@ -96,6 +96,8 @@ const localeUrl = useLocaleUrl()
       <span :class="QUIET" aria-hidden="true">&middot;</span>
       <span>crafted by <a :href="TELEGRAM" target="_blank" rel="noopener noreferrer" title="Telegram" :class="LINK">neuromask</a></span>
       <span :class="QUIET" aria-hidden="true">&middot;</span>
+      <NuxtLink :to="localeUrl('/about')" :class="LINK">{{ t('aboutNav') }}</NuxtLink>
+      <span :class="QUIET" aria-hidden="true">&middot;</span>
       <NuxtLink :to="localeUrl('/legal')" :class="LINK">{{ t('legalNav') }}</NuxtLink>
       <span :class="QUIET" aria-hidden="true">&middot;</span>
       <NuxtLink :to="localeUrl('/privacy')" :class="LINK">{{ t('privacyTitle') }}</NuxtLink>

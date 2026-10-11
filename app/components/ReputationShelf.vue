@@ -461,7 +461,7 @@ const LEGEND = [
               :key="entry.group.id"
               :ref="(element) => setChip(index, element as Element | null)"
               type="button"
-              class="hoa-tab shrink-0 whitespace-nowrap px-3 py-1.5 text-xs lg:w-full lg:justify-start lg:whitespace-normal lg:text-left"
+              class="hoa-tab hoa-liquid-glass shrink-0 whitespace-nowrap px-3 py-1.5 text-xs lg:w-full lg:justify-start lg:whitespace-normal lg:text-left"
               :class="{ 'hoa-tab-active': index === activeGroup }"
               :aria-current="index === activeGroup ? 'true' : undefined"
               @click="jumpTo(index)"

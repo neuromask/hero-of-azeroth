@@ -264,8 +264,8 @@
      is what a filter inside a filter is. The pane is already frosted, which makes it a backdrop root, so
      a band with a `backdrop-filter` of its own could only sample the pane - which Chromium paints as a
      stretched copy of it - and the band came out washed, its fill wandering instead of reading as a
-     band across the pane. What hides a row here is the fill, not the frost, so it wears the dark the
-     quick anchors are read against (`.hoa-anchors`, `/85`) and nothing else. Which is why it is written
+     band across the pane. What hides a row here is the fill, not the frost, so it wears the page's own
+     dark at `/85` and nothing else. Which is why it is written
      here, beside the pane, and not in each of the menus that have sections. */
   /* The title band of a menu pane: a sticky heading a long list scrolls under.
      Its padding is a pixel deeper at the top than at the bottom on purpose. An uppercase label has no
@@ -526,14 +526,16 @@
     scroll-margin-top: var(--hoa-anchor-offset, 8rem);
   }
 
-  /* The quick anchors: the panel of chips under the character's header, one per group of the shelf -
-     the rail a shelf of twenty-odd groups is walked with. The panel is a surface of the site's glass
-     like every other (see the base at the top of this layer): its border, its rounding and its drop
-     are its box, its dark tint, its frost and its lit top edge are its layer. What scrolls is the list
-     inside it, not the panel, and that is the whole arrangement: a layer on a box that scrolls would
-     travel with the chips it is meant to be read through, and the bottom of the panel would come back
-     bare. The list's own scrollbar is left out - it is dragged, wheeled and tapped, and a bar down the
-     inside edge would read as a second progress bar. */
+  /* The quick anchors: the panel of chips beside a shelf, one per group of it - the rail a shelf of
+     twenty-odd groups is walked with. The panel is a surface of the site's glass like every other (see the
+     base at the top of this layer): its border, its rounding and its drop are its box, its tint, its frost
+     and its lit top edge are its layer. It is the quietest pane of the site on purpose, because the chips
+     inside it are controls of the site's own glass (`.hoa-liquid-glass`, worn with `.hoa-tab`): a rail of
+     liquid glass reads as one only if the sheet under it stays behind the chips rather than joining them.
+     What scrolls is the list inside it, not the panel, and that is the whole arrangement: a layer on a box
+     that scrolls would travel with the chips it is meant to be read through, and the bottom of the panel
+     would come back bare. The list's own scrollbar is left out - it is dragged, wheeled and tapped, and a
+     bar down the inside edge would read as a second progress bar. */
   .hoa-anchors {
     --hoa-ring: rgba(255, 255, 255, 0.1);
     @apply rounded-2xl border border-transparent;
@@ -543,9 +545,9 @@
   }
 
   .hoa-anchors::before {
-    background-color: rgba(8, 10, 15, 0.8);
-    backdrop-filter: blur(24px);
-    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(24px) saturate(150%);
+    box-shadow: 0 0 0 1px var(--hoa-ring), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
 
   /* The boxes of the site that are wheeled, dragged and tapped rather than scrolled by a bar: the pane a

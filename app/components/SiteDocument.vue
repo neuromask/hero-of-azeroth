@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * A page that is a document rather than a view of the data: the frame the privacy policy and the legal
- * notice are both cut from.
+ * A page that is a document rather than a view of the data: the frame the about page, the privacy policy and
+ * the legal notice are all cut from.
  *
- * The two pages differ in what they say and in nothing else, so the frame is written once here: the
- * backdrop, the header with the two links a document offers, one pane of the site's glass with the article
- * in it, the sign-off and the two floating controls. It is the same arrangement the hall of fame stands in,
- * because a reader who followed a link in the foot of that page should arrive somewhere that looks like the
- * page they left.
+ * The pages differ in what they say and in nothing else, so the frame is written once here: the backdrop, the
+ * header with the two links a document offers, one pane of the site's glass with the article in it, the
+ * sign-off and the two floating controls. It is the same arrangement the hall of fame stands in, because a
+ * reader who followed a link in the foot of that page should arrive somewhere that looks like the page they
+ * left.
  *
  * What a page hands over is its title, its one line of meta, the date it was last edited - the policy
  * records one, the trademark notice does not - and the sections themselves. All of them are message keys
@@ -21,25 +21,32 @@
  * writes plain anchors and never the treatment: the slot's content is compiled by the page, but the classes
  * are the frame's.
  */
-defineProps<{
-  /** The artwork the page stands on, which a document takes from the site's own pictures. */
-  image: string
-  /**
-   * The page's name, as a message key: this is the heading the header prints, and the page itself sets the
-   * document's `<title>` through `usePageSeo`.
-   */
-  title: string
-  /** One line under the heading, as a message key. */
-  meta: string
-  /** When the document was last edited, for the pages that record it. */
-  updated?: string
-  /**
-   * The document itself, in the order it is read. A section may carry no heading - the trademark notice is
-   * three paragraphs and no titles - and its `body` is one message whose paragraphs are separated by a
-   * blank line.
-   */
-  sections: { title?: string; body: string }[]
-}>()
+withDefaults(
+  defineProps<{
+    /** The artwork the page stands on, which a document takes from the site's own pictures. */
+    image: string
+    /**
+     * The page's name, as a message key: this is the heading the header prints, and the page itself sets the
+     * document's `<title>` through `usePageSeo`.
+     */
+    title: string
+    /** One line under the heading, as a message key. */
+    meta: string
+    /** When the document was last edited, for the pages that record it. */
+    updated?: string
+    /**
+     * The prose of the document, in the order it is read. A section may carry no heading - the trademark
+     * notice is three paragraphs and no titles - and its `body` is one message whose paragraphs are separated
+     * by a blank line.
+     *
+     * A page that is *laid out* rather than written keeps its prose here and appends its own body to the slot:
+     * the about page opens with its introduction and goes on to a shelf of cards, and a frame that could only
+     * print headings and paragraphs would have to be taught about cards next.
+     */
+    sections?: { title?: string; body: string }[]
+  }>(),
+  { sections: () => [] }
+)
 
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()
@@ -64,8 +71,16 @@ const paragraphs = (body: string) => String(t(body)).split('\n\n')
          translated once, where the header draws them. -->
     <SiteHeader :title="t(title)" :meta="t(meta)" :links="links" />
 
-    <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
-      <article class="hoa-panel mx-auto max-w-3xl p-5 sm:p-7">
+    <div
+      class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4 lg:grid lg:max-w-5xl lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-x-6"
+    >
+      <!-- The rail of documents and the article are one arrangement, cut the way the shelves cut theirs: a
+           column on a phone - the rail above, the article under it - and a rail of 13rem beside the article
+           from `lg` up, where a window is wide enough to hold both. The measure the pair takes is the 64rem the
+           container is capped at, which leaves the article the 48rem a column of prose wants. -->
+      <DocumentNav class="mb-4 lg:mb-0" />
+
+      <article class="hoa-panel min-w-0 p-5 sm:p-7">
         <p v-if="updated" class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
           {{ t(updated) }}
         </p>
@@ -87,6 +102,11 @@ const paragraphs = (body: string) => String(t(body)).split('\n\n')
             {{ paragraph }}
           </p>
         </section>
+
+        <!-- What a page that is laid out rather than written adds under its prose: the about page opens with
+             the paragraphs of its introduction and goes on to a shelf of cards. A page that is only prose
+             leaves the slot empty, and an empty slot draws nothing. -->
+        <slot />
 
         <!-- Who the document names, and where their own terms are. -->
         <p

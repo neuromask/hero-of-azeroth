@@ -248,6 +248,10 @@ function placeholderHeight(section: CollectionSection): string {
          to its group - which is what `scroll-behavior: smooth` above and the section's
          `scroll-margin-top` are for.
 
+         Each chip is a control of the site's own glass (`hoa-liquid-glass`), which is what the panel
+         behind them is kept quiet for: the material the header's tabs are cut from, on a sheet that
+         stays out of its way (`app/assets/css/main.css`, `.hoa-anchors`).
+
          They stand in a panel to the left of the shelf, pinned under the character's header as the
          shelf moves past it and scrolling inside itself when a shelf holds more groups than a window
          is tall. A phone has no room for the panel beside the tiles and is given none (`hidden`
@@ -268,7 +272,7 @@ function placeholderHeight(section: CollectionSection): string {
           :key="section.id"
           :ref="(element) => setChip(index, element as Element | null)"
           type="button"
-          class="hoa-tab shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:text-xs lg:w-full lg:justify-start lg:whitespace-normal lg:text-left"
+          class="hoa-tab hoa-liquid-glass shrink-0 whitespace-nowrap px-3 py-1.5 text-xs sm:text-xs lg:w-full lg:justify-start lg:whitespace-normal lg:text-left"
           :class="{ 'hoa-tab-active': index === activeSection }"
           :aria-current="index === activeSection ? 'true' : undefined"
           @click="jumpTo(index)"

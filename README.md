@@ -182,10 +182,11 @@ a second implementation is a second answer.
 | `app/pages/index.vue` | The front door and its search |
 | `app/pages/leaderboard.vue` | The hall of fame |
 | `app/pages/privacy.vue` | The privacy policy: what is collected, what a sign-in stores, and what the counters are |
+| `app/pages/about.vue` | About the site: what it is, the four things it does, and the fact that it is free |
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SiteDocument` (the frame the policy and the legal notice are both cut from), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
 | `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
@@ -402,9 +403,9 @@ switches with no JavaScript at all.
 - Every character page is `og:image`d with its own card (`summary_large_image`), and `/api/card/` is
   deliberately left crawlable in `robots.txt`: a blocked preview path would leave every shared link
   blank.
-- `/sitemap.xml` lists the pages of the site itself — the front door, the hall of fame, the policy and the
-  legal notice — and the characters the site has actually rendered (kept in `server/data/`, capped at
-  50,000 URLs) with `xhtml:link` alternates per language. A browser opening it gets the page the map
+- `/sitemap.xml` lists the pages of the site itself — the front door, the hall of fame, the about page, the
+  policy and the legal notice — and the characters the site has actually rendered (kept in `server/data/`,
+  capped at 50,000 URLs) with `xhtml:link` alternates per language. A browser opening it gets the page the map
   doubles as (`public/sitemap.xsl`): who has been looked up and what they were — level, class, item
   level, rating — plus the breakdowns worth reading (level, class, realm, the last two weeks, the
   biggest collections), every figure counted off the map itself, so the page and the file a crawler
