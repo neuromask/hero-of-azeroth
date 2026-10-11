@@ -12,17 +12,26 @@
  * assembler - so asking for it is what changes the numbers, and the response says which of the two it ended
  * up being (`CollectionPage.account`).
  */
+import { ACCOUNT_SHELF_KINDS } from '#shared/data/collectionsSchema'
 import type { CollectionKind, CollectionPage, CollectionSummary, CollectionViewOptions } from '#shared/data/collectionsSchema'
 import { useCharacterView } from './characterView'
 
 export function useCollection(kind: () => CollectionKind, view: Ref<CollectionViewOptions>) {
   const { region, realm, name, apiLocale } = useCharacterView()
 
+  /**
+   * Whether this shelf's account-wide list may be asked for at all: only the ones Blizzard serves
+   * (`ACCOUNT_SHELF_KINDS`). A decorated shelf is this character's own whatever the switch says, so the flag
+   * is not sent for it - the endpoint would answer with the character's journal anyway, under a second cache
+   * key for the same page.
+   */
+  const scoped = computed(() => ACCOUNT_SHELF_KINDS.includes(kind()))
+
   /** The switches as the endpoint and the key read them: whether each is on. */
   const flags = computed(() => ({
     unobtainable: Boolean(view.value.unobtainable),
     upcoming: Boolean(view.value.upcoming),
-    byAccount: Boolean(view.value.byAccount)
+    byAccount: Boolean(view.value.byAccount) && scoped.value
   }))
 
   return useAsyncData<CollectionPage | null>(

@@ -118,8 +118,13 @@ function tileUrl(key: LeaderboardSort) {
     <!-- The character render, fixed behind the tiles so it holds its place while the page moves
          over it. Blizzard draws it on a 1600x1200 canvas with the model floating in the middle, so
          the image is blown up and shifted until the feet sit on the bottom edge of the window. It
-         belongs to the overview alone: the feed is a list and has no model behind it. -->
-    <div class="pointer-events-none fixed inset-0 z-[5] hidden items-center justify-center lg:flex" aria-hidden="true">
+         belongs to the overview alone: the feed is a list and has no model behind it.
+         "Behind" is what the layer says: a negative `z-index` inside this page's own `z-20` layer puts the
+         model under everything the page stands in front of it - the tiles are laid over its feet, which is
+         the whole point of a backdrop - while it stays over the artwork the site itself is drawn on. The
+         positive layer it used to carry (`z-[5]`) painted the model *over* the tiles: a fixed box above a
+         row of `z-auto` panels covers them, and the plates this page is read for were behind a picture. -->
+    <div class="pointer-events-none fixed inset-0 -z-10 hidden items-center justify-center lg:flex" aria-hidden="true">
       <div class="relative h-[78vh] max-h-[820px] w-[62vh] overflow-hidden">
         <img
           v-if="character?.renderUrl"

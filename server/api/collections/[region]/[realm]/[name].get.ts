@@ -38,7 +38,13 @@
  * shipped yet, which are SimpleArmory's own two settings under the same names. A request without a
  * `?kind=` is the summary - the running total and a row per shelf - which the root page draws.
  */
-import type { CollectionPage, CollectionSummary, CollectionViewOptions } from '#shared/data/collectionsSchema'
+import { ACCOUNT_SHELF_KINDS, COLLECTION_KINDS } from '#shared/data/collectionsSchema'
+import type {
+  CollectionKind,
+  CollectionPage,
+  CollectionSummary,
+  CollectionViewOptions
+} from '#shared/data/collectionsSchema'
 
 const shelves = createSwrCache<CollectionPage>(2 * 60 * 60 * 1000, 256)
 const summaries = createSwrCache<CollectionSummary>(2 * 60 * 60 * 1000, 256)
@@ -84,20 +90,29 @@ export default defineEventHandler(async (event) => {
   try {
     // Without a `kind` the request is for the summary: every shelf at once, under the default view.
     if (!kind) {
-      const pooled = accountView !== null ? accountCollectedByKind(accountView) : null
-      const account = pooled !== null
+      // The shelves the site has read the account's own ids for, which may be some of them: decorations
+      // are never among them (Blizzard's account collection endpoint refuses them) and a collection the
+      // site has not read yet is not either. What is missing falls back to this character's journal, shelf
+      // by shelf, and the answer says which is which.
+      const pooled = accountView !== null ? accountCollectedByKind(accountView) : {}
+      const accountKinds = new Set(
+        ACCOUNT_SHELF_KINDS.filter((shelf) => Boolean(pooled[shelf]))
+      ) as Set<CollectionKind>
+      const account = accountKinds.size > 0
 
       return await summaries(
         `${region}:${locale}:${realm}:${name}${account ? `:a${accountView}` : ''}`,
         async () => {
-          // The character is read only for the shelf that needs it: the account's numbers are the
-          // account's, and reading Blizzard for a faction they are not filtered by would be a call
-          // bought for nothing.
-          const character = account ? null : await getCharacter(realm, name, region, locale)
-          const collectedByKind = pooled || (await getCollectedByKind(region, realm, name, locale))
+          // The character is read for its faction and for the shelves the pool has nothing for - and the
+          // shelves it *does* have are counted without a faction, which is what makes them the account's.
+          const character = await getCharacter(realm, name, region, locale)
+          const own = await getCollectedByKind(region, realm, name, locale)
+          const collectedByKind = Object.fromEntries(
+            COLLECTION_KINDS.map((shelf) => [shelf, pooled[shelf] || own[shelf]])
+          ) as Record<CollectionKind, Set<number>>
 
           return {
-            ...buildCollectionSummary(locale, collectedByKind, character?.faction ?? null),
+            ...buildCollectionSummary(locale, collectedByKind, character?.faction ?? null, accountKinds),
             account
           }
         },

@@ -16,12 +16,21 @@
  * never this switch, because a collection the site has never read for that account comes back as the
  * character's and says so (`CollectionPage.account`, `CollectionSummary.account`).
  */
+import { ACCOUNT_SHELF_KINDS } from '#shared/data/collectionsSchema'
+import type { CollectionKind } from '#shared/data/collectionsSchema'
+
 const props = defineProps<{
   /**
    * Whether the answer standing above this control really was read from the account's own ids: the server
    * decides that, and the note under the chips is drawn from it rather than from the switch.
    */
   account?: boolean
+  /**
+   * The shelf this control stands over, when it stands over one: a shelf whose account-wide list Blizzard
+   * does not serve draws no control at all (`ACCOUNT_SHELF_KINDS`). The summary leaves it out, because it
+   * speaks for four shelves at once - three of which can be read as the account's.
+   */
+  kind?: CollectionKind
 }>()
 
 const { t } = useI18n()
@@ -29,10 +38,17 @@ const view = useCollectionView()
 
 /** Whether this character is the reader's own, which is the only case the account's shelf may be read in. */
 const mine = useOwnCharacter()
+
+/**
+ * Whether there is a choice here at all: only a shelf Blizzard serves an account-wide list for can be read as
+ * the account's, and a switch over decorations - which the account endpoint refuses, today and by design -
+ * would be a control that can only ever be turned back.
+ */
+const offersScope = computed(() => !props.kind || ACCOUNT_SHELF_KINDS.includes(props.kind))
 </script>
 
 <template>
-  <template v-if="mine">
+  <template v-if="mine && offersScope">
     <!-- The pair: the chosen half wears the brand gold, the way the account page draws its publish switch -
          so which collection the numbers above belong to is read at a glance rather than from the words. -->
     <span

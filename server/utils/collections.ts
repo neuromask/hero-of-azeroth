@@ -159,19 +159,25 @@ export function accountCollectedIds(userId: number, kind: CollectionKind): Set<n
 }
 
 /**
- * The same for every shelf at once, or `null` when any one of them is missing.
+ * The account's own ids for every shelf the site has read them for, keyed by shelf.
  *
- * A summary is one number over four shelves, so a half-known account cannot answer it: three shelves read
- * from the account and one from the character would be a figure belonging to nobody. All four, or the
- * character's own journal - and `CollectionSummary.account` says which came back.
+ * Partial on purpose, and that is the whole point of the shape. Decorations are not in it - Blizzard's
+ * account collection endpoint refuses them - and neither is a collection the site has not read for this
+ * account yet; a shelf missing from the map is one drawn from the character's own journal, and the summary
+ * says so for that shelf (`CollectionShelfSummary.account`). This used to be all four shelves or nothing,
+ * which meant the account's decorations decided whether the account's mounts could be read as the account's -
+ * the one shelf Blizzard never answers for held the other three hostage, and a reader with every collection
+ * read still met "the account's list has not been read yet" over their own numbers.
  */
-export function accountCollectedByKind(userId: number): Record<CollectionKind, Set<number>> | null {
-  const sets = COLLECTION_KINDS.map((kind) => accountCollectedIds(userId, kind))
-  if (sets.some((set) => set === null)) return null
+export function accountCollectedByKind(userId: number): Partial<Record<CollectionKind, Set<number>>> {
+  const sets: Partial<Record<CollectionKind, Set<number>>> = {}
 
-  return Object.fromEntries(
-    COLLECTION_KINDS.map((kind, index) => [kind, sets[index] as Set<number>])
-  ) as Record<CollectionKind, Set<number>>
+  for (const kind of COLLECTION_KINDS) {
+    const ids = accountCollectedIds(userId, kind)
+    if (ids) sets[kind] = ids
+  }
+
+  return sets
 }
 
 /** The ids the character being read holds on `kind`'s shelf. */
@@ -477,22 +483,32 @@ export async function getCollectedByKind(
 /**
  * Assembles the summary page: the running total over every shelf and a row per shelf, in the order
  * the menu lists them, under the default view (the retired and upcoming items hidden, as a shelf
- * opens). `faction` keeps the other side's items out of the count, exactly as it does on a shelf.
+ * opens).
+ *
+ * `faction` keeps the other side's items out of the count, exactly as it does on a shelf - for the shelves
+ * that are read as the character's. `accountKinds` names the ones read from the account's own pool instead,
+ * and those are counted without a faction at all: an account holds characters on both sides, so nothing it
+ * holds is out of its reach (`buildCollectionPage` does the same for one shelf). Each row says which of the
+ * two it was read as, because one summary flag cannot speak for four shelves.
  */
 export function buildCollectionSummary(
   locale: string,
   collectedByKind: Record<CollectionKind, Set<number>>,
-  faction?: string | null
+  faction?: string | null,
+  accountKinds: ReadonlySet<CollectionKind> = new Set()
 ): CollectionSummary {
   const side = FACTION_SIDE[String(faction || '').toUpperCase()] || null
 
   const shelves = COLLECTION_KINDS.map((kind) => {
-    const count = countShelf(kind, collectedByKind[kind], side, {})
+    const account = accountKinds.has(kind)
+    const count = countShelf(kind, collectedByKind[kind], account ? null : side, {})
+
     return {
       kind,
       collected: count.collected,
       total: count.total,
-      percent: count.total ? Math.round((count.collected / count.total) * 100) : 0
+      percent: count.total ? Math.round((count.collected / count.total) * 100) : 0,
+      account
     }
   })
 
@@ -504,6 +520,7 @@ export function buildCollectionSummary(
     total,
     percent: total ? Math.round((held / total) * 100) : 0,
     shelves,
+    account: accountKinds.size > 0,
     generatedAt: Date.now()
   }
 }

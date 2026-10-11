@@ -110,8 +110,9 @@ usePageLoading().follow('character:collections', pending)
           <!-- Whose collection this is: this character's own journal, or the whole account's. It is one
                control and it is drawn on two pages - under this heading and in the head of the summary the
                collections root opens on - so the pair lives in one component, and the sentence under it is
-               written from the server's answer rather than from the switch (`CollectionScopeSwitch.vue`). -->
-          <CollectionScopeSwitch :account="Boolean(data.account)" />
+               written from the server's answer rather than from the switch (`CollectionScopeSwitch.vue`).
+               A shelf Blizzard serves no account-wide list for carries no switch at all. -->
+          <CollectionScopeSwitch :kind="props.kind" :account="Boolean(data.account)" />
 
           <button
             v-for="item in SWITCHES"

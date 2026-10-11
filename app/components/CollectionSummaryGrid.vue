@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The summary the grid draws, and the shape of a shelf row inside it.
-import type { CollectionSummary } from '#shared/data/collectionsSchema'
+import type { CollectionSummary, CollectionShelfSummary } from '#shared/data/collectionsSchema'
+import { ACCOUNT_SHARED_KINDS } from '#shared/data/collectionsSchema'
 // Counts are written by the site's one rule, so a card reads its figures the way every page prints them.
 import { formatNumber } from '#shared/utils/formatNumber'
 
@@ -21,6 +22,30 @@ const props = defineProps<{
 }>()
 
 const localeUrl = useLocaleUrl()
+
+/**
+ * The scope the cards below are read in, and whether the reader is the one who may choose it: the switch is
+ * the same control a shelf carries (`CollectionScopeSwitch`), and the tag on each card says which of the two
+ * that card's numbers came from. It is drawn only while the account's view is the one being read - a reader
+ * who has not asked for it is looking at this character's collections, which needs no label.
+ */
+const view = useCollectionView()
+const mine = useOwnCharacter()
+
+/**
+ * Whether a card's numbers are the account's, which is what its label says.
+ *
+ * There are two ways to be the account's, and the difference is worth keeping. A shelf the site has read the
+ * account's own ids for (`row.account`) is the account's because it was counted from the account's list -
+ * mounts, pets and toys, where two characters really do hold different numbers. A shelf that is shared by
+ * nature is the account's whichever list it came from (`ACCOUNT_SHARED_KINDS`: housing decor, one collection
+ * for every character of the account, so its figure is the account's even though Blizzard hands it over per
+ * character). What is left is a shelf whose account list has simply not been read yet - that number is this
+ * character's, and its card says so rather than passing for the account's.
+ */
+function accountWide(row: CollectionShelfSummary): boolean {
+  return Boolean(row.account) || ACCOUNT_SHARED_KINDS.includes(row.kind)
+}
 </script>
 
 <template>
@@ -78,6 +103,18 @@ const localeUrl = useLocaleUrl()
             {{ formatNumber(row.percent) }}%
           </span>
         </div>
+
+        <!-- Which reading this card is, while the reader is looking at the account's: a shelf that is the
+             account's by nature - the decorations, one collection for every character of the account - says
+             so beside the three the site read the account's own ids for, and a shelf whose account list has
+             not been read yet says that it is still this character's (`accountWide`). -->
+        <p
+          v-if="mine && view.byAccount"
+          class="text-[11px] font-semibold uppercase tracking-wide"
+          :class="accountWide(row) ? 'text-wow-goldLight' : 'text-gray-500'"
+        >
+          {{ accountWide(row) ? $t('accountWide') : $t('perCharacter') }}
+        </p>
 
         <div class="mt-auto">
           <div class="mb-2 flex items-baseline justify-between gap-2">

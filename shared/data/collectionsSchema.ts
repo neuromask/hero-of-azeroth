@@ -24,6 +24,33 @@ export type CollectionKind = 'mounts' | 'pets' | 'toys' | 'decors'
 export const COLLECTION_KINDS = ['mounts', 'pets', 'toys', 'decors'] as const
 
 /**
+ * The shelves whose account-wide list Blizzard serves, which is the set the character/account switch may
+ * stand over.
+ *
+ * A WoW collection is shared across an account, and Blizzard answers for mounts, pets and toys with the
+ * account's own list of ids. Decorations are the exception: the account collection endpoint refuses them, so
+ * the decor shelf is a character's own journal whatever anybody asks for - and a switch that can only ever be
+ * turned back is a control that should not be drawn (`app/components/CollectionScopeSwitch.vue`).
+ */
+export const ACCOUNT_SHELF_KINDS: readonly CollectionKind[] = ['mounts', 'pets', 'toys']
+
+/**
+ * The shelves whose figure belongs to the account whoever it was read from.
+ *
+ * Housing decor is the one. Every character of an account is furnished by the same collection, so the figure a
+ * character's own endpoint answers with for it is the account's already - two characters of one account read
+ * the same number (1482 and 1479 across ninety-two of them, where their mounts run from 628 to 1214), and
+ * Blizzard hands it over per character rather than as an account list. `ACCOUNT_SHELF_KINDS` names the shelves
+ * it *also* serves an account's own ids for; this one names the shelf that needs no such list to be the
+ * account's, and a page may therefore label it as the account's whichever list it was counted from.
+ *
+ * A mount, a pet and a toy are deliberately not in it: two characters of one account hold different numbers of
+ * them, which is what the site's pool exists to fold together, so those are the account's only where the pool
+ * was really read.
+ */
+export const ACCOUNT_SHARED_KINDS: readonly CollectionKind[] = ['decors']
+
+/**
  * The Russian names of the headings SimpleArmory ships, keyed by the English name it ships them
  * under - a group (an expansion, an event) or a source ("Raid Drop", "Vendor", a zone), on any
  * shelf. A name that is a proper noun (an expansion, a vendor, a promotion) is left out on purpose -
@@ -490,6 +517,16 @@ export interface CollectionShelfSummary {
   collected: number
   total: number
   percent: number
+  /**
+   * Whether this one shelf's numbers came from the account's own ids rather than from the character's
+   * journal.
+   *
+   * A summary is four shelves read one by one, and they do not have to agree: the three Blizzard serves an
+   * account list for take it wherever the site has read them, while the decorations never do
+   * (`ACCOUNT_SHELF_KINDS`). The page says which is which per card, so a number that is the character's is
+   * not read as the account's.
+   */
+  account?: boolean
 }
 
 /** The whole collections log of a character, summarised: the total and a row per shelf. */
@@ -504,8 +541,10 @@ export interface CollectionSummary {
   /** When the summary was assembled, so a caller can tell a fresh copy from a revalidated one. */
   generatedAt: number
   /**
-   * Whether these numbers are the whole account's rather than this character's, exactly as a shelf reports
-   * it (`CollectionPage.account`): a summary is the same reading of the same ids, one shelf over.
+   * Whether these numbers are the whole account's rather than this character's: `true` when at least one of
+   * the four shelves was read from the account's own ids, which is as much as one flag over four shelves can
+   * say - the row of a shelf that could not be read that way carries its own answer
+   * (`CollectionShelfSummary.account`).
    */
   account?: boolean
 }
