@@ -833,7 +833,7 @@ onMounted(() => {
         <!-- The main: the character the account leads with, drawn large. Its portrait wears the
              character's own class as a frame, its two controls sit at the right of the head, and its
              whole stat line runs along the bottom. -->
-        <section v-if="main" class="hoa-panel rounded-2xl p-5">
+        <section v-if="main" class="hoa-panel relative z-30 rounded-2xl p-5">
           <div class="flex flex-wrap items-start gap-4">
             <span
               class="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 text-2xl font-extrabold"
@@ -945,9 +945,12 @@ onMounted(() => {
                 <!-- And beside the gold figure itself, the question a reader is owed an answer to: the
                      multipliers the site's own score is made of, in the same popup the hall of fame carries
                      at the end of its filter row (`app/components/ScoreLegend.vue`). It stands with the
-                     score rather than with the buttons above, because it is the score it explains - and the
-                     plate it stands in carries a layer of its own (`z-30` above), so the popup opens over
-                     the roster's filter bar rather than behind it. -->
+                     score rather than with the buttons above, because it is the score it explains. Two layers
+                     are what keep the pane open over what stands under it: the plate carries one (`z-30`),
+                     so the drop clears the note below it inside the card, and the card itself carries the
+                     other (on the `<section>` above), because a `.hoa-panel` is a stacking context of its
+                     own - `isolation` in `app/assets/css/main.css` - and without it the plate's layer would
+                     stop at the card and the roster's filter bar below (`z-20`) would cover the pane. -->
                 <ScoreLegend v-if="stat.key === 'score'" />
               </div>
             </div>
@@ -968,7 +971,7 @@ onMounted(() => {
                public table. The notice stands at the right edge of the row, where the eye looking for
                an explanation goes after the list itself. -->
           <div class="flex flex-wrap items-center gap-3">
-            <h2 class="text-lg font-bold text-white">
+            <h2 class="text-2xl font-bold text-white">
               {{ t('profileAlts') }} <span class="font-semibold text-gray-500">({{ characters.length }})</span>
             </h2>
 
