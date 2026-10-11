@@ -6,8 +6,11 @@ const realm = String(route.params.realm || '')
 const name = String(route.params.name || '')
 const path = `/${regionPath(region)}/${realm}/${name}/collections`
 
-// Every shelf's total, under one running total: the root the collections menu opens on.
-const { data, pending, error, refresh } = await useCollectionSummary()
+// Every shelf's total, under one running total: the root the collections menu opens on. It reads the same
+// switches a shelf does - above all whose collection this is (`useCollectionView`) - so the totals here cannot
+// disagree with the shelves they stand over.
+const view = useCollectionView()
+const { data, pending, error, refresh } = await useCollectionSummary(view)
 usePageLoading().follow('character:collections', pending)
 </script>
 

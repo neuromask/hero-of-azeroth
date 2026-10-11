@@ -30,6 +30,8 @@ const legendOpen = ref(false)
 /**
  * The three switches, in the order they are drawn. The collected items come first because that is the
  * one a collector reaches for most: turning it off leaves the shelf as a list of what is still missing.
+ * The fourth choice above them - whose collection this is - is a component of its own, because the root
+ * collections page carries the same one (`CollectionScopeSwitch.vue`).
  */
 const SWITCHES = [
   { key: 'collected', label: 'collectionsShowCollected' },
@@ -45,6 +47,24 @@ const LEGEND = [
 ] as const
 
 const { data, pending, error, refresh } = await useCollection(() => props.kind, view)
+
+/**
+ * What the note says about the numbers: the three reasons a shelf reads lower than the game's own counter, and
+ * - when the shelf being read really is the account's - a fourth about that.
+ *
+ * The fourth hangs on `data.account` rather than on this page's own switch, because it is the server's word
+ * that matters: a reader whose account's list of that collection has never been read gets the character's
+ * shelf back, and a legend claiming otherwise would be the one thing a legend must never be.
+ */
+const legend = computed(() => {
+  const points: { title: string; text: string }[] = [...LEGEND]
+
+  if (data.value?.account) {
+    points.push({ title: 'collectionsLegendAccountTitle', text: 'collectionsLegendAccountText' })
+  }
+
+  return points
+})
 
 // A shelf is read again when its kind changes and when a switch is flipped, and neither of those is a
 // navigation: the page stays where it stands, so nothing but this would say the site is working. The
@@ -82,10 +102,17 @@ usePageLoading().follow('character:collections', pending)
           />
         </div>
 
-        <!-- The two switches and the note: a switch is a small track with a knob that slides across it
-             and lights up in the brand gold, so on and off are told apart without reading a word - and
-             the note is a button carrying an arrow, because what it opens lands under it. -->
+        <!-- The switches, the note, and - for the reader this character belongs to - whose collection is
+             being read: a switch is a small track with a knob that slides across it and lights up in the brand
+             gold, so on and off are told apart without reading a word, and the note is a button carrying an
+             arrow, because what it opens lands under it. -->
         <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <!-- Whose collection this is: this character's own journal, or the whole account's. It is one
+               control and it is drawn on two pages - under this heading and in the head of the summary the
+               collections root opens on - so the pair lives in one component, and the sentence under it is
+               written from the server's answer rather than from the switch (`CollectionScopeSwitch.vue`). -->
+          <CollectionScopeSwitch :account="Boolean(data.account)" />
+
           <button
             v-for="item in SWITCHES"
             :key="item.key"
@@ -135,16 +162,17 @@ usePageLoading().follow('character:collections', pending)
           </button>
         </div>
 
-
         <!-- The note itself: one small card per reason, side by side on a wide screen so the shelf is
-             not pushed down by a paragraph, stacked on a phone where three columns would be unreadable. -->
+             not pushed down by a paragraph, stacked on a phone where three columns would be unreadable.
+             What a scope switch that could not be honoured says is the switch component's own line
+             (`CollectionScopeSwitch.vue`), drawn beside the chips rather than under the note. -->
         <div
           v-if="legendOpen"
           id="collections-legend"
           class="mt-3 grid gap-2 border-t border-white/10 pt-3 sm:grid-cols-3"
         >
           <div
-            v-for="point in LEGEND"
+            v-for="point in legend"
             :key="point.title"
             class="rounded-xl border border-white/5 bg-black/25 p-3"
           >

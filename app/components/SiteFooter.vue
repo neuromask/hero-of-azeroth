@@ -37,6 +37,14 @@
  * What the line deliberately does not carry is the cookie question. It is asked once and never again, so
  * there is nothing at the foot of a page to ask it from (`app/components/CookieNotice.vue`), and a link that
  * brought the question back would be a question the reader has already answered.
+ *
+ * The sign-off never out-paints the page it signs. Its box is the last thing in the flow, and the layer it is
+ * given is deliberately not a stacking level of its own: every page of the site gives its *body* the z-index
+ * (`z-10`, with the header's bar above that at `z-30`/`z-40`) and the foot carries none - a `<footer
+ * class="relative ...">` that a page gave `z-20` was a footer whose glass pill drew over whatever the page
+ * opened beneath it, which is how the profile's roster menu came up behind its own signature. Anything a page
+ * opens - a `.hoa-pop` pane, the share tray, a drawer - therefore paints over the foot rather than under it,
+ * on every page and without a second thought at the call site.
  */
 withDefaults(
   defineProps<{

@@ -14,8 +14,6 @@
  */
 import { FILTERABLE_FACTIONS } from '#shared/utils/wow-faction'
 import { formatNumber } from '#shared/utils/formatNumber'
-// The multipliers the legend prints, read from the formula itself so the two can never drift apart.
-import { SCORE_WEIGHTS } from '#shared/utils/leaderboardScore'
 import type {
   LeaderboardFaction,
   LeaderboardSort,
@@ -85,21 +83,8 @@ function isShown(key: LeaderboardSort): boolean {
   return !props.columns.includes('total') && props.columns.includes(key)
 }
 
-/**
- * The legend of the overall score: the six figures it is made of, in the order the table draws them,
- * each with the multiplier it carries.
- *
- * The numbers are read off `SCORE_WEIGHTS` rather than written out here, so the panel a reader opens
- * and the formula the server computes with cannot drift apart: this is the same table, drawn.
- */
-const SCORE_LEGEND = [
-  { key: 'achievements', icon: 'achievments', label: 'achievements', weight: SCORE_WEIGHTS.achievements },
-  { key: 'mounts', icon: 'mounts', label: 'mounts', weight: SCORE_WEIGHTS.mounts },
-  { key: 'toys', icon: 'toys', label: 'toys', weight: SCORE_WEIGHTS.toys },
-  { key: 'pets', icon: 'pets', label: 'pets', weight: SCORE_WEIGHTS.pets },
-  { key: 'decor', icon: 'decor', label: 'decor', weight: SCORE_WEIGHTS.decor },
-  { key: 'reputations', icon: 'exalted-rep', label: 'reputations', weight: SCORE_WEIGHTS.reputations }
-] as const
+// The legend of the overall score is no longer this file's own block: the profile prints the same number and
+// asks the same question beside it, so the panel is one component for both (`app/components/ScoreLegend.vue`).
 
 /**
  * The realms a reader may pick, as the aggregate offers them, each named in the language being read
@@ -136,25 +121,22 @@ function factionCount(faction: LeaderboardFaction | 'all'): number {
 }
 
 /**
- * The two panels this bar can open - the realm menu and the legend of the score - and the element a
- * click has to land outside of to shut each. Both behave the way the collections menu does: a click on
- * the control toggles it, a click anywhere else, Escape or a pick closes it.
+ * The one panel this bar opens itself - the realm menu - and the element a click has to land outside of
+ * to shut it. It behaves the way the collections menu does: a click on the control toggles it, a click
+ * anywhere else, Escape or a pick closes it. The legend of the score, the bar's other panel, keeps its
+ * own open state inside the component that draws it (`app/components/ScoreLegend.vue`).
  */
 const realmOpen = ref(false)
-const legendOpen = ref(false)
 const realmRoot = ref<HTMLElement | null>(null)
-const legendRoot = ref<HTMLElement | null>(null)
 
 function onDocumentClick(event: MouseEvent): void {
   const target = event.target as Node
   if (!realmRoot.value?.contains(target)) realmOpen.value = false
-  if (!legendRoot.value?.contains(target)) legendOpen.value = false
 }
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Escape') return
   realmOpen.value = false
-  legendOpen.value = false
 }
 
 onMounted(() => {
@@ -333,48 +315,11 @@ function clear() {
         @click="clear()"
       >{{ t('lbReset') }}</button>
 
-      <!-- The legend of the score, at the far end of the row: a question mark that opens the five
-           multipliers the overall column is made of, so a reader who wonders where a number comes
-           from has the answer one click away - in the same pane every menu on the site opens
-           (`.hoa-pop`). The multipliers are read off the formula itself, so the panel can never
-           promise something the server does not compute. -->
-      <div ref="legendRoot" class="relative ml-auto">
-        <button
-          type="button"
-          class="hoa-liquid-glass grid h-8 w-8 place-items-center rounded-full border text-sm font-semibold text-wow-goldLight"
-          aria-haspopup="dialog"
-          :aria-expanded="legendOpen"
-          :title="t('lbLegendTitle')"
-          :aria-label="t('lbLegendTitle')"
-          @click="legendOpen = !legendOpen"
-        >?</button>
-
-        <div
-          class="hoa-pop absolute right-0 top-full mt-2 w-72 p-3 transition-opacity duration-150"
-          :class="legendOpen ? 'opacity-100' : 'invisible opacity-0'"
-          role="dialog"
-          :aria-label="t('lbLegendTitle')"
-        >
-          <p class="text-[11px] font-semibold uppercase tracking-wider text-wow-goldLight">{{ t('lbLegendTitle') }}</p>
-          <p class="mt-1 text-xs leading-relaxed text-gray-400">{{ t('lbLegendIntro') }}</p>
-
-          <ul class="mt-3 space-y-1.5">
-            <li
-              v-for="row in SCORE_LEGEND"
-              :key="row.key"
-              class="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1.5 transition-colors hover:border-wow-gold/30 hover:bg-white/[0.06]"
-            >
-              <AppIcon :name="row.icon" class="h-[1.1em] w-[1.1em]" />
-              <span class="text-sm text-gray-200">{{ t(row.label) }}</span>
-              <span class="ml-auto text-sm font-extrabold tabular-nums text-wow-goldLight">×{{ row.weight }}</span>
-            </li>
-          </ul>
-
-          <p class="mt-3 border-t border-white/10 pt-2 text-xs leading-relaxed text-gray-500">
-            {{ t('lbLegendNote') }}
-          </p>
-        </div>
-      </div>
+      <!-- The legend of the score, at the far end of the row: a question mark that opens the multipliers the
+           overall column is made of, so a reader who wonders where a number comes from has the answer one
+           click away. The control is the profile's own as well - one component, one table of weights, read
+           off the formula itself (`app/components/ScoreLegend.vue`). -->
+      <ScoreLegend class="ml-auto" />
     </div>
 
   </div>

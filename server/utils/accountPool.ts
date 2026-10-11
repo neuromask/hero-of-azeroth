@@ -35,7 +35,7 @@ import { leaderboardKey } from './leaderboardExclusions'
 const POOL_KINDS = ['mounts', 'pets', 'toys', 'decor', 'reputations'] as const
 
 /** One of those kinds, which is also the name every reader of an account's figures knows it by. */
-type PoolKind = (typeof POOL_KINDS)[number]
+export type PoolKind = (typeof POOL_KINDS)[number]
 
 /** The account's own numbers, each one a count of unique ids. */
 type AccountPool = Record<PoolKind, number>
@@ -81,6 +81,31 @@ export function addToPool(userId: number, kind: PoolKind, ids: number[]): number
   }
 
   return added
+}
+
+/**
+ * The ids the account holds of one kind, as the pool has them.
+ *
+ * This is what an account-wide collection shelf is drawn from (`server/utils/collections`): the pool is
+ * ids rather than counts precisely so that a page can do more with it than print a number, and a shelf is
+ * that page. A kind the site has never read - the account's decorations, when Blizzard refuses that call -
+ * comes back empty, which is how the caller tells "nothing collected" from "nothing known" and falls back
+ * to the character's own journal.
+ */
+export function readAccountIds(userId: number, kind: PoolKind): Set<number> {
+  const ids = new Set<number>()
+
+  try {
+    const rows = useDb()
+      .prepare('SELECT item_id FROM account_pool WHERE user_id = ? AND kind = ?')
+      .all(userId, kind) as { item_id: number }[]
+
+    for (const row of rows) ids.add(row.item_id)
+  } catch {
+    // No database yet: no pool, which reads as an account with nothing to say about this kind.
+  }
+
+  return ids
 }
 
 /**
@@ -348,16 +373,28 @@ export function accountTotalsByCharacterKey(): Map<string, AccountTotals> {
  * own rows print. Every reader of an account reads this, so a page cannot be answered from one of the
  * account's numbers while the table is answered from another.
  */
-function findOwnerTotals(region: string, realm: string, name: string): AccountTotals | null {
+/**
+ * The account a character belongs to, or `null` for a character no account on the site holds.
+ *
+ * It is the site's own roster that answers it - the row a character was filed under when it was first read
+ * for somebody who is signed in - so a stranger's lookup finds nobody, which is the rule every
+ * account-wide view is gated on. The name is matched lowercased, the way the roster's own key stores it.
+ */
+export function accountOwnerId(region: string, realm: string, name: string): number | null {
   try {
     const row = useDb()
       .prepare('SELECT user_id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
       .get(region, String(realm).toLowerCase(), String(name).toLowerCase()) as { user_id: number } | undefined
 
-    return row ? readAccountTotals(row.user_id) : null
+    return row?.user_id ?? null
   } catch {
     return null
   }
+}
+
+function findOwnerTotals(region: string, realm: string, name: string): AccountTotals | null {
+  const owner = accountOwnerId(region, realm, name)
+  return owner === null ? null : readAccountTotals(owner)
 }
 
 /**

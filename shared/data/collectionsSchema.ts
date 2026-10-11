@@ -386,8 +386,21 @@ export interface CollectionViewOptions {
    * An item the game has not shipped stays hidden whatever this is: the site keeps it back too.
    */
   unobtainable?: boolean
-  /** Show the items the game has not shipped yet, the way the site's own "upcoming" setting does. */
+  /**
+   * Show the items the game has not shipped yet, the way the site's own "upcoming" setting does.
+   */
   upcoming?: boolean
+  /**
+   * Read the shelf as the whole account's rather than as this character's.
+   *
+   * A WoW collection is shared across every character of a Battle.net account, so the account is the
+   * truer unit for a collector - but only its owner may read it, because the ids it is read from are
+   * Blizzard's account-wide collection endpoints and they need the reader's own token
+   * (`server/utils/accountPool`). So this flag does nothing on its own: the endpoint honours it only
+   * for the reader whose account holds the character being viewed, and answers with `account: false`
+   * when it did not (`CollectionPage.account`), which is what a page draws its own words from.
+   */
+  byAccount?: boolean
 }
 
 /** One item on a shelf: what it is, how it looks, and whether this character has it. */
@@ -415,9 +428,11 @@ export interface CollectionItem {
    */
   wow: { type: 'item' | 'spell' | 'npc'; id: number } | null
   /**
-   * Set on a row SimpleArmory lists twice: it is drawn where it stands, because it is genuinely filed
-   * under both headings, and the numbers over a heading are kept without it - which is how the site
-   * counts it, and what keeps a shelf's totals the same as its own. Absent on every other row.
+   * Set on a row whose item another row of the same shelf counts: it is drawn where it stands, because it is
+   * genuinely filed under both headings, and the numbers over a heading are kept without it - which is what
+   * makes a shelf's totals the totals of the collection behind it. The atlas marks the pairs SimpleArmory
+   * marks itself (`dupe`, `bounty`), and a shelf marks the pairs the atlas leaves unmarked as it draws them,
+   * so this is on both. Absent on every other row.
    */
   uncounted?: true
 }
@@ -458,6 +473,13 @@ export interface CollectionPage {
   total: number
   percent: number
   sections: CollectionSection[]
+  /**
+   * Whether these numbers are the whole account's rather than this character's: `true` only for a reader
+   * whose account holds the character and who asked for it (`CollectionViewOptions.byAccount`), and only
+   * when the account's own list of that collection has actually been read. Absent, or `false`, means the
+   * shelf is the character's own journal - which is what every page drew before this flag existed.
+   */
+  account?: boolean
   /** When the shelf was assembled, so a caller can tell a fresh copy from a revalidated one. */
   generatedAt: number
 }
@@ -481,4 +503,9 @@ export interface CollectionSummary {
   shelves: CollectionShelfSummary[]
   /** When the summary was assembled, so a caller can tell a fresh copy from a revalidated one. */
   generatedAt: number
+  /**
+   * Whether these numbers are the whole account's rather than this character's, exactly as a shelf reports
+   * it (`CollectionPage.account`): a summary is the same reading of the same ids, one shelf over.
+   */
+  account?: boolean
 }

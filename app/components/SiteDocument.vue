@@ -116,7 +116,7 @@ const paragraphs = (body: string) => String(t(body)).split('\n\n')
       </article>
     </div>
 
-    <footer class="relative z-20 container mx-auto px-4 pb-2 text-xs">
+    <footer class="relative container mx-auto px-4 pb-2 text-xs">
       <SiteFooter />
     </footer>
 

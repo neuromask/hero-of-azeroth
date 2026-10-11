@@ -446,7 +446,7 @@ onMounted(loadHistory)
 
     <!-- The line every page of the site signs off with: the wordmark over the brand line, drawn exactly as the
          character pages draw it. -->
-    <footer class="relative z-20 container mx-auto px-4 pb-2 text-xs">
+    <footer class="relative container mx-auto px-4 pb-2 text-xs">
       <SiteFooter />
     </footer>
 

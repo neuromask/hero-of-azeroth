@@ -7,8 +7,19 @@
  * the character's own list of collected ids, three cheap calls to Blizzard's profile endpoint, which
  * is laid over the atlas to flag each item `collected`; the shelf that comes out is then cached by
  * the endpoint's SWR store, so the next visitor is answered without touching Blizzard at all.
+ *
+ * Which ids are laid over the atlas is the one thing this module does not decide: it is handed a set and
+ * draws it. That set is a character's own journal by default, and - for a reader whose account holds the
+ * character, and only then - the account's own ids out of the site's pool
+ * (`server/utils/accountPool`, read through `accountCollectedIds` below), because a WoW collection is
+ * shared across every character of an account. The account's shelf is also the one drawn without the
+ * faction filter: an account holds characters on both sides, so nothing it holds is out of its reach.
  */
 import { getBlizzardToken } from './blizzard'
+// The account's own ids, for the one shelf a reader is allowed to see as their account's rather than as
+// this character's. The pool is keyed by its own kind names, which `POOL_KIND` below translates into this
+// module's (`decors` is the shelf; `decor` is the pool's own spelling of it).
+import { readAccountIds, type PoolKind } from './accountPool'
 import {
   COLLECTION_KINDS,
   SIMPLEARMORY_LABELS_RU,
@@ -125,6 +136,44 @@ export function isCollectionKind(value: unknown): value is CollectionKind {
   return typeof value === 'string' && (COLLECTION_KINDS as readonly string[]).includes(value)
 }
 
+/** The pool's own name for each shelf, which is not always the shelf's (`decors` against `decor`). */
+const POOL_KIND: Record<CollectionKind, PoolKind> = {
+  mounts: 'mounts',
+  pets: 'pets',
+  toys: 'toys',
+  decors: 'decor'
+}
+
+/**
+ * The account's own ids for one shelf, or `null` when the site has never read that collection for the
+ * account.
+ *
+ * `null` rather than an empty set is the whole point of the signature: an account whose decorations
+ * Blizzard refuses to list has nothing *known* about them, and a shelf drawn from an empty set would read
+ * as "0 collected" - a number wrong in the one direction a collector would notice. So a caller falls back
+ * to the character's own journal and says which it answered with (`CollectionPage.account`).
+ */
+export function accountCollectedIds(userId: number, kind: CollectionKind): Set<number> | null {
+  const ids = readAccountIds(userId, POOL_KIND[kind])
+  return ids.size ? ids : null
+}
+
+/**
+ * The same for every shelf at once, or `null` when any one of them is missing.
+ *
+ * A summary is one number over four shelves, so a half-known account cannot answer it: three shelves read
+ * from the account and one from the character would be a figure belonging to nobody. All four, or the
+ * character's own journal - and `CollectionSummary.account` says which came back.
+ */
+export function accountCollectedByKind(userId: number): Record<CollectionKind, Set<number>> | null {
+  const sets = COLLECTION_KINDS.map((kind) => accountCollectedIds(userId, kind))
+  if (sets.some((set) => set === null)) return null
+
+  return Object.fromEntries(
+    COLLECTION_KINDS.map((kind, index) => [kind, sets[index] as Set<number>])
+  ) as Record<CollectionKind, Set<number>>
+}
+
 /** The ids the character being read holds on `kind`'s shelf. */
 export async function getCollectedIds(
   region: string,
@@ -168,11 +217,12 @@ const FACTION_SIDE: Record<string, 'A' | 'H'> = { ALLIANCE: 'A', HORDE: 'H' }
  * upcoming stock, and a retired item only for a character who holds it - or for a visitor who asked
  * for the hidden ones, and the item is not one the game has still to ship.
  *
- * What it asks is what *this* character can get and use, which is the question a reader standing in the
- * game on them is asking - so the account's union across the roster is never applied here, and a shelf may
- * count fewer things than the account-wide tile beside it. That union is a figure for the tiles and the
- * hall of fame's rows (`server/utils/accountPool`), and the achievements shelves filter their own atlas by
- * this same rule (`server/utils/achievementCollections`).
+ * What it asks is what the character whose ids it was handed can get and use, which is the question a
+ * reader standing in the game on them is asking - and it is why the account's own shelf, when a reader asks
+ * for it and is allowed it, passes no side at all (`side: null`): an account plays both sides, so nothing
+ * it holds is out of its reach. Either way a shelf may count fewer things than the account-wide tile beside
+ * it, and the achievements shelves filter their own atlas by this same rule
+ * (`server/utils/achievementCollections`).
  */
 function kept(
   entry: AtlasItem,
@@ -260,8 +310,9 @@ function countedTotal(items: CollectionItem[]): number {
  *
  * A source or a group that came out empty is dropped - a group whose every item belongs to the other
  * faction, a source a patch emptied - so a shelf shows only the rows it actually has, and the counts
- * a heading is measured by are the counts of what is drawn under it, less the few rows the site draws
- * twice and counts once.
+ * a heading is measured by are the counts of what is drawn under it, less the rows the site draws twice
+ * and counts once: the rows the atlas marks itself (`dupe`, `bounty`) and the ones it leaves unmarked,
+ * which the shelf finds as it draws them (see `drawn` below).
  */
 function buildSections(
   kind: CollectionKind,
@@ -273,11 +324,40 @@ function buildSections(
 ): CollectionSection[] {
   const sections: CollectionSection[] = []
 
+  /**
+   * The ids this shelf has already counted, so that an item the atlas files under two headings is counted
+   * once. There are two ways the atlas files one twice:
+   *
+   *   - a row SimpleArmory marks itself (`dupe`, `bounty`), which `toItems` carries as it stands: whichever
+   *     of the pair is drawn, one of them carries the item;
+   *   - a pair it leaves unmarked, which the shelf finds here. The atlas holds two such pairs today: the toy
+   *     `Corrosive Victory`, filed under both `Midnight: Season 2` and `Midnight: Achievement`, and the mount
+   *     `Deathtusk Felboar`, filed once per faction under `Warlords of Draenor: Reputation`. A character never
+   *     sees the second pair twice - one half is the other side's - but the account's own shelf does, because
+   *     it passes no side, and an unmarked pair left to the rows reads one item more than there are: a reader
+   *     saw 411 toys where the collection behind them numbered 410.
+   *
+   * The copy that counts is the first of the pair that is drawn, which is how the atlas's own marks read as
+   * well: the count sits under the heading of the copy that stands, and where the second copy is not drawn at
+   * all - the other faction's, a spotlight row the site leaves off - the drawn copy is the item's only row and
+   * counts. A row the atlas already leaves out never claims an id: a pair must not take the count off both.
+   */
+  const drawn = new Set<number>()
+
   for (const group of SHELVES[kind] || []) {
     const subgroups: CollectionSubgroup[] = []
     for (const source of group.subs) {
       const items = toItems(source.items, russian, region, collected, side, view)
       if (!items.length) continue
+
+      for (const item of items) {
+        // A row the atlas already counts elsewhere does not claim the id: the copy that is counted is the one
+        // that counts, and a row no count is kept of must not push its twin out of the numbers as well.
+        if (item.uncounted) continue
+        if (drawn.has(item.id)) item.uncounted = true
+        else drawn.add(item.id)
+      }
+
       subgroups.push({
         id: source.id,
         label: shelfLabel(source.en, russian),
@@ -312,9 +392,11 @@ function buildSections(
  *
  * `faction` is the one Blizzard names the character with (`HORDE`, `ALLIANCE`), and it is what keeps
  * the other side's items off the shelf: they are dropped before anything is counted, so the totals a
- * visitor reads are the totals of what they can actually collect. `view` is what the visitor asked to
- * be shown beyond the default - the retired items and the upcoming ones (see `toItems`), which is the
- * same pair of switches SimpleArmory's own pages carry.
+ * visitor reads are the totals of what they can actually collect. `null` is not a character of no
+ * faction: it is the account's own shelf, where both sides' items are the account's to hold - which is the
+ * whole of what "by account" means for the numbers below. `view` is what the visitor asked to be shown
+ * beyond the default - the retired items and the upcoming ones (see `toItems`), which is the same pair of
+ * switches SimpleArmory's own pages carry.
  */
 export function buildCollectionPage(
   kind: CollectionKind,
@@ -347,8 +429,8 @@ export function buildCollectionPage(
 /**
  * The count of one shelf, without building its tiles: what a summary card reads. It walks the same
  * rows the shelf would and drops the same ones (`kept`), so the two numbers are always the same
- * number - a row the site lists twice is left out of both, exactly as `heldCount`/`countedTotal` do
- * for a built shelf.
+ * number - an item the shelf counts once is counted once here too, by id rather than by row, exactly
+ * as a built shelf counts it.
  */
 function countShelf(
   kind: CollectionKind,
@@ -356,21 +438,23 @@ function countShelf(
   side: 'A' | 'H' | null,
   view: CollectionViewOptions
 ): { collected: number; total: number } {
-  let held = 0
-  let total = 0
+  // By id, exactly as a built shelf counts (`buildSections`): the atlas may list one item in two groups, and a
+  // summary that counted the rows would disagree with the shelf it summarises.
+  const counted = new Set<number>()
+  const held = new Set<number>()
 
   for (const group of SHELVES[kind] || []) {
     for (const source of group.subs) {
       for (const entry of source.items) {
         if (!kept(entry, collected, side, view)) continue
         if (entry.dupe || entry.bounty) continue
-        total++
-        if (collected.has(entry.id)) held++
+        counted.add(entry.id)
+        if (collected.has(entry.id)) held.add(entry.id)
       }
     }
   }
 
-  return { collected: held, total }
+  return { collected: held.size, total: counted.size }
 }
 
 /** The ids the character holds on every shelf, read in one pass - what a summary stands on. */

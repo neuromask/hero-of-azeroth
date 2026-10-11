@@ -13,6 +13,12 @@
  * response already says which items are held, per item - and it is on by default, because a shelf that
  * opens on nothing but gaps would be a strange thing to meet first.
  *
+ * The fourth is whose collection this is: `byAccount` asks the endpoint for the whole account's ids rather
+ * than this character's (`CollectionViewOptions.byAccount`), which is the truer reading of a WoW collection
+ * and one only the account's own reader may ask for - the server refuses it for everybody else and answers
+ * with the flag off, so a page draws its own words from the response rather than from this switch. It is off
+ * by default, because a shelf is a character's journal to everybody who has not said otherwise.
+ *
  * The stored choice is read after the page has hydrated rather than while it is being set up: the
  * numbers in the response are the default shelf's, and reading storage mid-hydration would render a
  * different shelf than the one the server sent.
@@ -29,7 +35,8 @@ export function useCollectionView() {
   const view = useState<CollectionSwitches>('collectionView', () => ({
     unobtainable: false,
     upcoming: false,
-    collected: true
+    collected: true,
+    byAccount: false
   }))
 
   onMounted(() => {

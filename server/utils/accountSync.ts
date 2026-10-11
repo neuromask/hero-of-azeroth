@@ -83,9 +83,11 @@ export async function upsertAccountCharacters(
     const nested = flat?.character || {}
     const name = flat?.name || nested?.name
     const realmName = flat?.realm?.name || nested?.realm?.name || ''
-    // A realm is addressed by its slug; one that named only the realm's display name is turned into
-    // a slug, which is what a character page's address needs.
-    const realmSlug = flat?.realm?.slug || nested?.realm?.slug || slugify(realmName)
+    // A realm is addressed by its slug; one that named only the realm's display name has the name looked up
+    // in Blizzard's own realm list, which is the only authority on which spelling belongs to which address
+    // (`realmSlugByName`). Slugifying the name as it stands is the last resort, for a realm that list has
+    // not got.
+    const realmSlug = flat?.realm?.slug || nested?.realm?.slug || (await realmSlugByName(region, realmName))
     if (!name || !realmSlug) continue
 
     statement.run(
@@ -115,6 +117,43 @@ function slugify(value?: string): string {
     .replace(/['’]/g, '')
     .replace(/[^a-z0-9\u0400-\u04ff]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+/**
+ * The address of a realm a roster entry named only by its display name.
+ *
+ * A roster read in Russian names a realm the way the game does in Russian (`Гордунни`), while the address a
+ * character's page is built from needs the slug Blizzard files it under (`gordunni`). Slugifying the Russian
+ * name gives `гордунни`: a realm no endpoint can resolve, and a second row for every character on it - two
+ * cards in the profile, one of them leading nowhere. So the name is looked up in Blizzard's own realm list,
+ * read in both languages the site serves and cached for the process (`getRealms`), and the slugified name is
+ * only what stands for a realm that list has not got.
+ */
+const REALM_LOCALES = ['en_US', 'ru_RU'] as const
+/** The names each region's realms answer to, per region, filled once and kept. */
+const realmSlugs = new Map<string, Map<string, string>>()
+
+async function realmSlugByName(region: BlizzardRegion, name: string): Promise<string> {
+  const wanted = String(name || '').trim().toLowerCase()
+  if (!wanted) return ''
+
+  let known = realmSlugs.get(region)
+  if (!known) {
+    known = new Map<string, string>()
+    realmSlugs.set(region, known)
+
+    for (const locale of REALM_LOCALES) {
+      try {
+        for (const realm of await getRealms(region, locale)) {
+          known.set(String(realm.name || '').trim().toLowerCase(), realm.slug)
+        }
+      } catch {
+        // A realm list that cannot be read leaves the slugified name in charge, as it was before.
+      }
+    }
+  }
+
+  return known.get(wanted) || slugify(name)
 }
 
 /** A character row as the database keeps it, which is what a stats read is made for. */

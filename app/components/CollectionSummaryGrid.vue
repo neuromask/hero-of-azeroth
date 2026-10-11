@@ -39,6 +39,20 @@ const localeUrl = useLocaleUrl()
         </span>
       </div>
 
+      <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <!-- The scope switch a shelf carries, drawn here too: the root page's totals are the same kind of
+             number, so they answer to the same control (`CollectionScopeSwitch.vue`). -->
+        <CollectionScopeSwitch :account="props.summary.account" />
+
+        <!-- Whose numbers these are, in one line: the choice is the shelf pages' own switch
+             (`useCollectionView`), and which reading came back is the server's answer
+             (`CollectionSummary.account`) - so a reader whose account has no such list yet is told the
+             figures are this character's rather than shown a total belonging to nobody. -->
+        <p class="text-xs text-gray-400">
+          {{ props.summary.account ? $t('collectionsScopeAccount') : $t('collectionsScopeCharacter') }}
+        </p>
+      </div>
+
       <div class="h-2.5 w-full overflow-hidden rounded-full border border-white/5 bg-black/60 p-0.5">
         <div
           class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"

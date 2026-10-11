@@ -934,6 +934,7 @@ onMounted(() => {
                 v-for="stat in mainStats"
                 :key="stat.key"
                 class="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2.5 text-base transition-colors hover:border-white/10 hover:bg-white/[0.05] sm:text-lg"
+                :class="stat.key === 'score' ? 'relative z-30' : ''"
               >
                 <AppIcon :name="stat.icon" class="h-[1.5em] w-[1.5em] shrink-0 opacity-80" />
                 <span class="truncate text-[17px] font-bold uppercase tracking-wide text-gray-300 sm:text-[18px]">{{ stat.label }}</span>
@@ -941,9 +942,21 @@ onMounted(() => {
                   class="ml-auto whitespace-nowrap text-2xl font-extrabold leading-none tabular-nums sm:text-3xl"
                   :class="stat.color"
                 >{{ stat.display }}</span>
+                <!-- And beside the gold figure itself, the question a reader is owed an answer to: the
+                     multipliers the site's own score is made of, in the same popup the hall of fame carries
+                     at the end of its filter row (`app/components/ScoreLegend.vue`). It stands with the
+                     score rather than with the buttons above, because it is the score it explains - and the
+                     plate it stands in carries a layer of its own (`z-30` above), so the popup opens over
+                     the roster's filter bar rather than behind it. -->
+                <ScoreLegend v-if="stat.key === 'score'" />
               </div>
             </div>
           </div>
+          <!-- And under the figures, the note that explains them: where each one comes from, what belongs to
+               the account and what to the character, how the gold figure is made and who can see any of it
+               (`app/components/ProfileStatsNote.vue`). It stands inside the main's own card, because that is
+               the panel a reader is looking at when the questions arrive. -->
+          <ProfileStatsNote class="mt-5" />
         </section>
 
         <!-- The roster: everybody the filters kept, the main among them, so the grid carries the
@@ -1489,7 +1502,7 @@ onMounted(() => {
       </aside>
     </div>
 
-    <footer class="relative z-20 container mx-auto px-4 pb-2 text-xs">
+    <footer class="relative container mx-auto px-4 pb-2 text-xs">
       <SiteFooter />
     </footer>
 

@@ -285,8 +285,10 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
   const tree = newTree()
   // A shelf read from more than one file (the pets, from `pets.json` and `battlepets.json`) leaves the
   // repeat out: the two files are two halves of one collection, and a pet both list is one tile here.
-  // A shelf read from a single file keeps every row that file lists, duplicates and all, because
-  // SimpleArmory counts its own rows - and a row it lists twice is two of the numbers it reads.
+  // A shelf read from a single file keeps every row that file lists, because the file's tree is what a
+  // shelf is drawn from - a row its groups list twice is drawn twice and counts once, which is what
+  // `server/utils/collections.ts` makes of it. The file marks some of those repeats itself (`dupe`,
+  // `bounty`) where it counts them once, and misses others, so counting is not left to the mark alone.
   const shared = files.length > 1
   const filed = new Set()
   let written = 0

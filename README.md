@@ -188,9 +188,9 @@ a second implementation is a second answer.
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable`, `LeaderboardYou` (the reader's own place in the table) |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `ownCharacter` (whether the character a page is about is the reader's own), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
@@ -282,7 +282,7 @@ Two rules make a shelf read **lower** than the counter in the game — and truer
   live are not drawn at all.
 
 Both are SimpleArmory's own settings, and both are yours as well — the two switches under the shelf's
-bar, with a three-line note beside them that says the same:
+bar, with a note beside them that says the same:
 
 | Switch | What it uncovers |
 | --- | --- |
@@ -291,6 +291,21 @@ bar, with a three-line note beside them that says the same:
 
 With a switch on, a shelf reads exactly what SimpleArmory reads with its own setting on — the numbers
 were matched item by item, not approximated.
+
+### By account or by character
+
+A WoW collection is shared by every character of a Battle.net account, so the account is the truer unit for a
+collector — and a reader who is signed in finds one more choice in that same row: **per character** (where a
+shelf opens, and all a guest ever gets) or **account-wide**, which draws the shelf from the account's own ids.
+
+Those ids are Blizzard's account-wide collections, read with the reader's own token and kept in the site's pool
+(`server/utils/accountPool`), so the choice is honoured for the account that holds the character and for nobody
+else: a link copied out of a signed-in browser opens the character's own shelf for whoever it reaches, and a
+guest is not even offered the switch. The account's shelf is also the one drawn without the faction filter — an
+account plays both sides, so nothing it holds is out of its reach — and it says which reading it gave you: a
+collection the site has never read for that account (Blizzard refuses the account's decorations today) falls back
+to the character's journal and says so in a line under the switches. The four tiles of the collections page
+follow the same choice, with the line under the running total naming whose numbers they are.
 
 ### Why they differ from the game's own counter
 
