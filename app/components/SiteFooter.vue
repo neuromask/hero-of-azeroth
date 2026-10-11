@@ -26,6 +26,17 @@
  * open in the tab the reader is already in, and the credit opens the author's Telegram in a new one,
  * so a reader who follows it keeps the page they were reading. The external link carries the pair of
  * `rel` values the rest of the site's external links carry (`WowheadLink.vue`).
+ *
+ * The line carries two things that are neither a link of that kind nor a name: the privacy policy and the
+ * legal notice, which are pages of the site like any other and are read like ones (`app/pages/privacy.vue`,
+ * `app/pages/legal.vue`) - a reader who wants to know what is collected, or who owns the game, has to be
+ * able to find it without an address bar. They wear the treatment of the links beside them so the line keeps
+ * one voice, and they close the row rather than opening it: the addresses and the credit are what a reader
+ * comes to the foot of a page for, and these two are the ones that are only ever looked for.
+ *
+ * What the line deliberately does not carry is the cookie question. It is asked once and never again, so
+ * there is nothing at the foot of a page to ask it from (`app/components/CookieNotice.vue`), and a link that
+ * brought the question back would be a question the reader has already answered.
  */
 withDefaults(
   defineProps<{
@@ -50,6 +61,14 @@ const LINK = 'text-gray-300 outline-none transition-colors hover:text-wow-goldLi
 
 /** The separators and the year: the line's quiet parts, which the links are read against. */
 const QUIET = 'text-gray-500'
+
+/**
+ * The policy and the legal notice, which are pages of the site rather than questions: the footer is where a
+ * reader looks for them (`app/pages/privacy.vue`, `app/pages/legal.vue`), and this is the only place either
+ * of them is linked from.
+ */
+const { t } = useI18n()
+const localeUrl = useLocaleUrl()
 </script>
 
 <template>
@@ -76,6 +95,10 @@ const QUIET = 'text-gray-500'
       <a :href="REPOSITORY" :class="LINK" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub</a>
       <span :class="QUIET" aria-hidden="true">&middot;</span>
       <span>crafted by <a :href="TELEGRAM" target="_blank" rel="noopener noreferrer" title="Telegram" :class="LINK">neuromask</a></span>
+      <span :class="QUIET" aria-hidden="true">&middot;</span>
+      <NuxtLink :to="localeUrl('/legal')" :class="LINK">{{ t('legalNav') }}</NuxtLink>
+      <span :class="QUIET" aria-hidden="true">&middot;</span>
+      <NuxtLink :to="localeUrl('/privacy')" :class="LINK">{{ t('privacyTitle') }}</NuxtLink>
     </span>
   </div>
 </template>

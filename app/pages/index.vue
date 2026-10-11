@@ -83,7 +83,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative min-h-screen bg-wow-dark flex flex-col items-center justify-center p-4">
+  <div class="relative min-h-screen bg-wow-dark flex flex-col items-center p-4">
     <!-- The community artwork (`app/assets/img/bg-01.webp` through `bg-06.webp`) covers the
          whole page, one picture at a time: the six are stacked on each other and the page
          fades between them, so the change is a cross-fade and never a blank frame. Every
@@ -108,8 +108,14 @@ onBeforeUnmount(() => {
          offered it is the same fields, the same suggestions and the same progress. Its frost is drawn
          by a layer of the card rather than by the card (`hoa-panel-layered`), so the two panes the
          fields drop - the realms, and the characters this browser looked at - are not cut off from the
-         artwork and blur it the way every other menu on the site blurs the page. -->
-    <div class="hoa-panel hoa-panel-layered hoa-panel-float relative z-20 max-w-md w-full p-8">
+         artwork and blur it the way every other menu on the site blurs the page.
+
+         `my-auto` is what keeps the foot of the page where every other page keeps it: the column is as
+         tall as the window, and the margins above and below the card take the room the sign-off underneath
+         does not, so the card stays centred in what is left while the line below it stands on the foot of
+         the window. Centring the whole column instead - which is what this page used to do - put the
+         sign-off somewhere up the window on a tall screen, and no other page of the site does that. -->
+    <div class="hoa-panel hoa-panel-layered hoa-panel-float my-auto relative z-20 w-full max-w-md p-8">
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
           <!-- The wordmark carries the brand, so the heading is the artwork: it is
@@ -148,10 +154,10 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- The sign-off, drawn by the same component every page carries, so the two pages sign off
-         identically. The column above centres the box and the line as one block, so the box keeps its
-         place while the line stays the same. It is asked for the compact form: the card above opens
-         with the wordmark, and this page brings its own `mt-4` rather than the component's 36px, so
-         the gap under the card stays what it always was. -->
+         identically, and standing where every other page stands it: on the foot of the window, with the
+         card centred in the room above it (see the card's own note). It is asked for the compact form: the
+         card above opens with the wordmark, and this page brings its own `mt-4` rather than the component's
+         36px, so the gap under the card stays what it always was. -->
     <footer class="relative z-10 mt-4 text-xs">
       <SiteFooter :standalone="false" />
     </footer>

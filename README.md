@@ -181,11 +181,13 @@ a second implementation is a second answer.
 | --- | --- |
 | `app/pages/index.vue` | The front door and its search |
 | `app/pages/leaderboard.vue` | The hall of fame |
+| `app/pages/privacy.vue` | The privacy policy: what is collected, what a sign-in stores, and what the counters are |
+| `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SiteDocument` (the frame the policy and the legal notice are both cut from), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
@@ -193,6 +195,7 @@ a second implementation is a second answer.
 | `shared/data/reputationsSchema.ts` | The reputation journal's types, the stage message keys, and the synthetic group's name |
 | `shared/data/leaderboardSchema.ts` | The hall of fame's record, query and payload types, shared by the server and the components |
 | `shared/utils/leaderboardScore.ts` | `calculatePlayerScore` and the weights it is made of |
+| `shared/utils/consent.ts` | The cookie key, the Consent Mode defaults and what an answer changes — read by both `nuxt.config.ts` and the banner |
 | `shared/utils/wow-{class,faction,professions}.ts` | The names the game's own UI uses, in both languages: the classes, the factions, and the professions (taken from Blizzard's profession index, so a pill reads as the game's profession pane spells it) |
 
 ---
@@ -399,14 +402,42 @@ switches with no JavaScript at all.
 - Every character page is `og:image`d with its own card (`summary_large_image`), and `/api/card/` is
   deliberately left crawlable in `robots.txt`: a blocked preview path would leave every shared link
   blank.
-- `/sitemap.xml` lists the characters the site has actually rendered (kept in `server/data/`, capped at
+- `/sitemap.xml` lists the pages of the site itself — the front door, the hall of fame, the policy and the
+  legal notice — and the characters the site has actually rendered (kept in `server/data/`, capped at
   50,000 URLs) with `xhtml:link` alternates per language. A browser opening it gets the page the map
   doubles as (`public/sitemap.xsl`): who has been looked up and what they were — level, class, item
   level, rating — plus the breakdowns worth reading (level, class, realm, the last two weeks, the
   biggest collections), every figure counted off the map itself, so the page and the file a crawler
   reads can never disagree.
 - Google Tag Manager is wired in `nuxt.config.ts` — the loader in `<head>`, the `<noscript>` frame right
-  after `<body>`.
+  after `<body>` — and it is wired *behind a consent*: two inline scripts run ahead of the container in the
+  same head, the first setting the defaults of Google's Consent Mode, the second handing over the answer of a
+  reader who has already given one, read straight out of their own storage — the key is `cookie_consent` and
+  the answer is `'true'` or `'false'` (`shared/utils/consent.ts`), with the key absent meaning nobody has been
+  asked yet. `localStorage` on purpose: it is not a cookie, so it rides on no request and is never sent to the
+  server, and the site's one cookie stays the session the sign-in hands out. The order is the point of it: a
+  `default` may only be said once, so a page that lets the container load first has already lost the argument
+  — and a reader who said no is never counted at all rather than corrected a moment later. Both scripts are
+  built from `shared/utils/consent.ts`, so the key the banner writes and the key the page reads cannot drift
+  apart, and the defaults keep `functionality_storage` and `security_storage` granted: those *are* the
+  Battle.net sign-in and the state its OAuth round trip carries, and a website cannot ask permission for the
+  thing that keeps a reader signed in.
+- The question is one line at the foot of the page (`app/components/CookieNotice.vue`, drawn by the root in
+  `app/app.vue`, answered through `app/composables/cookieConsent.ts`): a mark, one sentence that says the
+  sign-in cookie is not optional and the counter is, a link to the policy, and the two answers — it opens
+  with a short step up rather than springing into place, and it is asked exactly once: the answer is
+  remembered in the reader's own storage, so the next visit is a page with no question on it, and there is no
+  way back into it from anywhere on the site. What it points at is the
+  policy page itself (`app/pages/privacy.vue`, `/privacy` and `/ru/privacy`), which is written against what
+  the site actually does rather than copied from a template: the sign-in section names the id, the BattleTag
+  and the roster the account stores and the profile switch that takes them out of the table, and the
+  analytics section says that nothing reaches the reader's device until the question is answered. `denied` is
+  not "nothing runs" but "nothing of yours is touched" — the tags still load and count what Google can count
+  without cookies. Because the site runs no ads, the question really is one switch: the three advertising
+  consent switches keep their default and stay denied. Two things are worth knowing when working on this: the
+  tags in the container have to be the kind that honour consent mode (a Google tag or a GA4 tag does, the
+  retired Universal Analytics one does not), and Wowhead's tooltip widget — which a shelf loads when it is
+  read — is deliberately outside the question, as the figures are not readable without it.
 
 ## 🔐 Accounts & alts
 

@@ -8,6 +8,9 @@ providePageLoading()
   <div>
     <NuxtRouteAnnouncer />
     <NuxtPage />
+    <!-- The cookie question is the root's too: it is asked once, it is answered in the browser rather than on
+         a page, and it stands over whichever page the reader happened to land on. -->
+    <CookieNotice />
     <!-- The wheel is the root's own, so a wait looks the same whichever page is waiting for what. -->
     <PagePreloader />
   </div>

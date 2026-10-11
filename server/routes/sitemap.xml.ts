@@ -1,11 +1,12 @@
 /**
  * The sitemap `robots.txt` points crawlers at.
  *
- * It lists two kinds of page: the front door, which is the only address that exists without
- * having been searched for, and every character the site has rendered. A character page has no
- * registry to be read from - the game has no list of its players - so the site keeps its own,
- * written the moment a lookup finds somebody (see `server/utils/characterIndex.ts`), and hands
- * that list to a crawler here.
+ * It lists three kinds of page: the few that are the site itself - the front door, the hall of fame, the
+ * privacy policy and the legal notice, each of which exists whether or not anybody has been looked up - and
+ * every character the site has rendered, which is the part that grows as the site is used. A character
+ * page has no registry to be read from - the game has no list of its players - so the site keeps its own,
+ * written the moment a lookup finds somebody (see `server/utils/characterIndex.ts`), and hands that list
+ * to a crawler here.
  *
  * A page is listed once, not once per language: the `<loc>` names it in the default language and
  * the languages it also exists in are `xhtml:link` alternates inside that same `<url>`, which is
@@ -86,6 +87,11 @@ export default defineEventHandler(async (event) => {
     // The hall of fame changes whenever a character is looked up - it is the same population the
     // map below spells out - so it carries the day of the freshest lookup rather than one of its own.
     { path: '/leaderboard', lastmod: characters[0]?.updatedAt || '', details: '' },
+    // The policy is the one page that is a document rather than a view of the data: it is edited when it
+    // is edited, which its own date at the top records, so it carries no `lastmod` here. The legal notice
+    // beside it is the same kind of page, and also carries none.
+    { path: '/privacy', lastmod: '', details: '' },
+    { path: '/legal', lastmod: '', details: '' },
     ...characters.map((entry) => ({
       path: `/${regionPath(entry.region)}/${entry.realm}/${encodeURIComponent(entry.name)}`,
       lastmod: entry.updatedAt,

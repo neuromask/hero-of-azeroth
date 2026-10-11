@@ -1,3 +1,5 @@
+import { CONSENT_DEFAULTS, CONSENT_KEY, consentUpdate } from './shared/utils/consent'
+
 /**
  * Public facts about where this copy of the site lives. Both can be overridden from
  * the environment, so a staging copy never advertises the production host in its
@@ -40,6 +42,32 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 })(window,document,'script','dataLayer','${GTM_ID}');`
 
 const GTM_FRAME = `<iframe src="https://www.googletagmanager.com/ns.html?id=${GTM_ID}" height="0" width="0" style="display:none;visibility:hidden" title="Google Tag Manager"></iframe>`
+
+/**
+ * Consent Mode, and it has to be said here rather than in the app.
+ *
+ * Google's Consent Mode is a conversation with the tag manager, and its first word belongs to the page: a
+ * `default` may only be said once per switch and everything after it is ignored, so the container has to
+ * hear "denied" *before* it loads - a browser that has already been read is not un-read by a later answer.
+ * A config is the only place that runs early enough, which is why these two scripts exist at all, and they
+ * are built from the names the reader's own answer is stored and applied under (`shared/utils/consent.ts`)
+ * rather than written out here: a second copy of a storage key is how a banner comes to ask a question that
+ * nobody can then answer.
+ *
+ * The second script is the reader who has already answered: it reads the one key out of their own storage -
+ * `cookie_consent`, holding `'true'` or `'false'` (`shared/utils/consent.ts`) - and tells the tag manager so in
+ * the same tick, still ahead of the container, so a returning reader is never counted in a way that has to be
+ * corrected a moment later, and a reader who said no is never counted at all.
+ */
+const CONSENT_DEFAULT_SCRIPT = `window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag('consent', 'default', ${JSON.stringify(CONSENT_DEFAULTS)});`
+
+const CONSENT_RESTORE_SCRIPT = `try {
+  var answer = localStorage.getItem(${JSON.stringify(CONSENT_KEY)});
+  if (answer === 'true') gtag('consent', 'update', ${JSON.stringify(consentUpdate('true'))});
+  else if (answer === 'false') gtag('consent', 'update', ${JSON.stringify(consentUpdate('false'))});
+} catch (e) {}`
 
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
@@ -130,7 +158,14 @@ export default defineNuxtConfig({
         // while the page itself is still parsing.
         { rel: 'preconnect', href: 'https://www.googletagmanager.com' }
       ],
-      script: [{ innerHTML: GTM_LOADER }],
+      // The order is the whole trick: the defaults, then the answer of a reader who has already given
+      // one, and only then the container - each inline script runs as the parser reaches it, so the tag
+      // manager cannot possibly start a tag before it has been told what it may do.
+      script: [
+        { innerHTML: CONSENT_DEFAULT_SCRIPT },
+        { innerHTML: CONSENT_RESTORE_SCRIPT },
+        { innerHTML: GTM_LOADER }
+      ],
       // GTM wants this immediately after `<body>`; `bodyOpen` is the position
       // Nitro prints before the app markup.
       noscript: [{ tagPosition: 'bodyOpen', innerHTML: GTM_FRAME }]
