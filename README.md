@@ -474,6 +474,13 @@ character up still costs nothing and needs no account.
   minute by `app/composables/presence.ts`). The list is its own endpoint on purpose: the table itself is
   cached for an hour and may be served by a CDN for another, and a dot that old says nothing — so no dot
   ever pulls the hour-long table through the cache again.
+- **Which rows are an account's own.** A row that belongs to an account that signed in — that account's
+  main — wears a halo in Battle.net's blue on its portrait, the same blue the sign-in plate of the header
+  wears, with a tooltip saying what it means: the figures come from the account pool the background sync
+  keeps filling, not from one lookup that happened to see the character (`server/utils/accounts.ts`, and the
+  mark itself is applied where the pool is merged into a row, in `leaderboardStorage`). Unlike the online
+  dot, this fact rides *in* the table's own cached answer: it moves when somebody signs in or names another
+  main, which is a handful of times a day, so an hour of cache costs nothing.
 
 Register the callback in the Battle.net developer portal before the first sign-in:
 `https://heroofazeroth.com/api/auth/callback` (plus a localhost copy for development). It must match

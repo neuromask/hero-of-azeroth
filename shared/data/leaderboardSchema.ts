@@ -102,6 +102,17 @@ export interface LeaderboardPlayer {
    * and a row without one draws a monogram in the class colour instead.
    */
   avatar?: string
+  /**
+   * Whether the row belongs to an account on the site - the character an account signed in with and leads
+   * with - rather than being a character somebody looked up once.
+   *
+   * The table wears it as a blue halo on the portrait: the same blue the Battle.net plate of the header
+   * wears, because it says the same thing (there is an account behind this), and it is the one mark that
+   * tells a reader which figures are the site's own reading of a whole account rather than one glimpse of
+   * one character (see `server/utils/accounts.ts`). Absent on every other row, and on every row of a table
+   * that could not read the database at all.
+   */
+  isAccount?: true
   /** Blizzard's class id, which is the same in every language. */
   classId: number
   /** The side the character plays for. */

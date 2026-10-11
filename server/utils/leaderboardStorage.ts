@@ -36,6 +36,9 @@ import { readCharacterIndex } from './characterIndex'
 // The one rule the table learns from the site's accounts: a character an account kept to itself
 // does not belong here, and only a main does (see `./leaderboardExclusions`).
 import { excludedLeaderboardKeys, exclusionsRevision, leaderboardKey } from './leaderboardExclusions'
+// And who belongs to an account at all, which is the other fact the table learns from that database: the
+// rows whose figures are an account's own rather than one lookup's (see `./accounts`).
+import { accountLeaderboardKeys } from './accounts'
 // The account behind a row, and the figures it holds: what makes the table print the account's
 // numbers for a signed-in player rather than one character's (see `withAccountTotals`).
 import { accountTotalsByCharacterKey, bestFigures } from './accountPool'
@@ -701,7 +704,24 @@ function visiblePlayers(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
     ? players.filter((player) => !excluded.has(leaderboardKey(player.region, player.realm, player.name)))
     : players
 
-  return withAccountTotals(roster)
+  return withAccountMark(withAccountTotals(roster))
+}
+
+/**
+ * Marks the rows that belong to an account on the site, which is what the table's blue halo is read from.
+ *
+ * It stands on the same step the account's own figures are merged into a row, because the two are one fact
+ * asked twice: a row the pool has figures for is a row whose account signed in, and the mark is that fact
+ * said out loud (`./accounts` holds the join). An empty set - a checkout that never opened the database -
+ * hands the rows back untouched rather than copying every one of them for nothing.
+ */
+function withAccountMark(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
+  const accounts = accountLeaderboardKeys()
+  if (!accounts.size) return players
+
+  return players.map((player) =>
+    accounts.has(identity(player)) ? { ...player, isAccount: true as const } : player
+  )
 }
 
 /** Whether a player survives the filters a caller asked for. */

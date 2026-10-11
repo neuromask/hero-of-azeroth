@@ -173,6 +173,7 @@
   "lbSelectedBadge": "Selected",
   "lbOnline": "Online on the site",
   "lbOnlineNow": "{count} online",
+  "lbAccount": "Signed in with Battle.net — the figures come from the account pool, not from a single lookup",
   "lbYouBadge": "You",
   "lbPresets": "Leaderboard presets",
   "lbColumns": "Columns",

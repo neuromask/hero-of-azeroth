@@ -342,8 +342,21 @@ function open(player: LeaderboardPlayer) {
               <div class="flex items-center gap-3">
                 <!-- The portrait, and the online dot hung beside it: the dot rides on this wrapper rather
                      than on the portrait itself, because the portrait's own box clips its picture to a
-                     circle and would clip the mark with it. -->
-                <span class="relative shrink-0">
+                     circle and would clip the mark with it.
+
+                     The wrapper is also where the account mark is worn: a row whose character is the main
+                     of an account that signed in wears a halo in Battle.net's own blue - the blue the
+                     sign-in plate of the header wears, because it says the same thing, that there is an
+                     account behind this - and the halo's tooltip says what that means for the figures. -->
+                <span
+                  class="relative shrink-0 rounded-full"
+                  :class="
+                    player.isAccount
+                      ? 'ring-2 ring-[#00aeff]/80 shadow-[0_0_12px_rgba(0,174,255,0.35)]'
+                      : ''
+                  "
+                  :title="player.isAccount ? t('lbAccount') : undefined"
+                >
                   <span
                     class="relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border"
                     :style="{

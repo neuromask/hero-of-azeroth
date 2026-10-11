@@ -11,10 +11,10 @@
  * the main being the only character of an account the table would ever have shown. The two are one
  * query because they are one answer: who the table must not draw.
  *
- * It reads only the tables an account owns, and it is deliberately the *only* place the
- * leaderboard reaches into SQLite: the table's own storage (`./leaderboardStorage`) is otherwise a
- * JSON file, and keeping the dependency this small is what lets that storage be swapped later
- * without touching this rule.
+ * It reads only the tables an account owns, and it is one of deliberately only *two* places the leaderboard
+ * reaches into SQLite: this module and `./accounts`, which answers who belongs to an account at all. The
+ * table's own storage (`./leaderboardStorage`) is otherwise a JSON file, and keeping the dependency this
+ * small is what lets that storage be swapped later without touching these rules.
  *
  * A process that cannot read the database - a checkout that never opened it - simply offers no
  * exclusions, which is the conservative answer: the table shows what it always showed.
