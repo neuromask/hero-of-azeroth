@@ -183,6 +183,8 @@
   "lbYouOf": "из {total}",
   "lbYouReveal": "Найти в таблице",
   "lbSelectedBadge": "Выбран",
+  "lbOnline": "Онлайн на сайте",
+  "lbOnlineNow": "{count} онлайн",
   "lbYouBadge": "Вы",
   "lbPresets": "Пресеты рейтинга",
   "lbColumns": "Колонки",

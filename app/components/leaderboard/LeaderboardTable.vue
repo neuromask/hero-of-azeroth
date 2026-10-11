@@ -49,6 +49,13 @@ const props = defineProps<{
    * absent from a page that does not hold the account's main.
    */
   owner?: string
+  /**
+   * The mains whose account is on the site right now, keyed the way `searchHistoryKey` writes a row
+   * (`app/composables/presence.ts`). A row whose character is in it wears the green dot on its portrait;
+   * an absent set - a page that never asked, a request that failed - draws no dot at all, which is the
+   * quiet answer to a question nobody could answer.
+   */
+  online?: Set<string>
 }>()
 
 const emit = defineEmits<{ (event: 'update:sort', value: LeaderboardSort): void }>()
@@ -106,6 +113,15 @@ function isSelected(player: LeaderboardPlayer): boolean {
  */
 function isOwner(player: LeaderboardPlayer): boolean {
   return !!props.owner && props.owner === searchHistoryKey(player)
+}
+
+/**
+ * Whether the account behind a row is on the site right now, which is what the dot on that row's portrait
+ * says. The set it asks is the presence list (`app/composables/presence.ts`), keyed exactly as
+ * `searchHistoryKey` writes a row - so the two are the same character rather than two spellings of one.
+ */
+function isOnline(player: LeaderboardPlayer): boolean {
+  return !!props.online?.has(searchHistoryKey(player))
 }
 
 /**
@@ -324,24 +340,41 @@ function open(player: LeaderboardPlayer) {
             <!-- Who the row is: portrait, name in the class colour, side, realm, class and level. -->
             <td class="px-3 py-2.5 align-middle">
               <div class="flex items-center gap-3">
-                <span
-                  class="relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border"
-                  :style="{
-                    borderColor: `${classHex(player.classId)}66`,
-                    backgroundColor: `${classHex(player.classId)}1f`
-                  }"
-                >
-                  <span class="text-sm font-extrabold" :style="{ color: classHex(player.classId) }">
-                    {{ initial(player) }}
+                <!-- The portrait, and the online dot hung beside it: the dot rides on this wrapper rather
+                     than on the portrait itself, because the portrait's own box clips its picture to a
+                     circle and would clip the mark with it. -->
+                <span class="relative shrink-0">
+                  <span
+                    class="relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border"
+                    :style="{
+                      borderColor: `${classHex(player.classId)}66`,
+                      backgroundColor: `${classHex(player.classId)}1f`
+                    }"
+                  >
+                    <span class="text-sm font-extrabold" :style="{ color: classHex(player.classId) }">
+                      {{ initial(player) }}
+                    </span>
+                    <img
+                      v-if="player.avatar && !missing[searchHistoryKey(player)]"
+                      :src="player.avatar"
+                      :alt="player.displayName"
+                      loading="lazy"
+                      decoding="async"
+                      class="absolute inset-0 h-full w-full object-cover"
+                      @error="missing[searchHistoryKey(player)] = true"
+                    />
                   </span>
-                  <img
-                    v-if="player.avatar && !missing[searchHistoryKey(player)]"
-                    :src="player.avatar"
-                    :alt="player.displayName"
-                    loading="lazy"
-                    decoding="async"
-                    class="absolute inset-0 h-full w-full object-cover"
-                    @error="missing[searchHistoryKey(player)] = true"
+
+                  <!-- The mark itself: the account behind this row is on the site right now. It is a fact
+                       about the reader of the site rather than about the character - which is why it is read
+                       from the presence list and not from the record the table is drawn from - and it wears
+                       a ring in the page's own dark so it reads on any portrait, bright or dark. -->
+                  <span
+                    v-if="isOnline(player)"
+                    class="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-wow-dark bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.55)]"
+                    role="img"
+                    :title="t('lbOnline')"
+                    :aria-label="t('lbOnline')"
                   />
                 </span>
 

@@ -46,6 +46,16 @@ const {
   setPage
 } = useLeaderboardView()
 
+/**
+ * Who is on the site, which is what the dots on the portraits are drawn from.
+ *
+ * The list is fetched with the page - the first answer the server sends already carries it, so the dots
+ * are in the HTML - and re-read every minute while the tab is visible (`app/composables/presence.ts`).
+ * Only the hall of fame draws anything with it, which is why the read lives here rather than in the
+ * plugin: the beat is everybody's, and the list is this page's.
+ */
+const { online, count: onlineCount } = await usePresence()
+
 usePageSeo({
   title: () => t('lbSeoTitle'),
   description: () => t('lbSeoDescription')
@@ -252,7 +262,7 @@ onMounted(loadHistory)
     </SiteHeader>
 
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
-      <LeaderboardStats :stats="stats" :pending="pending" />
+      <LeaderboardStats :stats="stats" :pending="pending" :online="onlineCount" />
 
       <LeaderboardFilters
         class="mt-3"
@@ -283,6 +293,7 @@ onMounted(loadHistory)
         :pending="pending"
         :highlight="meKey"
         :owner="ownerKey"
+        :online="online"
         @update:sort="setSort"
       />
 

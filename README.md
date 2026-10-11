@@ -167,6 +167,8 @@ a second implementation is a second answer.
 | `/api/collections/<region>/<realm>/<name>?kind=mounts` | One shelf, laid over the character's ids — `kind` is `mounts`, `pets`, `toys` or `decors`, and `?unobtainable=1` / `?upcoming=1` are the two switches; without `kind` it answers the summary |
 | `/api/achievements/<region>/<realm>/<name>` | The achievements summary, laid over the character's log (omit `?category=` for the summary, add it for one category's shelf) |
 | `/api/reputations/<region>/<realm>/<name>` | The character's own reputation journal, laid over the shipped faction tree — this character only, never the account's union (see below) |
+| `/api/user/heartbeat` (POST) | The presence beat of a signed-in reader: one a minute from an open, visible tab, which is what puts that account's main on the hall of fame's online dots |
+| `/api/leaderboard/presence` | Who is on the site right now, as the keys of the mains whose account has beaten inside five minutes |
 | `/api/activity/<region>/<realm>/<name>` | The recent-achievement feed |
 | `/api/card/<region>/<realm>/<name>?locale=ru_RU` | The shareable JPEG, 1200×630 |
 | `/api/realms` | The realm list the search box completes from |
@@ -183,7 +185,7 @@ a second implementation is a second answer.
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
 | `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable` |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the two switches), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
@@ -464,6 +466,14 @@ character up still costs nothing and needs no account.
   also leave the table altogether: the profile's **Hall of Fame** switch (`/api/profile/fame`,
   `users.hide_from_fame`) keeps its main out of it, both from what the endpoint serves and from what
   a later lookup writes.
+- **Who is on the site.** A signed-in browser beats once a minute while its tab is visible
+  (`POST /api/user/heartbeat`, started once for the whole site by `app/plugins/presence.client.ts`), which
+  stamps `users.last_seen_at`; an account stamped inside five minutes is read as being here
+  (`server/utils/presence.ts`). The hall of fame wears it as a green dot on the portrait of each main and
+  prints the count beside the population on the first plate (`GET /api/leaderboard/presence`, re-read every
+  minute by `app/composables/presence.ts`). The list is its own endpoint on purpose: the table itself is
+  cached for an hour and may be served by a CDN for another, and a dot that old says nothing — so no dot
+  ever pulls the hour-long table through the cache again.
 
 Register the callback in the Battle.net developer portal before the first sign-in:
 `https://heroofazeroth.com/api/auth/callback` (plus a localhost copy for development). It must match

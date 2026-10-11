@@ -249,3 +249,22 @@ export interface LeaderboardQuery {
   page?: number
   perPage?: number
 }
+
+/**
+ * Who is on the site right now, which is what the hall of fame's online dots are drawn from
+ * (`GET /api/leaderboard/presence`, read by `app/composables/presence.ts`).
+ *
+ * `keys` are the characters whose account has beaten inside `window` seconds, written the way the table
+ * keys a row - `region:realm:name`, lowercased, which is the same string `searchHistoryKey` writes in the
+ * browser - so a row and a key can be compared at all. It is the *mains* that are answered: the one
+ * character per account the table draws.
+ *
+ * This rides on its own endpoint rather than on the table's own answer on purpose: that answer is cached
+ * for an hour and may be served by a CDN for another, and a dot that old says nothing.
+ */
+export interface LeaderboardPresence {
+  /** How long a beat is good for, in seconds: what the dot's freshness means. */
+  window: number
+  /** The online mains, as keys of the characters the table would draw. */
+  keys: string[]
+}

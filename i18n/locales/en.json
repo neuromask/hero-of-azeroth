@@ -171,6 +171,8 @@
   "lbYouOf": "of {total}",
   "lbYouReveal": "Find in the table",
   "lbSelectedBadge": "Selected",
+  "lbOnline": "Online on the site",
+  "lbOnlineNow": "{count} online",
   "lbYouBadge": "You",
   "lbPresets": "Leaderboard presets",
   "lbColumns": "Columns",

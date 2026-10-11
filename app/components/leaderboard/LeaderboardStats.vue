@@ -28,6 +28,11 @@ const props = defineProps<{
   stats: LeaderboardStats | null
   /** True while a fresh answer is on its way, which dims the row rather than emptying it. */
   pending?: boolean
+  /**
+   * How many mains are on the site right now, printed beside the population (`app/composables/presence.ts`).
+   * Absent while the list is unknown or empty, which leaves the plate reading as it always did.
+   */
+  online?: number
 }>()
 
 const { locale, t } = useI18n()
@@ -60,6 +65,11 @@ interface Card {
   dotHex?: string
   label: string
   value: string
+  /**
+   * A second figure printed beside the first, in the presence green: who is on the site right now. Empty
+   * on every plate but the population's, which is the one it belongs to.
+   */
+  aside?: string
   /** The class the figure is set in, so a rating keeps its own colour. */
   valueClass?: string
   hint: string
@@ -85,6 +95,7 @@ const cards = computed<Card[]>(() => {
       icon: 'user',
       label: t('lbStatPlayers'),
       value: stats ? formatNumber(stats.players) : DASH,
+      aside: stats && props.online ? t('lbOnlineNow', { count: formatNumber(props.online) }) : '',
       hint: stats
         ? t('lbStatPlayersHint', { realms: formatNumber(stats.realms), classes: formatNumber(stats.classes) })
         : DASH
@@ -160,11 +171,23 @@ const cards = computed<Card[]>(() => {
         <span class="truncate">{{ card.label }}</span>
       </p>
 
-      <p
-        class="mt-2 truncate text-2xl font-extrabold leading-tight sm:text-3xl"
-        :class="card.valueClass || 'text-white'"
-        :title="card.value"
-      >{{ card.value }}</p>
+      <p class="mt-2 flex items-baseline gap-2">
+        <span
+          class="truncate text-2xl font-extrabold leading-tight sm:text-3xl"
+          :class="card.valueClass || 'text-white'"
+          :title="card.value"
+        >{{ card.value }}</span>
+
+        <!-- Who is on the site right now, beside the population the plate counts: the same green the
+             table's own dots wear, so the plate and the rows read as one fact rather than two. -->
+        <span
+          v-if="card.aside"
+          class="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-emerald-400"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
+          {{ card.aside }}
+        </span>
+      </p>
 
       <p
         class="mt-1 truncate text-xs text-gray-400"

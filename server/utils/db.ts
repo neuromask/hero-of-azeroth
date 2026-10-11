@@ -90,7 +90,16 @@ CREATE TABLE IF NOT EXISTS users (
    */
   hide_from_fame INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
-  last_login_at INTEGER NOT NULL
+  last_login_at INTEGER NOT NULL,
+  /**
+   * When the account was last seen on the site, to the second, written by the presence heartbeat
+   * (see server/utils/presence.ts - named without backticks on purpose: this whole schema is one template
+   * literal, and a backtick in a comment inside it ends it). It is what the hall of fame's online dot is
+   * read from, and it is the *account's* moment rather than a character's: characters.last_seen_at below is
+   * when a character was last read into the table, which is a different fact altogether. An account that has
+   * never beaten - or one written before this column existed - leaves it null, which is simply offline.
+   */
+  last_seen_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -174,7 +183,9 @@ const ADDED_COLUMNS = [
   // The moment a character's figures were read, which is not the day its snapshot is keyed to.
   'ALTER TABLE characters ADD COLUMN stats_read_at INTEGER',
   // The account's choice not to appear in the public table at all.
-  'ALTER TABLE users ADD COLUMN hide_from_fame INTEGER NOT NULL DEFAULT 0'
+  'ALTER TABLE users ADD COLUMN hide_from_fame INTEGER NOT NULL DEFAULT 0',
+  // When the account was last seen on the site, which is what the hall of fame's online dot is read from.
+  'ALTER TABLE users ADD COLUMN last_seen_at INTEGER'
 ]
 
 /**
