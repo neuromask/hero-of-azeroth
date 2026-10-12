@@ -491,7 +491,12 @@ function remoteNames(target, netrc, dir) {
 
   if (listing.status !== 0) return null
 
-  return listing.stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+  // `.` and `..` are the directory itself and its parent: servers list them, nothing can delete them, and
+  // they are not files anyone means to prune or verify.
+  return listing.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((name) => name && name !== '.' && name !== '..')
 }
 
 /**
@@ -566,13 +571,25 @@ function localTree(files) {
  * Asks the server to delete names in a remote directory. Best effort on purpose:
  * a batch that trips over one name still deletes the others, so what was really
  * removed is established by reading the directory back, not from this call.
+ *
+ * `DELE` is sent *before* the transfer rather than after it (`-Q`, not `+Q`), and with the whole path. A
+ * post-transfer quote is not something curl treats as a failure: this host answered a refusal to every one
+ * of them - a burst of commands sent straight after sixty megabytes of uploads is exactly what it throttles -
+ * and the run was reported as a directory full of files "left on the server" with nothing to say why. Sent
+ * first, a refusal is an error curl exits on, which is what makes a retry and a reason possible.
  */
 function deleteRemote(target, netrc, dir, names) {
   const args = ftpArgs(target, netrc)
-  for (const name of names) args.push('--quote', `+DELE ${name}`)
-  args.push('--list-only', ftpUrl(target, dir))
 
-  curl(args, { allowFailure: true })
+  for (const name of names) {
+    const file = `${dir}${name}`
+    const folder = path.posix.dirname(file)
+    const key = folder === '.' ? '' : `${folder}/`
+    args.push('--quote', `DELE ${target.root}${key}${path.posix.basename(file)}`)
+  }
+
+  // No listing in this call: it is here to delete, and the directory is read back once by the caller.
+  return curlWithRetry(args)
 }
 
 /**
@@ -585,6 +602,7 @@ function deleteRemote(target, netrc, dir, names) {
 function prune(target, netrc, directories) {
   let removed = 0
   const skipped = []
+  let reason = null
 
   for (const [dir, names] of directories) {
     if (!dir.startsWith('public/') && !dir.startsWith('server/chunks/')) continue
@@ -602,7 +620,8 @@ function prune(target, netrc, directories) {
     if (!stale.length) continue
 
     for (let index = 0; index < stale.length; index += FTP_BATCH) {
-      deleteRemote(target, netrc, dir, stale.slice(index, index + FTP_BATCH))
+      const result = deleteRemote(target, netrc, dir, stale.slice(index, index + FTP_BATCH))
+      if (!reason && result.status !== 0) reason = (result.stderr || '').trim().split('\n')[0]
     }
 
     // The directory is read back because only the server can say what it let go of.
@@ -613,7 +632,7 @@ function prune(target, netrc, directories) {
     for (const name of kept) skipped.push(`${dir}${name}`)
   }
 
-  return { removed, skipped }
+  return { removed, skipped, reason }
 }
 
 /**
@@ -893,9 +912,17 @@ if (SKIP_FTP) {
     )
 
     if (PRUNE) {
-      const { removed, skipped } = prune(target, netrc, directories)
+      const { removed, skipped, reason } = prune(target, netrc, directories)
       log(`   pruned ${removed} stale file(s)`)
-      for (const entry of skipped) log(`   !! left on the server: ${entry} (a directory, or no permission)`)
+
+      // A host that refuses a burst of deletions leaves files behind, and that is disk space rather than a
+      // broken deploy: one line saying how many and why, rather than a hundred saying where.
+      if (skipped.length) {
+        log(`   !! ${skipped.length} stale file(s) the host would not let go of${reason ? ` (${reason})` : ''}`)
+        for (const entry of skipped.slice(0, 5)) log(`      ${entry}`)
+        if (skipped.length > 5) log(`      ... and ${skipped.length - 5} more`)
+        log('           the next deploy tries again')
+      }
     }
 
     if (VERIFY) {
