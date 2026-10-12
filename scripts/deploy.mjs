@@ -22,7 +22,9 @@
  *      printed beside it is only true when something moved. `--env-force` sends
  *      it regardless.
  *   5. Before any of that, the data the site has written on the host is read back
- *      into `backups/<date>/server-data/`: the SQLite database, the character
+ *      into `backups/<date>/`: the files as `server-data/`, and one
+ *      `server-data.zip` holding that folder and a `backup.json` that says where
+ *      it came from and what is inside. It is the SQLite database, the character
  *      index the sitemap is built from and the hall of fame's table (the one
  *      directory `server/utils/appPaths` names). None of them is part of
  *      `.output` and nothing here deletes them - which is exactly why a copy is
@@ -499,15 +501,54 @@ function remoteNames(target, netrc, dir) {
     .filter((name) => name && name !== '.' && name !== '..')
 }
 
+/** `4.5 MB`, `812 KB`, `97 B`: enough to judge what a copy weighs. */
+function sizeOf(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+
+  return `${bytes} B`
+}
+
 /**
- * Reads the site's own data directory back into `backups/<date>/server-data/` on this machine.
+ * Packs a copy into one archive beside it, and says how many entries landed in it.
+ *
+ * The folder is what a restore copies back, and the archive is what is worth keeping: one file per deploy
+ * rather than six - the database's write-ahead log alone is four megabytes - and nothing to lose in a
+ * directory listing. `tar` is used because Windows has shipped it since the same release as `curl`, and `-a`
+ * picks the zip format from the name. A machine that cannot pack is not a reason to fail a deploy: the
+ * folder is already there, and the caller reports the archive it did not get.
+ */
+function packBackup(directory) {
+  const archive = `${directory}.zip`
+  const folder = path.dirname(directory)
+  const name = path.basename(directory)
+
+  const packed = spawnSync('tar', ['-a', '-c', '-f', archive, '-C', folder, name], { cwd: ROOT, encoding: 'utf8' })
+  if (packed.error || packed.status !== 0 || !fs.existsSync(archive)) return null
+
+  // Read back, so the report is about an archive that really holds the files rather than a file that exists.
+  const listed = spawnSync('tar', ['-t', '-f', archive], { cwd: ROOT, encoding: 'utf8' })
+  const entries = (listed.stdout || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  return { archive, bytes: fs.statSync(archive).size, entries: entries.length }
+}
+
+/**
+ * Reads the site's own data directory back into `backups/<stamp>/` on this machine.
  *
  * It is the one thing this deploy does not own and could not rebuild: the SQLite database (accounts, their
  * characters and the snapshots), the character index the sitemap is built from, and the hall of fame's
  * table - all three written by the running site into the directory `server/utils/appPaths` names. Nothing
  * here deletes or replaces them; the copy is for the day something else does, when the alternative is a
- * front page that has to be filled again from scratch. A host that has never run the site has no directory
- * there, which is not a problem worth reporting.
+ * front page that has to be filled again from scratch.
+ *
+ * The copy is kept two ways, because they answer different needs: `server-data/` is what a restore copies
+ * back file by file, and `server-data.zip` is one archive holding that folder and a `backup.json` saying
+ * where it came from, which commit it was taken beside, and what is inside. A host that has never run the
+ * site has no directory there, which is not a problem worth reporting.
  */
 function backupRemoteData(target, netrc) {
   const listed = remoteNames(target, netrc, DATA_LISTING)
@@ -515,7 +556,8 @@ function backupRemoteData(target, netrc) {
   if (!names.length) return { nothing: true }
 
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  const directory = path.join(BACKUPS, stamp, 'server-data')
+  const folder = path.join(BACKUPS, stamp)
+  const directory = path.join(folder, 'server-data')
   fs.mkdirSync(directory, { recursive: true })
 
   const kept = []
@@ -533,14 +575,40 @@ function backupRemoteData(target, netrc) {
     ])
 
     if (result.status === 0 && fs.existsSync(local) && fs.statSync(local).size > 0) {
-      kept.push(name)
+      kept.push({ name, bytes: fs.statSync(local).size })
     } else {
       failed.push(name)
       fs.rmSync(local, { force: true })
     }
   }
 
-  return { relative: path.relative(ROOT, directory).split(path.sep).join('/'), kept, failed }
+  const bytes = kept.reduce((total, file) => total + file.bytes, 0)
+
+  fs.writeFileSync(
+    path.join(folder, 'backup.json'),
+    `${JSON.stringify(
+      {
+        takenAt: new Date().toISOString(),
+        from: `${target.server}${target.root}${DATA_DIR}`,
+        commit: sourceSha,
+        files: kept,
+        bytes
+      },
+      null,
+      2
+    )}\n`
+  )
+
+  const packed = packBackup(directory)
+  const relative = (absolute) => path.relative(ROOT, absolute).split(path.sep).join('/')
+
+  return {
+    relative: relative(folder),
+    kept,
+    failed,
+    bytes,
+    archive: packed ? { relative: relative(packed.archive), bytes: packed.bytes, entries: packed.entries } : null
+  }
 }
 
 /**
@@ -834,7 +902,7 @@ if (SKIP_FTP) {
     }
   if (PRUNE) log('   --prune: stale files below public/ and server/chunks/ would be deleted')
   if (VERIFY) log('   --verify: every directory would be read back afterwards')
-  if (!SKIP_BACKUP) log(`   would read ${DATA_DIR} back into backups/ first, so the site's own data can be put back`)
+  if (!SKIP_BACKUP) log(`   would read ${DATA_DIR} back into backups/ first, and pack it into server-data.zip`)
 } else {
   step('Uploading .output to the FTP target')
 
@@ -875,7 +943,13 @@ if (SKIP_FTP) {
         // that every deploy says what it saw either way.
         log(`   ${DATA_DIR} <- nothing to read back there yet`)
       } else {
-        log(`   ${DATA_DIR} <- ${kept.kept.length} file(s) kept in ${kept.relative}`)
+        log(`   ${DATA_DIR} <- ${kept.kept.length} file(s), ${sizeOf(kept.bytes)} kept in ${kept.relative}`)
+
+        if (kept.archive) {
+          log(`   ${path.basename(kept.archive.relative)} <- one archive, ${sizeOf(kept.archive.bytes)}, ${kept.archive.entries} entries`)
+        } else {
+          log('   !! could not pack the copy into an archive; the folder beside it is what to keep')
+        }
 
         for (const name of kept.failed) {
           log(`   !! could not read ${DATA_DIR}/${name} back`)

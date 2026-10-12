@@ -661,12 +661,16 @@ is how a site's own front page comes up empty while its data sits untouched in t
 process used. `NUXT_DATA_DIR` overrides the location outright, and the process prints the directory it
 settled on while it starts (`[data] ...`, beside the `[env]` line).
 
-Every `npm run deploy` reads that directory back into `backups/<date>/server-data/` before it uploads
-anything (`--no-backup` skips it). None of it is part of `.output` and nothing in the deploy deletes it —
-which is why a copy is worth taking: it is the only thing in this repository's world that a build cannot
-produce again. To put a copy back, **stop the site first**: the table is held in memory for as long as the
-process runs (`server/utils/leaderboardStorage`), so the file has to be copied over while nothing is
-running, and the site started again afterwards to read it.
+Every `npm run deploy` reads that directory back into `backups/<date>/` before it uploads anything: the files
+under `server-data/`, and one `server-data.zip` holding that folder plus a `backup.json` saying where it came
+from, which commit it was taken beside and what is inside (`--no-backup` skips it). None of it is part of
+`.output` and nothing in the deploy deletes it — which is why a copy is worth taking: it is the only thing in
+this repository's world that a build cannot produce again.
+
+To put a copy back, **stop the site first**: the table is held in memory for as long as the process runs
+(`server/utils/leaderboardStorage`), so the files have to be copied over while nothing is running, and the
+site started again afterwards to read them. Unpack the archive with `tar -x -f backups/<date>/server-data.zip`
+it holds the same `server-data/` folder the rest of the copy is in.
 
 ### Deploy options
 
