@@ -84,6 +84,9 @@ describe('the activity feed', () => {
 describe('the leaderboard contract', () => {
   it('knows an overall order and the item-level cap', () => {
     expect(LEADERBOARD_SORTS).toContain('total')
+    // The honorable kills stand in the table's own column after the rating, so they are a figure a reader can
+    // order by as well - and the endpoint checks a query string against this very list.
+    expect(LEADERBOARD_SORTS).toContain('kills')
     expect(isAtItemLevelCap(CURRENT_MAX_LEVEL)).toBe(true)
     expect(isAtItemLevelCap(CURRENT_MAX_LEVEL - 1)).toBe(false)
     expect(isAtItemLevelCap(undefined)).toBe(false)
@@ -97,5 +100,10 @@ describe('the leaderboard contract', () => {
     expect(leaderboardColumnsFromQuery('nonsense')).toBeNull()
     expect(leaderboardColumnsFromQuery('')).toBeNull()
     expect(leaderboardColumnsFromQuery(undefined)).toBeNull()
+  })
+
+  it('carries the honorable kills column in an address, like every other figure', () => {
+    expect(leaderboardColumnsFromQuery('mplus,kills')).toEqual(['mplus', 'kills'])
+    expect(leaderboardColumnsQuery(['kills'])).toEqual({ columns: 'kills' })
   })
 })

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <g id="Layer_2" data-name="Layer 2">
+    <g class="cls-1">
+      <!-- Two swords crossed in saltire, each one a solid silhouette: a broad tapering blade, a cross guard
+           with rounded ends, a grip and a round pommel. The shape is built upright and rotated about the centre
+           of the box, which is where the two blades meet; the rotation is what makes them cross, and it is
+           mirrored for the second sword. Every part is cut fat on purpose - the rest of the set is solid
+           silhouettes, and a thin one reads as a different family beside them. -->
+      <g transform="rotate(45 12 12)">
+        <path d="M12 -4 L15.2 2 L15.2 12.4 L8.8 12.4 L8.8 2 Z" />
+        <rect x="6.6" y="12.4" width="10.8" height="3.2" rx="1.6" />
+        <rect x="10.2" y="15.6" width="3.6" height="4" rx="1.2" />
+        <circle cx="12" cy="20.9" r="2.4" />
+      </g>
+      <g transform="rotate(-45 12 12)">
+        <path d="M12 -4 L15.2 2 L15.2 12.4 L8.8 12.4 L8.8 2 Z" />
+        <rect x="6.6" y="12.4" width="10.8" height="3.2" rx="1.6" />
+        <rect x="10.2" y="15.6" width="3.6" height="4" rx="1.2" />
+        <circle cx="12" cy="20.9" r="2.4" />
+      </g>
+    </g>
+  </g>
+</svg>

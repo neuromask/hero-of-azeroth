@@ -56,6 +56,14 @@ export interface IndexedCharacter {
   decor?: number
   reputations?: number
   achievements?: number
+  /**
+   * The honorable kills the profile reported, which is the figure the hall of fame's own column prints.
+   *
+   * It is kept here for the reason every other figure is: the table is filled from this index when it has no
+   * file of its own (`backfillFromIndex` in `./leaderboardStorage`), so a figure the table draws and the index
+   * forgets is a column that comes up empty on every row the backfill writes.
+   */
+  honorableKills?: number
 }
 
 /**
@@ -136,6 +144,7 @@ export function rememberCharacter(character: {
   decor?: number
   reputations?: number
   achievements?: number
+  honorableKills?: number
 }): Promise<void> {
   writes = writes.then(async () => {
     try {
@@ -168,7 +177,8 @@ export function rememberCharacter(character: {
         toys: character.toys ?? previous?.toys,
         decor: character.decor ?? previous?.decor,
         reputations: character.reputations ?? previous?.reputations,
-        achievements: character.achievements ?? previous?.achievements
+        achievements: character.achievements ?? previous?.achievements,
+        honorableKills: character.honorableKills ?? previous?.honorableKills
       }
 
       const rest = index.filter((entry) => identity(entry) !== key)

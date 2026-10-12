@@ -95,12 +95,22 @@ export function fileDailyReading(characterId: number, profile: CharacterData, da
     pets: profile.stats.pets.count,
     toys: profile.stats.toys.count,
     decor: profile.stats.decor.count,
-    reputations: profile.stats.reputations?.count ?? null
+    reputations: profile.stats.reputations?.count ?? null,
+    // And the figures beside the collections. Each is the character's own reading where the profile carries
+    // one, and `null` where it does not - the appearance sources, which a page read does not fetch - which is
+    // what keeps a figure read by the account sync from being blanked by a page that never asked for it.
+    titles: profile.stats.titles?.count ?? null,
+    quests: profile.stats.quests?.count ?? null,
+    recipes: profile.stats.recipes?.count ?? null,
+    transmogs: profile.stats.transmogs?.count ?? null,
+    honorable_kills: profile.stats.honorableKills?.count ?? null,
+    honor_level: profile.stats.honorLevel?.count ?? null
   }
 
   const stored = db
     .prepare(
-      `SELECT ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations
+      `SELECT ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+              titles, quests, recipes, transmogs, honorable_kills, honor_level
          FROM snapshots WHERE character_id = ? AND taken_at = ?`
     )
     .get(characterId, dayStart) as Record<string, number | null> | undefined
@@ -116,10 +126,10 @@ export function fileDailyReading(characterId: number, profile: CharacterData, da
   }
 
   db.prepare('DELETE FROM snapshots WHERE character_id = ? AND taken_at = ?').run(characterId, dayStart)
-  db.prepare(
-    `INSERT INTO snapshots (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+
+  // Sixteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list - the shape
+  // the account sync's own bulk inserts use.
+  const values = [
     characterId,
     dayStart,
     next.ilvl,
@@ -129,6 +139,19 @@ export function fileDailyReading(characterId: number, profile: CharacterData, da
     next.pets,
     next.toys,
     next.decor,
-    next.reputations
-  )
+    next.reputations,
+    next.titles,
+    next.quests,
+    next.recipes,
+    next.transmogs,
+    next.honorable_kills,
+    next.honor_level
+  ]
+
+  db.prepare(
+    `INSERT INTO snapshots
+       (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+        titles, quests, recipes, transmogs, honorable_kills, honor_level)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(...(values as any[]))
 }

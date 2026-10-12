@@ -63,7 +63,11 @@ export async function feedProfile({ region, realm, name, profile, reading }: Pro
     toys: profile.stats.toys.count,
     decor: profile.stats.decor.count,
     reputations: profile.stats.reputations.count,
-    achievements: profile.ap
+    achievements: profile.ap,
+    // The one figure of the list that is not a collection of items, and the one an account answers for by
+    // adding its characters up rather than by taking the best of them (`server/utils/accountPool`): the
+    // reading lives in the profile's own stats, beside the honor level.
+    honorableKills: profile.stats.honorableKills.count
   }
 
   // The sitemap's index: the page exists, and what the character was when it was seen.

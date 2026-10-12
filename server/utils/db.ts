@@ -162,7 +162,20 @@ CREATE TABLE IF NOT EXISTS snapshots (
   pets INTEGER,
   toys INTEGER,
   decor INTEGER,
-  reputations INTEGER
+  reputations INTEGER,
+  -- The figures that are not collections of items, read beside them from the same profile (server/utils/blizzard):
+  -- the titles and quests a character has earned, the recipes its professions know, the appearance sources its
+  -- account has unlocked, and the two figures of its player versus player side.
+  --
+  -- They are stored as counts, which is what a tile and a row print. The ids the account's unions are taken from
+  -- do not live here: they are read by the account sync and folded straight into account_pool
+  -- (server/utils/accountSync), which is the one place a union of ids is kept.
+  titles INTEGER,
+  quests INTEGER,
+  recipes INTEGER,
+  transmogs INTEGER,
+  honorable_kills INTEGER,
+  honor_level INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_character ON snapshots(character_id, taken_at);
 
@@ -192,7 +205,15 @@ const ADDED_COLUMNS = [
   // The account's choice not to appear in the public table at all.
   'ALTER TABLE users ADD COLUMN hide_from_fame INTEGER NOT NULL DEFAULT 0',
   // When the account was last seen on the site, which is what the hall of fame's online dot is read from.
-  'ALTER TABLE users ADD COLUMN last_seen_at INTEGER'
+  'ALTER TABLE users ADD COLUMN last_seen_at INTEGER',
+  // The figures that are not collections of items, beside the six the rating weighs (see the note on the
+  // `snapshots` table).
+  'ALTER TABLE snapshots ADD COLUMN titles INTEGER',
+  'ALTER TABLE snapshots ADD COLUMN quests INTEGER',
+  'ALTER TABLE snapshots ADD COLUMN recipes INTEGER',
+  'ALTER TABLE snapshots ADD COLUMN transmogs INTEGER',
+  'ALTER TABLE snapshots ADD COLUMN honorable_kills INTEGER',
+  'ALTER TABLE snapshots ADD COLUMN honor_level INTEGER'
 ]
 
 /**

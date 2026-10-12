@@ -248,6 +248,58 @@ export interface ReputationStat extends CharacterStat {
   accountWide: boolean
 }
 
+/**
+ * A figure that has no denominator the site can read: the count alone.
+ *
+ * The six collection tiles are measured against a total (`CharacterStat`), because a collection has a size -
+ * the mount journal, the achievement points a patch ships. The figures added beside them do not: how many
+ * quests a character has run, how many titles it has earned, how many recipes it knows, how many appearance
+ * sources its account has unlocked, how many honorable kills it has and what its honor level stands at are
+ * counts with no reachable ceiling the API states, and a bar measured against an invented one would be a lie
+ * drawn in gold. So the count is the whole figure, and a tile prints it alone.
+ *
+ * `accountWide` is the reputations rule read the other way round: it marks a figure whose count on one
+ * character is already the account's own - the appearances, which the game keeps for the account, and the
+ * honor level, which is a property of the account rather than of the hero - so a tile can say so.
+ */
+export interface CountStat {
+  count: number
+  accountWide?: boolean
+}
+
+/**
+ * The ids of a Blizzard list that names its entries by id, or by the id at the end of an href alone.
+ *
+ * The titles and the quests arrive as `{ id, name, key: { href } }` on one endpoint and as `{ name, key:
+ * { href } }` on another, so both spellings are read here. A list that carries neither is an empty set rather
+ * than a count of rows that cannot be told apart - which is what makes the figure a count of *unique* things.
+ */
+function idsIn(list: any[] | undefined): Set<number> {
+  const ids = new Set<number>()
+
+  for (const entry of list || []) {
+    const fromHref = String(entry?.key?.href || '').match(/\/\d+(?:[/?]|$)/)?.[0]
+    const id = entry?.id ?? (fromHref ? Number(fromHref.replace(/\D/g, '')) : undefined)
+
+    if (typeof id === 'number' && Number.isFinite(id) && id > 0) ids.add(id)
+  }
+
+  return ids
+}
+
+/** Every recipe id a character's professions document names, primaries and secondaries together. */
+function recipeIdsOf(professions: any): Set<number> {
+  const ids = new Set<number>()
+
+  for (const group of ['primaries', 'secondaries']) {
+    for (const entry of professions?.[group] || []) {
+      for (const tier of entry?.tiers || []) idsIn(tier?.known_recipes).forEach((id) => ids.add(id))
+    }
+  }
+
+  return ids
+}
+
 export interface CharacterData {
   name: string
   title: string
@@ -296,6 +348,24 @@ export interface CharacterData {
     decor: CharacterStat
     reputations: ReputationStat
     achievements: CharacterStat
+    /**
+     * The four figures that are not collections of items, read from the same character profile: the titles and
+     * quests it has earned, the recipes its professions know, and the two figures of its player versus player
+     * side. Each is a count of unique ids where ids exist - the account's union over the roster is taken from
+     * those very ids (`server/utils/accountPool`) - and a plain number where they do not: honorable kills add
+     * up over a roster, an honor level is taken from its highest character.
+     */
+    titles: CountStat
+    quests: CountStat
+    recipes: CountStat
+    honorableKills: CountStat
+    honorLevel: CountStat
+    /**
+     * The appearance sources unlocked for every gear slot, which is the one figure of the six that is *not*
+     * read with the profile: the document behind it is 2.5 MB, so it is read by the tray that shows it
+     * (`server/api/transmog`). Absent from a reading that never asked for it.
+     */
+    transmogs?: CountStat
   }
 }
 
@@ -352,17 +422,27 @@ async function fetchCharacterProfile(
   const baseUrl = `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}`
   const ns = `namespace=profile-${region}&locale=${locale}`
 
-  const [summary, media, mounts, pets, toys, decor, reps, mplus, totals] = await Promise.allSettled([
-    callBlizzard<any>(`${baseUrl}?${ns}`, { headers }),
-    callBlizzard<any>(`${baseUrl}/character-media?${ns}`, { headers }),
-    callBlizzard<any>(`${baseUrl}/collections/mounts?${ns}`, { headers }),
-    callBlizzard<any>(`${baseUrl}/collections/pets?${ns}`, { headers }),
-    callBlizzard<any>(`${baseUrl}/collections/toys?${ns}`, { headers }),
-    callBlizzard<any>(`${baseUrl}/collections/decor?${ns}`, { headers }),
-    callBlizzard<any>(`${baseUrl}/reputations?${ns}`, { headers }),
-    callBlizzard<any>(`${baseUrl}/mythic-keystone-profile?${ns}`, { headers }),
-    getCollectionTotals(region, token)
-  ])
+  const [summary, media, mounts, pets, toys, decor, reps, mplus, totals, titles, quests, professions, pvp] =
+    await Promise.allSettled([
+      callBlizzard<any>(`${baseUrl}?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/character-media?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/collections/mounts?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/collections/pets?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/collections/toys?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/collections/decor?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/reputations?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/mythic-keystone-profile?${ns}`, { headers }),
+      getCollectionTotals(region, token),
+      // The four figures that are not collections of items: the titles, the quests and the recipes a character
+      // has earned (ids, so the account's union can be taken over the roster) and the two figures of the player
+      // versus player side (`/pvp-summary`, a kilobyte, which carries both the honorable kills and the honor
+      // level). The transmogs are deliberately not read here: that document is 2.5 MB and belongs to the tray
+      // that asks for it (`server/api/transmog`).
+      callBlizzard<any>(`${baseUrl}/titles?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/quests/completed?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/professions?${ns}`, { headers }),
+      callBlizzard<any>(`${baseUrl}/pvp-summary?${ns}`, { headers })
+    ])
 
   if (summary.status === 'rejected') {
     // Thrown exactly as it arrived, and *not* turned into a status here: `getCharacter` is the one place a
@@ -381,6 +461,10 @@ async function fetchCharacterProfile(
   const repsData = reps.status === 'fulfilled' ? reps.value : null
   const mplusData = mplus.status === 'fulfilled' ? mplus.value : null
   const totalsData = totals.status === 'fulfilled' && totals.value ? totals.value : CHARACTER_DEFAULT_TOTALS
+  const titlesData = titles.status === 'fulfilled' ? titles.value : null
+  const questsData = quests.status === 'fulfilled' ? quests.value : null
+  const professionsData = professions.status === 'fulfilled' ? professions.value : null
+  const pvpData = pvp.status === 'fulfilled' ? pvp.value : null
 
   const rawAssets = mediaData?.assets || []
   const mainRaw = rawAssets.find((a: any) => a.key === 'main-raw')?.value
@@ -446,6 +530,18 @@ async function fetchCharacterProfile(
 
   const mountJournal = readMountJournal(region, realm, name)
 
+  /**
+   * The four figures read beside the collections, as sets of unique ids where Blizzard names them by id.
+   *
+   * They are sets rather than lengths because the ids are what the account's own figures are taken from: a
+   * title or a quest earned on one character is part of the account's union (`server/utils/accountPool`), and a
+   * count taken here would be a count of one character's rows. `honorableKills` and `honorLevel` are numbers
+   * instead - the first adds up over a roster, the second is an account's own standing.
+   */
+  const titleIds = idsIn(titlesData?.titles)
+  const questIds = idsIn(questsData?.quests)
+  const recipeIds = recipeIdsOf(professionsData)
+
   return {
     name: charData.name,
     title: charData.active_title?.display_string?.replace('{name}', charData.name) || '',
@@ -481,7 +577,15 @@ async function fetchCharacterProfile(
         // Set by the pool: on its own the reading is this character's, and says so.
         accountWide: false
       },
-      achievements: { count: achievementPoints, total: ACHIEVEMENT_POINTS_TOTAL }
+      achievements: { count: achievementPoints, total: ACHIEVEMENT_POINTS_TOTAL },
+      // The four figures that are counts of what a character has *done* rather than of what it keeps. Each is
+      // the character's own reading here; the account's own union is laid over them where the site holds a pool
+      // (`overlayPool` in `server/utils/accountPool`), exactly as it is for the reputations above.
+      titles: { count: titleIds.size },
+      quests: { count: questIds.size },
+      recipes: { count: recipeIds.size },
+      honorableKills: { count: Number(pvpData?.honorable_kills) || 0 },
+      honorLevel: { count: Number(pvpData?.honor_level) || 0 }
     }
   }
 }
@@ -543,7 +647,7 @@ const CHARACTER_CACHE_LIMIT = 500
 function carryForward(previous: CharacterData | undefined, read: CharacterData): CharacterData {
   if (!previous) return read
 
-  const held = (kind: keyof CharacterData['stats']) => previous.stats[kind].count
+  const held = (kind: keyof CharacterData['stats']) => previous.stats[kind]?.count ?? 0
   const kept = (kind: keyof CharacterData['stats'], value: number) => (value > 0 ? value : held(kind))
 
   return {
@@ -556,7 +660,15 @@ function carryForward(previous: CharacterData | undefined, read: CharacterData):
       pets: { ...read.stats.pets, count: kept('pets', read.stats.pets.count) },
       toys: { ...read.stats.toys, count: kept('toys', read.stats.toys.count) },
       decor: { ...read.stats.decor, count: kept('decor', read.stats.decor.count) },
-      reputations: { ...read.stats.reputations, count: kept('reputations', read.stats.reputations.count) }
+      reputations: { ...read.stats.reputations, count: kept('reputations', read.stats.reputations.count) },
+      titles: { ...read.stats.titles, count: kept('titles', read.stats.titles.count) },
+      quests: { ...read.stats.quests, count: kept('quests', read.stats.quests.count) },
+      recipes: { ...read.stats.recipes, count: kept('recipes', read.stats.recipes.count) },
+      // The two player versus player figures are deliberately not carried: an honor level and a tally of
+      // honorable kills are figures a fresh character really gives as zero, exactly as the item level and the
+      // rating above are.
+      honorableKills: read.stats.honorableKills,
+      honorLevel: read.stats.honorLevel
     }
   }
 }
@@ -753,4 +865,137 @@ export async function getCharacterProfessions(realm: string, name: string, regio
   } catch {
     return []
   }
+}
+
+/**
+ * The ids one character's own list names, as the account's pool is filled from them.
+ *
+ * Read here rather than carried on a profile, and for the reason the mount ids are (`getCharacterMountIds`): a
+ * page prints counts, the pool counts *unique ids*, and the two are read by different callers - the page by
+ * whoever opens a character, the pool by the account sync, which reads a character it is due for anyway. A list
+ * the site could not read is an empty one, so a failed call leaves the pool as it was rather than emptying it.
+ */
+async function characterListIds(
+  realm: string,
+  name: string,
+  region: string,
+  path: string,
+  pick: (data: any) => any[] | undefined
+): Promise<number[]> {
+  try {
+    const token = await getBlizzardToken(region)
+    const data = await callBlizzard<any>(
+      `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/${path}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        query: { namespace: `profile-${region}`, locale: 'en_US' }
+      }
+    )
+
+    return [...idsIn(pick(data))]
+  } catch {
+    return []
+  }
+}
+
+/** The titles one character wears, which the account's own figure is the union of. */
+export function getCharacterTitleIds(realm: string, name: string, region: string): Promise<number[]> {
+  return characterListIds(realm, name, region, 'titles', (data) => data?.titles)
+}
+
+/** The quests one character has completed, which the account's own figure is the union of. */
+export function getCharacterQuestIds(realm: string, name: string, region: string): Promise<number[]> {
+  return characterListIds(realm, name, region, 'quests/completed', (data) => data?.quests)
+}
+
+/** The recipes one character's professions know, primaries and secondaries together. */
+export async function getCharacterRecipeIds(realm: string, name: string, region: string): Promise<number[]> {
+  try {
+    const token = await getBlizzardToken(region)
+    const data = await callBlizzard<any>(
+      `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/professions`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        query: { namespace: `profile-${region}`, locale: 'en_US' }
+      }
+    )
+
+    return [...recipeIdsOf(data)]
+  } catch {
+    return []
+  }
+}
+
+/** The appearance sources read per character, and when that reading stops being served. */
+const cachedTransmogs = new Map<string, { count: number; expires_at: number }>()
+
+/** The reads still in flight, under the same key, so a tray opened twice waits once. */
+const pendingTransmogs = new Map<string, Promise<number | null>>()
+
+/**
+ * How many appearances a character's account has unlocked, counted over every gear slot.
+ *
+ * The one figure of the six added beside the collections that is *not* read with the profile, because the
+ * document behind it is 2.5 MB - measured on a collector's account: 22 slots, 19 016 appearance ids, the same
+ * order as the character's whole achievement document, which the site deliberately stopped reading for a single
+ * counter. It is read here instead, by the tray that shows it (`server/api/transmog`) and by the account sync.
+ *
+ * Once per account is exact rather than an approximation: the wardrobe belongs to the account, so two
+ * characters of one account answer the same 22 slots with the same ids in the same order.
+ *
+ * What the number counts is the *sum* over those slots, which is how the game's own collection pane counts
+ * them: an appearance that fits more than one slot is listed under each of them, so the figure stands a few
+ * handfuls above the number of distinct appearances behind it (measured against one collector's account:
+ * 24 511 entries over the slots, 24 358 distinct ids). It is the appearances that are counted, not the
+ * *sources* a third-party tracker reports - a source is one item that teaches an appearance, and one
+ * appearance may be taught by several, which is why a figure like a tracker's "appearance sources" is the
+ * larger number, and why the two are not the same measurement. The document's own `appearance_sets` are not
+ * counted at all: a set is a way of wearing what is already there rather than another appearance.
+ *
+ * A reading is kept for a day, and shared while it is being taken: an appearance is unlocked by playing, not by
+ * a patch, so the figure moves by handfuls and a tray opened twice must not cost 2.5 MB twice.
+ */
+export async function getCharacterTransmogs(realm: string, name: string, region: string): Promise<number | null> {
+  const key = `${region}:${realm}:${name}`.toLowerCase()
+  const now = Math.floor(Date.now() / 1000)
+
+  const held = cachedTransmogs.get(key)
+  if (held && held.expires_at > now) return held.count
+
+  const running = pendingTransmogs.get(key)
+  if (running) return running
+
+  const reading = (async (): Promise<number | null> => {
+    try {
+      const token = await getBlizzardToken(region)
+      const data = await $fetch<any>(
+        `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/collections/transmogs`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          query: { namespace: `profile-${region}`, locale: 'en_US' }
+        }
+      )
+
+      const count = (data?.slots || []).reduce(
+        (total: number, slot: any) => total + (slot?.appearances || []).length,
+        0
+      )
+
+      if (count > 0) {
+        if (cachedTransmogs.size > 500) cachedTransmogs.clear()
+        cachedTransmogs.set(key, { count, expires_at: now + 24 * 60 * 60 })
+      }
+
+      return count
+    } catch {
+      // A reading the site could not take is not a zero: a tray prints a dash for a character whose appearances
+      // could not be read rather than an empty wardrobe.
+      return null
+    } finally {
+      pendingTransmogs.delete(key)
+    }
+  })()
+
+  pendingTransmogs.set(key, reading)
+  return reading
 }

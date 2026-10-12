@@ -38,8 +38,17 @@ import { calculatePlayerScore, scoreFigures, type ScoreInput } from './playerSco
 // the table itself looks a row up by.
 import { leaderboardKey } from './leaderboardExclusions'
 
-/** The kinds the pool counts, one per figure a tile prints. */
-const POOL_KINDS = ['mounts', 'pets', 'toys', 'decor', 'reputations'] as const
+/**
+ * The kinds the pool counts, one per figure a tile prints - and every one of them is a count of *unique ids*.
+ *
+ * The first five are collections the game keeps for the account: Blizzard's own account collections fill them
+ * at sign-in, and each character's reading adds the ids only it has been shown (its mounts, its finished
+ * factions). The last three are earned rather than kept, and the union is what makes them the account's own
+ * figure: a title learned, a quest run and a recipe taught on any character belong to the account those
+ * characters share, and the count of them is exactly what the site prints beside a character's own
+ * (`server/utils/blizzard`, `overlayPool` below).
+ */
+const POOL_KINDS = ['mounts', 'pets', 'toys', 'decor', 'reputations', 'titles', 'quests', 'recipes'] as const
 
 /** One of those kinds, which is also the name every reader of an account's figures knows it by. */
 export type PoolKind = (typeof POOL_KINDS)[number]
@@ -162,7 +171,52 @@ export function syncPoolReputations(userId: number, factionIds: number[]): numbe
   return addToPool(userId, 'reputations', factionIds)
 }
 
+/**
+ * And the three figures a character *earns*, folded into the pool the same way: the titles it wears, the quests
+ * it has run and the recipes its professions know.
+ *
+ * The union is what makes them the account's own figure - a title learned on one character belongs to the
+ * account those characters share - and it is why the ids travel here rather than a count: a count is one
+ * character's rows and cannot be unioned with anything. Every kind is its own list, and a kind the caller did
+ * not read is simply not passed: the pool keeps what it had rather than being emptied by a read that failed.
+ */
+export function syncPoolFigures(userId: number, figures: Partial<Record<'titles' | 'quests' | 'recipes', number[]>>): number {
+  let added = 0
+
+  for (const kind of ['titles', 'quests', 'recipes'] as const) {
+    const ids = figures[kind]
+    if (ids?.length) added += addToPool(userId, kind, ids)
+  }
+
+  return added
+}
+
 /** The account's own totals, as the profile, the card and the hall of fame read them. */
+/**
+ * The figures an account holds beside the six its rating weighs: what its characters have *done*, rather than
+ * what they keep.
+ *
+ * They are here rather than in `AccountFigures` on purpose. `AccountFigures` is the formula's own input
+ * (`ScoreInput`), and the rating is a collector's rating - a title or a kill earned by playing is not something
+ * a character gathered, exactly as the Mythic+ rating and the item level are not. So these six travel beside
+ * the six the score is computed from, under their own name, and a page prints them without a rating ever
+ * seeing them.
+ *
+ * Each is the account's own answer, and each was read from the same two places the collections are: the pool of
+ * unique ids (the titles, the quests and the recipes, unioned over the roster) and the snapshots (everything
+ * else). Honorable kills are the one figure that is a *sum* - a kill belongs to the character that earned it -
+ * and the honor level is the highest any of its characters stands at.
+ */
+export interface AccountExtra {
+  titles: number
+  quests: number
+  recipes: number
+  /** Appearances unlocked over every gear slot: the wardrobe is the account's, so nothing is unioned here. */
+  transmogs: number
+  honorableKills: number
+  honorLevel: number
+}
+
 /**
  * The account's own totals: the six figures the site ranks by, plus the three facts about an account that
  * are not collections of them.
@@ -176,6 +230,8 @@ export interface AccountTotals extends AccountFigures {
   mplus: number | null
   /** The overall rating the hall of fame ranks by, read off the six figures above. */
   score: number
+  /** The six figures beside the collections, which no rating weighs (see `AccountExtra`). */
+  extra: AccountExtra
   /** The kinds the pool answered, which is what marks a figure as the account's own. */
   accountWide: PoolKind[]
 }
@@ -232,9 +288,44 @@ export function bestFigures(live: AccountFigures, account: AccountTotals): Accou
   }
 }
 
+/**
+ * The account's own version of the six figures beside the collections, merged with one character's reading.
+ *
+ * The same rule as `bestFigures`, and for the same reason: each figure has two possible sources - the reading
+ * the site has just taken for one character, and the account's own totals - and the answer has to be one answer
+ * wherever it is read. `max` rather than "the account wins", because the pool is filled in the background and a
+ * live reading can carry a title the pool has not been told about yet.
+ *
+ * Honorable kills are merged the same way rather than added to, and that is not an oversight: the account's
+ * total is the sum over its *characters*, and the reading being merged is one of those characters - it is
+ * already inside the total whenever the sync has read it. Adding the two would count the character being looked
+ * at twice.
+ */
+export function bestExtras(live: AccountExtra, account: AccountTotals): AccountExtra {
+  const of = (value: number | null | undefined) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0)
+
+  return {
+    titles: Math.max(of(live.titles), account.extra.titles),
+    quests: Math.max(of(live.quests), account.extra.quests),
+    recipes: Math.max(of(live.recipes), account.extra.recipes),
+    transmogs: Math.max(of(live.transmogs), account.extra.transmogs),
+    honorableKills: Math.max(of(live.honorableKills), account.extra.honorableKills),
+    honorLevel: Math.max(of(live.honorLevel), account.extra.honorLevel)
+  }
+}
+
 /** How many unique ids of each kind the account holds. */
 function readAccountPool(userId: number): AccountPool {
-  const pool: AccountPool = { mounts: 0, pets: 0, toys: 0, decor: 0, reputations: 0 }
+  const pool: AccountPool = {
+    mounts: 0,
+    pets: 0,
+    toys: 0,
+    decor: 0,
+    reputations: 0,
+    titles: 0,
+    quests: 0,
+    recipes: 0
+  }
 
   try {
     const rows = useDb()
@@ -260,6 +351,20 @@ interface AccountMaxes {
   pets: number | null
   toys: number | null
   decor: number | null
+  titles: number | null
+  quests: number | null
+  recipes: number | null
+  transmogs: number | null
+  honorLevel: number | null
+  /**
+   * The honorable kills of the whole roster, which is the one figure of the twelve that is *added up*.
+   *
+   * A kill is earned by one character and belongs to it, so the account's total is what its characters have
+   * done between them - unlike a collection, where a mount owned twice is one mount. Each character's *newest*
+   * reading is what is added, rather than every snapshot on file: a character read on five days would otherwise
+   * be counted five times.
+   */
+  honorableKills: number | null
 }
 
 /**
@@ -284,15 +389,39 @@ export function readAccountTotals(userId: number): AccountTotals {
   const maxes = useDb()
     .prepare(
       `SELECT
-         (SELECT MAX(s.ilvl)         FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS ilvl,
-         (SELECT MAX(s.mplus_score)  FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mplus,
-         (SELECT MAX(s.achievements) FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS achievements,
-         (SELECT MAX(s.mounts)       FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mounts,
-         (SELECT MAX(s.pets)         FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS pets,
-         (SELECT MAX(s.toys)         FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS toys,
-         (SELECT MAX(s.decor)        FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS decor`
+         (SELECT MAX(s.ilvl)          FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS ilvl,
+         (SELECT MAX(s.mplus_score)   FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mplus,
+         (SELECT MAX(s.achievements)  FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS achievements,
+         (SELECT MAX(s.mounts)        FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mounts,
+         (SELECT MAX(s.pets)          FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS pets,
+         (SELECT MAX(s.toys)          FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS toys,
+         (SELECT MAX(s.decor)         FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS decor,
+         (SELECT MAX(s.titles)        FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS titles,
+         (SELECT MAX(s.quests)        FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS quests,
+         (SELECT MAX(s.recipes)       FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS recipes,
+         (SELECT MAX(s.transmogs)     FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS transmogs,
+         (SELECT MAX(s.honor_level)   FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS honorLevel,
+         (SELECT SUM(latest.kills) FROM (
+            SELECT (SELECT s.honorable_kills FROM snapshots s
+                     WHERE s.character_id = c.id ORDER BY s.taken_at DESC LIMIT 1) AS kills
+              FROM characters c WHERE c.user_id = ?
+          ) AS latest) AS honorableKills`
     )
-    .get(userId, userId, userId, userId, userId, userId, userId) as AccountMaxes
+    .get(
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId,
+      userId
+    ) as unknown as AccountMaxes
 
   const pool = readAccountPool(userId)
   const accountWide = POOL_KINDS.filter((kind) => pool[kind] > 0)
@@ -328,10 +457,26 @@ export function readAccountTotals(userId: number): AccountTotals {
     reputations: pool.reputations || 0
   }
 
+  /**
+   * The account's own figures beside the collections. The three unions are merged with the best reading the
+   * same way the collections are (`pick`), because the pool's count and a reading are two lower bounds of one
+   * figure; the wardrobe is the account's whole and has nothing to merge with; the honor level is the highest
+   * any of its characters stands at; and the kills are the roster's own sum (`AccountMaxes` explains why).
+   */
+  const extra: AccountExtra = {
+    titles: pick('titles', maxes.titles),
+    quests: pick('quests', maxes.quests),
+    recipes: pick('recipes', maxes.recipes),
+    transmogs: maxes.transmogs || 0,
+    honorableKills: maxes.honorableKills || 0,
+    honorLevel: maxes.honorLevel || 0
+  }
+
   return {
     ilvl: maxes.ilvl ?? null,
     mplus: maxes.mplus ?? null,
     ...figures,
+    extra,
     // The overall rating, off the very collections above - the same formula the table's own column is
     // computed with, so the pool never carries a score the leaderboard would not agree with.
     score: calculatePlayerScore(figures),
@@ -466,7 +611,11 @@ export function syncMainToLeaderboard(userId: number): void {
     toys: totals.toys || undefined,
     decor: totals.decor || undefined,
     reputations: totals.reputations || undefined,
-    achievements: totals.achievements || undefined
+    achievements: totals.achievements || undefined,
+    // The one figure of the row that is the *account's* rather than the main's alone: a kill belongs to the
+    // character that earned it, so the account's answer is the sum over its roster (`AccountExtra`), and it is
+    // what the hall of fame's own column, standing after the rating, prints for an account's main.
+    honorableKills: totals.extra.honorableKills || undefined
   })
 }
 
@@ -561,6 +710,24 @@ export function overlayPool(
     account
   )
 
+  /**
+   * And the six figures beside the collections, merged the same way: the reading this page holds against the
+   * account's own totals. Each is marked as the account's where the pool answered it (`accountWide`), which is
+   * the note a tile prints - and the whole reason a signed-in reader sees one number for a title on every page
+   * while a stranger is shown the character's own.
+   */
+  const extras = bestExtras(
+    {
+      titles: profile.stats.titles?.count || 0,
+      quests: profile.stats.quests?.count || 0,
+      recipes: profile.stats.recipes?.count || 0,
+      transmogs: profile.stats.transmogs?.count || 0,
+      honorableKills: profile.stats.honorableKills?.count || 0,
+      honorLevel: profile.stats.honorLevel?.count || 0
+    },
+    account
+  )
+
   return {
     ...profile,
     ap: figures.achievements,
@@ -596,7 +763,18 @@ export function overlayPool(
           ? reputationReachableTotal()
           : profile.stats.reputations.total,
         accountWide: account.accountWide.includes('reputations')
-      }
+      },
+      // The three figures a character *earns*, each the account's own union of ids where the pool answered it -
+      // and this character's own reading where it has not, which is the same rule mounts are printed by.
+      titles: { count: extras.titles, accountWide: account.accountWide.includes('titles') },
+      quests: { count: extras.quests, accountWide: account.accountWide.includes('quests') },
+      recipes: { count: extras.recipes, accountWide: account.accountWide.includes('recipes') },
+      // The wardrobe belongs to the account by the game's own design, and an honor level is a standing of the
+      // account rather than of the hero: wherever an account stands behind the character, both are its own, and
+      // both say so - a stranger's page prints the character's own reading with no note under it.
+      transmogs: { ...profile.stats.transmogs, count: extras.transmogs, accountWide: true },
+      honorableKills: { count: extras.honorableKills, accountWide: true },
+      honorLevel: { count: extras.honorLevel, accountWide: true }
     }
   }
 }

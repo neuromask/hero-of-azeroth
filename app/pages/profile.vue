@@ -33,6 +33,13 @@ interface LatestStats {
   toys: number | null
   decor: number | null
   reputations: number | null
+  /** The figures beside the collections, which no rating weighs (`server/utils/accountPool`). */
+  titles: number | null
+  quests: number | null
+  recipes: number | null
+  transmogs: number | null
+  honorableKills: number | null
+  honorLevel: number | null
 }
 
 /** One character of the account. */
@@ -55,6 +62,13 @@ interface ProfileCharacter {
   /** When this character's figures were last read, or `null` while only the roster knows it. */
   statsReadAt: number | null
   latest: LatestStats | null
+  /**
+   * The overall rating of the figures above, computed where those figures were merged - on the server, in the
+   * one place the account's own totals are laid over a character's reading (`server/api/profile/index.get.ts`).
+   * The page prints this number rather than working one out from the tiles it draws, which is why it has to be
+   * named here: a figure the endpoint sends and the page's own type forgets is a tile the compiler cannot check.
+   */
+  score: number
 }
 
 interface ProfileResponse {
@@ -424,6 +438,52 @@ const figure = (value: number | null | undefined) => (typeof value === 'number' 
 const mainScore = computed(() => main.value?.score ?? 0)
 
 /**
+ * The account's appearance sources, asked for on the spot when the background pass has not read them yet.
+ *
+ * They are the one figure of the six beside the collections that `/api/profile` cannot carry: the document
+ * behind them is 2.5 MB (`getCharacterTransmogs` in `server/utils/blizzard`), and that endpoint is
+ * documented as SQLite alone - it answers the moment a sign-in lands and never waits on Blizzard. So the
+ * figure is read here the way the character page's tray reads it (`app/components/StatDrawer.vue`): once,
+ * for the main, behind the day-long cache the server keeps of it. A snapshot that already carries the
+ * figure wins, because the background pass read it there and a page must not ask twice for one number.
+ */
+const accountTransmogs = ref<number | null | undefined>(undefined)
+const readingTransmogs = ref(false)
+
+/** The wardrobe the tile prints: the snapshot's reading, the one read on the spot, or nothing at all. */
+const wardrobe = computed(() => main.value?.latest?.transmogs || accountTransmogs.value || null)
+
+/** Whether that figure is still on its way, which is what its dash beats for. */
+const wardrobePending = computed(() => readingTransmogs.value && !wardrobe.value)
+
+async function askWardrobe(): Promise<void> {
+  const character = main.value
+  if (!character || wardrobe.value || readingTransmogs.value) return
+
+  readingTransmogs.value = true
+
+  try {
+    const answer = await $fetch<{ count: number | null }>(
+      `/api/transmog/${character.region}/${character.realmSlug}/${encodeURIComponent(character.name)}`
+    )
+    accountTransmogs.value = answer?.count ?? null
+  } catch {
+    // A reading the site could not take is a dash, which is what `null` means here - not a zero.
+    accountTransmogs.value = null
+  } finally {
+    readingTransmogs.value = false
+  }
+}
+
+/**
+ * Asked for once, on mount, and only when nobody has read it yet: the tile stands empty rather than wrong
+ * while the answer travels, exactly as it does on a character page.
+ */
+onMounted(() => {
+  void askWardrobe()
+})
+
+/**
  * The main's whole stat line as one list, so the template stays a `v-for`.
  *
  * Each entry is drawn the way a character page draws its own tiles
@@ -445,7 +505,16 @@ const mainStats = computed(() => {
     { key: 'pets', icon: 'pets', label: t('pets'), display: figure(latest?.pets), color: 'text-white' },
     { key: 'toys', icon: 'toys', label: t('toys'), display: figure(latest?.toys), color: 'text-white' },
     { key: 'decor', icon: 'decor', label: t('decor'), display: figure(latest?.decor), color: 'text-white' },
-    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), display: figure(latest?.reputations), color: 'text-white' }
+    { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), display: figure(latest?.reputations), color: 'text-white' },
+    // And the six figures that are not collections of items, drawn the same way and in the same grid: what the
+    // account's characters have *done*. Each wears the glyph the set draws for it (`app/assets/icons`), so the
+    // six read as one family with the collections above them.
+    { key: 'titles', icon: 'titles', label: t('titles'), display: figure(latest?.titles), color: 'text-white' },
+    { key: 'quests', icon: 'quests', label: t('quests'), display: figure(latest?.quests), color: 'text-white' },
+    { key: 'recipes', icon: 'recipes', label: t('recipes'), display: figure(latest?.recipes), color: 'text-white' },
+    { key: 'transmogs', icon: 'transmogs', label: t('transmogs'), display: figure(wardrobe.value), color: 'text-white' },
+    { key: 'honorableKills', icon: 'kills', label: t('honorableKills'), display: figure(latest?.honorableKills), color: 'text-white' },
+    { key: 'honorLevel', icon: 'honorLevel', label: t('honorLevel'), display: figure(latest?.honorLevel), color: 'text-white' }
   ]
 })
 
@@ -545,7 +614,13 @@ function applyLatest(id: number, profile: any) {
     pets: profile.stats.pets?.count ?? null,
     toys: profile.stats.toys?.count ?? null,
     decor: profile.stats.decor?.count ?? null,
-    reputations: profile.stats.reputations?.count ?? null
+    reputations: profile.stats.reputations?.count ?? null,
+    titles: profile.stats.titles?.count ?? null,
+    quests: profile.stats.quests?.count ?? null,
+    recipes: profile.stats.recipes?.count ?? null,
+    transmogs: profile.stats.transmogs?.count ?? null,
+    honorableKills: profile.stats.honorableKills?.count ?? null,
+    honorLevel: profile.stats.honorLevel?.count ?? null
   }
   entry.classId = profile.classId ?? entry.classId
   entry.level = profile.level ?? entry.level
@@ -940,7 +1015,7 @@ onMounted(() => {
                 <span class="truncate text-[17px] font-bold uppercase tracking-wide text-gray-300 sm:text-[18px]">{{ stat.label }}</span>
                 <span
                   class="ml-auto whitespace-nowrap text-2xl font-extrabold leading-none tabular-nums sm:text-3xl"
-                  :class="stat.color"
+                  :class="[stat.color, stat.key === 'transmogs' && wardrobePending ? 'animate-pulse' : '']"
                 >{{ stat.display }}</span>
                 <!-- And beside the gold figure itself, the question a reader is owed an answer to: the
                      multipliers the site's own score is made of, in the same popup the hall of fame carries

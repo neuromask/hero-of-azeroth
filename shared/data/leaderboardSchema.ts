@@ -27,12 +27,16 @@ export type LeaderboardFaction = 'alliance' | 'horde' | 'neutral'
  *
  * The first five are the page's own tabs; `pets`, `toys` and `reputations` are here because the table
  * has a column for each of them and a column a reader can see is a column a reader expects to sort by.
+ * `kills` is the honorable kills a character has earned, and it is the one figure of the table an account
+ * is counted for by *adding its characters up* rather than by taking the best of them: a kill belongs to
+ * the character that earned it (see `AccountExtra` in `server/utils/accountPool`).
  */
 export type LeaderboardSort =
   | 'total'
   | 'mounts'
   | 'decor'
   | 'mplus'
+  | 'kills'
   | 'achievements'
   | 'pets'
   | 'toys'
@@ -45,6 +49,7 @@ export const LEADERBOARD_SORTS: readonly LeaderboardSort[] = [
   'mounts',
   'decor',
   'mplus',
+  'kills',
   'achievements',
   'pets',
   'toys',
@@ -123,6 +128,16 @@ export interface LeaderboardPlayer {
   ilvl: number
   /** The Mythic+ rating, rounded, as the profile reported it. */
   mPlusScore: number
+  /**
+   * Honorable kills earned, which is the column standing after the Mythic+ rating.
+   *
+   * The one figure of a row that an account's own is a *sum* rather than a best: a kill belongs to the
+   * character that earned it, so the account's total is what its characters have done between them (see
+   * `readAccountTotals` and `AccountExtra` in `server/utils/accountPool`). A row that belongs to an account
+   * carries the account's total, and every other row carries the reading of the one character it stands
+   * for - which is exactly the rule the table's other columns follow.
+   */
+  honorableKills: number
   /** Mounts collected. */
   mounts: number
   /** Pets collected, counted by species. */

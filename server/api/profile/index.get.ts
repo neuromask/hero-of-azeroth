@@ -44,6 +44,12 @@ export interface ProfileCharacter {
     toys: number | null
     decor: number | null
     reputations: number | null
+    titles: number | null
+    quests: number | null
+    recipes: number | null
+    transmogs: number | null
+    honorableKills: number | null
+    honorLevel: number | null
   } | null
   /**
    * The overall rating of the figures above, computed where those figures were merged - which is here, in
@@ -67,6 +73,13 @@ export interface ProfileTotals {
   toys: number
   decor: number
   reputations: number
+  /** The six figures beside the collections, which no rating weighs (`server/utils/accountPool`). */
+  titles: number
+  quests: number
+  recipes: number
+  transmogs: number
+  honorableKills: number
+  honorLevel: number
   /** The overall rating the hall of fame ranks by, read off the account's own collections. */
   score: number
   /** The kinds the account's pool answered, which is what makes a figure the account's own. */
@@ -98,6 +111,12 @@ interface ProfileRow {
   toys: number | null
   decor: number | null
   reputations: number | null
+  titles: number | null
+  quests: number | null
+  recipes: number | null
+  transmogs: number | null
+  honorable_kills: number | null
+  honor_level: number | null
 }
 
 export default defineEventHandler(async (event) => {
@@ -114,7 +133,8 @@ export default defineEventHandler(async (event) => {
       `SELECT c.id, c.region, c.realm_slug, c.realm_name, c.name, c.display_name, c.class_id, c.level,
               c.faction, c.avatar, c.profession_1, c.profession_2, c.is_main, c.last_seen_at,
               c.stats_read_at,
-              s.taken_at, s.ilvl, s.mplus_score, s.achievements, s.mounts, s.pets, s.toys, s.decor, s.reputations
+              s.taken_at, s.ilvl, s.mplus_score, s.achievements, s.mounts, s.pets, s.toys, s.decor, s.reputations,
+              s.titles, s.quests, s.recipes, s.transmogs, s.honorable_kills, s.honor_level
          FROM characters c
          LEFT JOIN snapshots s ON s.id = (
            SELECT id FROM snapshots WHERE character_id = c.id ORDER BY taken_at DESC LIMIT 1
@@ -153,7 +173,13 @@ export default defineEventHandler(async (event) => {
           pets: row.pets,
           toys: row.toys,
           decor: row.decor,
-          reputations: row.reputations
+          reputations: row.reputations,
+          titles: row.titles,
+          quests: row.quests,
+          recipes: row.recipes,
+          transmogs: row.transmogs,
+          honorableKills: row.honorable_kills,
+          honorLevel: row.honor_level
         }
   }))
 
@@ -195,6 +221,28 @@ export default defineEventHandler(async (event) => {
     latest.decor = figures.decor || latest.decor
     latest.reputations = figures.reputations || latest.reputations
 
+    // And the six beside them, merged the same way and under the same rule (`bestExtras`): the reading this
+    // character's snapshot carries against the account's own totals, which is what makes a title, a quest or a
+    // recipe the account's union rather than one character's rows.
+    const extras = bestExtras(
+      {
+        titles: latest.titles ?? 0,
+        quests: latest.quests ?? 0,
+        recipes: latest.recipes ?? 0,
+        transmogs: latest.transmogs ?? 0,
+        honorableKills: latest.honorableKills ?? 0,
+        honorLevel: latest.honorLevel ?? 0
+      },
+      account
+    )
+
+    latest.titles = extras.titles || latest.titles
+    latest.quests = extras.quests || latest.quests
+    latest.recipes = extras.recipes || latest.recipes
+    latest.transmogs = extras.transmogs || latest.transmogs
+    latest.honorableKills = extras.honorableKills || latest.honorableKills
+    latest.honorLevel = extras.honorLevel || latest.honorLevel
+
     // And the rating of the very figures above, computed here rather than by the page that prints them:
     // the number and the figures it was made from travel together, so the account's page, the character
     // page and the hall of fame's row cannot disagree about one player.
@@ -211,6 +259,7 @@ export default defineEventHandler(async (event) => {
     toys: account.toys,
     decor: account.decor,
     reputations: account.reputations,
+    ...account.extra,
     score: account.score,
     accountWide: account.accountWide
   }

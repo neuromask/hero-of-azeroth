@@ -8,7 +8,7 @@
  * count used to be Blizzard's account-wide Exalted figure and mixing the two is how the drift began.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
-import { readAccountTotals } from '../../server/utils/accountPool'
+import { bestExtras, readAccountTotals } from '../../server/utils/accountPool'
 import { calculatePlayerScore } from '../../server/utils/playerScore'
 import { createMemoryDb, installUseDb, type MemoryDb } from '../helpers/memoryDb'
 
@@ -94,5 +94,72 @@ describe('readAccountTotals', () => {
     expect(totals.mounts).toBe(0)
     expect(totals.score).toBe(0)
     expect(totals.accountWide).toEqual([])
+  })
+})
+
+describe('the figures beside the collections', () => {
+  it('unions the titles, quests and recipes a roster has earned, and says so', () => {
+    memory.addUser(1)
+    const main = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Main', isMain: true })
+
+    // One character has earned two titles, the account's pool has been told about three.
+    memory.addSnapshot({ characterId: main, takenAt: 1, titles: 2 })
+    memory.addPoolItems(1, 'titles', [10, 11, 12])
+    memory.addPoolItems(1, 'quests', [1, 2])
+    memory.addPoolItems(1, 'recipes', [7])
+
+    const totals = readAccountTotals(1)
+    expect(totals.extra.titles).toBe(3)
+    expect(totals.extra.quests).toBe(2)
+    expect(totals.extra.recipes).toBe(1)
+    // Marked as the account's own, which is the note a tile prints and the reason a signed-in reader sees one
+    // number for a title on every page while a stranger is shown the character's own.
+    expect(totals.accountWide).toContain('titles')
+    expect(totals.accountWide).not.toContain('honorLevel' as never)
+  })
+
+  it('adds the kills up over the roster, once per character', () => {
+    memory.addUser(1)
+    const main = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Main', isMain: true })
+    const alt = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Alt' })
+
+    // Two readings of one character, one of the other: the account's total is 8 + 2, not 5 + 8 + 2 - a
+    // character read on two days has not earned its kills twice.
+    memory.addSnapshot({ characterId: main, takenAt: 1, honorableKills: 5 })
+    memory.addSnapshot({ characterId: main, takenAt: 2, honorableKills: 8 })
+    memory.addSnapshot({ characterId: alt, takenAt: 1, honorableKills: 2 })
+
+    const totals = readAccountTotals(1)
+    expect(totals.extra.honorableKills).toBe(10)
+    // And the honor level is the highest any of them stands at, which is the account's standing.
+    expect(totals.extra.honorLevel).toBe(0)
+  })
+
+  it('takes the honor level of the character standing highest', () => {
+    memory.addUser(1)
+    const main = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Main', isMain: true })
+    const alt = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Alt' })
+
+    memory.addSnapshot({ characterId: main, takenAt: 1, honorLevel: 7 })
+    memory.addSnapshot({ characterId: alt, takenAt: 1, honorLevel: 22 })
+
+    expect(readAccountTotals(1).extra.honorLevel).toBe(22)
+  })
+
+  it('merges a character reading upward into the account, and never adds the kills twice', () => {
+    memory.addUser(1)
+    const main = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Main', isMain: true })
+    memory.addPoolItems(1, 'titles', [1, 2])
+    memory.addSnapshot({ characterId: main, takenAt: 1, honorableKills: 8 })
+
+    const account = readAccountTotals(1)
+    const merged = bestExtras(
+      { titles: 5, quests: 0, recipes: 0, transmogs: 0, honorableKills: 8, honorLevel: 0 },
+      account
+    )
+
+    expect(merged.titles).toBe(5)
+    // The reading is one of the account's own characters, so it is already inside the total: 8, not 16.
+    expect(merged.honorableKills).toBe(8)
   })
 })

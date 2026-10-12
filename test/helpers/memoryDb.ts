@@ -43,7 +43,13 @@ CREATE TABLE snapshots (
   pets INTEGER,
   toys INTEGER,
   decor INTEGER,
-  reputations INTEGER
+  reputations INTEGER,
+  titles INTEGER,
+  quests INTEGER,
+  recipes INTEGER,
+  transmogs INTEGER,
+  honorable_kills INTEGER,
+  honor_level INTEGER
 );
 
 CREATE TABLE account_pool (
@@ -75,6 +81,13 @@ export interface NewSnapshot {
   pets?: number | null
   toys?: number | null
   decor?: number | null
+  /** The figures beside the collections (`server/utils/blizzard`), which no rating weighs. */
+  titles?: number | null
+  quests?: number | null
+  recipes?: number | null
+  transmogs?: number | null
+  honorableKills?: number | null
+  honorLevel?: number | null
 }
 
 export interface MemoryDb {
@@ -120,8 +133,9 @@ export function createMemoryDb(): MemoryDb {
     addSnapshot(snapshot) {
       db.prepare(
         `INSERT INTO snapshots
-           (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+            titles, quests, recipes, transmogs, honorable_kills, honor_level)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         snapshot.characterId,
         snapshot.takenAt,
@@ -132,7 +146,13 @@ export function createMemoryDb(): MemoryDb {
         snapshot.pets ?? null,
         snapshot.toys ?? null,
         snapshot.decor ?? null,
-        null
+        null,
+        snapshot.titles ?? null,
+        snapshot.quests ?? null,
+        snapshot.recipes ?? null,
+        snapshot.transmogs ?? null,
+        snapshot.honorableKills ?? null,
+        snapshot.honorLevel ?? null
       )
     },
 

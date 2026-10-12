@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <g id="Layer_2" data-name="Layer 2" class="cls-1">
+    <!-- A scroll: a parchment hanging between two rods, with the mark a quest is known by cut clean through
+         it. `evenodd` is what turns the bar and the dot into holes rather than into white shapes on white. -->
+    <rect x="64" y="40" width="384" height="64" rx="32" />
+    <rect x="64" y="408" width="384" height="64" rx="32" />
+    <path fill-rule="evenodd" d="M112 96 L400 96 L400 416 L112 416 Z M236 152 L276 152 L276 312 L236 312 Z M228 344 A28 28 0 1 0 284 344 A28 28 0 1 0 228 344 Z" />
+  </g>
+</svg>

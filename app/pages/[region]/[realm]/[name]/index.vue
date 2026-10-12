@@ -199,34 +199,45 @@ function tileUrl(key: LeaderboardSort) {
        still stacked in one column (phones and tablets) it keeps an ordinary gap so it never rests
        on the last box. -->
   <div class="relative z-30 container mx-auto px-4 mt-6 sm:mt-8 lg:-mt-8 pb-6 flex flex-col items-center gap-2">
-    <!-- The summary figures have taken the place the download button held, and with it the glass
-         the tiles above are cut from: the same frame, the same blur and the same lift under the
-         pointer, so the row reads as one more block of statistics. -->
-    <div class="hoa-panel hoa-panel-interactive flex w-full items-center justify-between gap-3 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3 lg:w-auto">
-      <!-- The overall rating leads the row, the way it leads the table: the one figure that sums up
-           everything beside it. -->
-      <div class="text-center">
-        <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('lbColScore') }}</span>
-        <span class="text-2xl sm:text-3xl font-extrabold text-wow-goldLight inline-flex items-center justify-center gap-2 whitespace-nowrap">
-          <AppIcon name="trophy" class="h-[0.85em] w-[0.85em]" />
-          {{ formatNumber(totalScore) }}
-        </span>
-      </div>
-      <div class="h-8 w-[1px] bg-white/15"></div>
-      <div class="text-center">
-        <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('itemLevel') }}</span>
-        <span class="text-2xl sm:text-3xl font-extrabold text-white inline-flex items-center justify-center gap-2 whitespace-nowrap">
-          <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
-          {{ formatNumber(character?.ilvl) }}
-        </span>
-      </div>
-      <div class="h-8 w-[1px] bg-white/15"></div>
-      <div class="text-center">
-        <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('mPlus') }}</span>
-        <span class="text-2xl sm:text-3xl font-extrabold inline-flex items-center justify-center gap-2 whitespace-nowrap" :class="mPlusColor">
-          <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
-          {{ formatNumber(character?.mPlusScore) }}
-        </span>
+    <!-- The plate and the drawer that belongs to it share one box, which is what makes them one width. The box
+         hugs the plate the way the plate used to hug its three figures (`lg:w-auto` once the grid leaves the
+         middle of the row free), and the drawer - out of the flow and anchored to the plate's own top edge
+         (`bottom-full`) - is stretched across that same width, so the panel, the label on it and the plate all
+         measure the same. Anchoring it to the plate's top edge rather than laying it out above is also what makes
+         it open upward: the plate never moves a pixel, the way a drawer pulled out from under a shelf behaves.
+         The plate is a layer above the drawer (`z-10` against the drawer's own layer), which is what lets the
+         drawer's bottom edge slide under the plate - by exactly the plate's corner radius (`translate-y-3`, the
+         `rounded-xl` of `.hoa-panel`), so the plate's own curve is what the label disappears behind. -->
+    <div class="relative w-full lg:w-auto">
+      <StatDrawer class="absolute inset-x-0 bottom-full translate-y-3" />
+
+      <!-- The three figures the page leads with: the rating, the item level and the Mythic+ score. -->
+      <div class="hoa-panel hoa-panel-interactive relative z-10 flex w-full items-center justify-between gap-3 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3">
+        <!-- The overall rating leads the row, the way it leads the table: the one figure that sums up
+             everything beside it. -->
+        <div class="text-center">
+          <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('lbColScore') }}</span>
+          <span class="text-2xl sm:text-3xl font-extrabold text-wow-goldLight inline-flex items-center justify-center gap-2 whitespace-nowrap">
+            <AppIcon name="trophy" class="h-[0.85em] w-[0.85em]" />
+            {{ formatNumber(totalScore) }}
+          </span>
+        </div>
+        <div class="h-8 w-[1px] bg-white/15"></div>
+        <div class="text-center">
+          <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('itemLevel') }}</span>
+          <span class="text-2xl sm:text-3xl font-extrabold text-white inline-flex items-center justify-center gap-2 whitespace-nowrap">
+            <AppIcon name="item-level" class="h-[0.85em] w-[0.85em]" />
+            {{ formatNumber(character?.ilvl) }}
+          </span>
+        </div>
+        <div class="h-8 w-[1px] bg-white/15"></div>
+        <div class="text-center">
+          <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('mPlus') }}</span>
+          <span class="text-2xl sm:text-3xl font-extrabold inline-flex items-center justify-center gap-2 whitespace-nowrap" :class="mPlusColor">
+            <AppIcon name="key" class="h-[0.85em] w-[0.85em]" />
+            {{ formatNumber(character?.mPlusScore) }}
+          </span>
+        </div>
       </div>
     </div>
   </div>

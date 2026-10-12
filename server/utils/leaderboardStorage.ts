@@ -42,7 +42,7 @@ import { excludedLeaderboardKeys, exclusionsRevision, leaderboardKey } from './l
 import { accountLeaderboardKeys } from './accounts'
 // The account behind a row, and the figures it holds: what makes the table print the account's
 // numbers for a signed-in player rather than one character's (see `withAccountTotals`).
-import { accountTotalsByCharacterKey, bestFigures } from './accountPool'
+import { accountTotalsByCharacterKey, bestExtras, bestFigures } from './accountPool'
 import type {
   LeaderboardFaction,
   LeaderboardLeader,
@@ -102,6 +102,12 @@ export interface PlayerProfileInput {
   level?: number
   ilvl?: number
   mPlusScore?: number
+  /**
+   * Honorable kills, which is the figure the table's own column prints after the rating. An account's main is
+   * written with the account's total here (`syncMainToLeaderboard`), and every other row with the reading of
+   * the one character it stands for.
+   */
+  honorableKills?: number
   mounts?: number
   pets?: number
   toys?: number
@@ -196,6 +202,7 @@ function isSameRecord(a: LeaderboardPlayer, b: LeaderboardPlayer): boolean {
     a.level === b.level &&
     a.ilvl === b.ilvl &&
     a.mPlusScore === b.mPlusScore &&
+    a.honorableKills === b.honorableKills &&
     a.mounts === b.mounts &&
     a.pets === b.pets &&
     a.toys === b.toys &&
@@ -222,6 +229,10 @@ function toPlayer(input: PlayerProfileInput, firstSeenAt: string): LeaderboardPl
     reputations: count(input.reputations),
     achievements: count(input.achievements),
     mPlusScore: count(input.mPlusScore),
+    // Beside the rating rather than among the six the rating weighs: a kill is something a character has done,
+    // not something it gathered (`ScoreInput` in `./playerScore`), and this one figure travels with the row for
+    // the table's own column.
+    honorableKills: count(input.honorableKills),
     ilvl: count(input.ilvl),
     level: count(input.level)
   }
@@ -341,7 +352,11 @@ async function readFromDisk(): Promise<LeaderboardFile> {
       // type has always promised.
       players: parsed.players.filter(isPlayerLike).map((player) => ({
         ...player,
-        reputations: count(player.reputations)
+        reputations: count(player.reputations),
+        // And the same for the kills, which are the column this build added to a file that was written
+        // without them: an absent key would be filled in as `NaN` by the account's own merge (`bestExtras`)
+        // rather than as nought, and a row would print a figure no number can be read beside.
+        honorableKills: count(player.honorableKills)
       }))
     }
   } catch {
@@ -382,6 +397,7 @@ async function backfillFromIndex(): Promise<LeaderboardPlayer[]> {
           level: entry.level,
           ilvl: entry.ilvl,
           mPlusScore: entry.mPlusScore,
+          honorableKills: entry.honorableKills,
           mounts: entry.mounts,
           pets: entry.pets,
           toys: entry.toys,
@@ -508,6 +524,7 @@ export function upsertPlayer(profile: PlayerProfileInput): Promise<void> {
           level: profile.level ?? previous?.level,
           ilvl: profile.ilvl ?? previous?.ilvl,
           mPlusScore: profile.mPlusScore ?? previous?.mPlusScore,
+          honorableKills: profile.honorableKills ?? previous?.honorableKills,
           mounts: profile.mounts ?? previous?.mounts,
           pets: profile.pets ?? previous?.pets,
           toys: profile.toys ?? previous?.toys,
@@ -582,6 +599,8 @@ function sortValue(player: LeaderboardPlayer, sort: LeaderboardSort): number {
       return player.reputations
     case 'mplus':
       return player.mPlusScore
+    case 'kills':
+      return player.honorableKills
     case 'achievements':
       return player.achievements
     case 'ilvl':
@@ -647,6 +666,12 @@ function byRating(a: LeaderboardPlayer, b: LeaderboardPlayer): number {
  * Nothing is lowered, with the one deliberate exception the merge itself names: a reputation figure the pool
  * holds is the account's own (`bestFigures`), because the number a stored row carries for reputations can
  * still be the account-wide counter Blizzard used to be read for.
+ *
+ * The figures beside the collections are laid over the row the same way (`bestExtras`), and of those a row
+ * carries exactly one: the honorable kills, which stand in the table's own column after the rating. An
+ * account answers for them by *adding its characters up* rather than by keeping the best of them, so a row
+ * belonging to an account prints the account's total and every other row prints the single reading it was
+ * written with - the same two readings, and the same rule, every other column of the table follows.
  */
 function withAccountTotals(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
   const accounts = accountTotalsByCharacterKey()
@@ -671,13 +696,36 @@ function withAccountTotals(players: LeaderboardPlayer[]): LeaderboardPlayer[] {
       account
     )
 
+    // And the figures beside the collections, of which a row carries exactly one: the honorable kills, the
+    // column standing after the rating. It is merged under that same rule (`bestExtras`) rather than handled
+    // here, so a row and a page cannot answer the account differently - and the other five are handed over as
+    // nothing, because a row has nothing to say about a title, a quest or a wardrobe. What comes back for
+    // those is the account's own number, which is simply not read; the kills are the account's own total,
+    // which is the *sum* over its characters, so nothing is added up a second time here.
+    const extras = bestExtras(
+      {
+        titles: 0,
+        quests: 0,
+        recipes: 0,
+        transmogs: 0,
+        honorableKills: player.honorableKills,
+        honorLevel: 0
+      },
+      account
+    )
+
     // A row the account has nothing to add to is handed back as it stands, so the common case - an
     // account whose row was already written from its own pool - allocates nothing.
-    if (isSameFigures(player, figures)) return player
+    if (isSameFigures(player, figures) && player.honorableKills === extras.honorableKills) return player
 
     // The rating is a stored column, so it is recomputed here from the figures being served: the
     // table's order is the order of what a reader sees.
-    return { ...player, ...figures, score: calculatePlayerScore({ ...player, ...figures }) }
+    return {
+      ...player,
+      ...figures,
+      honorableKills: extras.honorableKills,
+      score: calculatePlayerScore({ ...player, ...figures })
+    }
   })
 }
 

@@ -151,7 +151,7 @@ function initial(player: LeaderboardPlayer): string {
  * is a button, and the figure it names is the preset the endpoint already understands - so ordering
  * by pets is the same request as ordering by mounts, with a different word in it.
  *
- * Two of the eight are written out rather than translated: `M+` and `ilvl` are the game's own
+ * Two of the nine are written out rather than translated: `M+` and `ilvl` are the game's own
  * shorthand, a player reads them the same in either language, and a translated header is exactly
  * what makes a table look foreign.
  */
@@ -169,6 +169,7 @@ const COLUMNS: {
   { key: 'decor', label: 'decor', field: 'decor' },
   { key: 'reputations', label: 'reputations', field: 'reputations' },
   { key: 'mplus', label: 'M+', field: 'mPlusScore', literal: true },
+  { key: 'kills', label: 'lbColKills', field: 'honorableKills' },
   { key: 'ilvl', label: 'ilvl', field: 'ilvl', literal: true }
 ]
 
@@ -197,10 +198,10 @@ const showsScore = computed(() => props.columns.includes('total'))
  * its own heading, with the reader who came to compare them reading across a wall of empty table. So
  * every figure is given a share of the panel instead, capped where a column of three or four digits
  * stops needing to be wider, and the name column takes whatever is left over - which is what makes a
- * row of seven readable as seven columns and still leaves the name room beside them.
+ * row of nine readable as nine columns and still leaves the name room beside them.
  *
  * The rank and the overall rating are measured rather than shared, since neither a rank nor a rating
- * grows. The figures can never claim more than seven shares, so the columns add up to less than the
+ * grows. The figures can never claim more than nine shares, so the columns add up to less than the
  * panel at any width above the table's own minimum and the name column absorbs the difference.
  */
 const RANK_WIDTH = 3.5

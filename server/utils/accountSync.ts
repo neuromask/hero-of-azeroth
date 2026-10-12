@@ -164,6 +164,8 @@ export interface CharacterRow {
   realm_slug: string
   name: string
   name_key: string
+  /** Whether this is the character its account leads with, which is who files the account's wardrobe. */
+  is_main?: number
 }
 
 /**
@@ -207,6 +209,20 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
     row.id
   )
 
+  /**
+   * And the account's wardrobe, read once for the account rather than once per character.
+   *
+   * The appearance sources are the account's own figure - the game keeps the wardrobe for the whole account, so
+   * two of its characters answer the same document - which is why the character its *main* leads with is the one
+   * that files it, and why every other character's tile reads it from the account's totals. It is also the most
+   * expensive read of the twelve (2.5 MB): a pass over a thirty-alt account would otherwise ask Blizzard for the
+   * same document thirty times.
+   */
+  if (row.is_main) {
+    const transmogs = await getCharacterTransmogs(row.realm_slug, row.name_key, row.region)
+    if (transmogs !== null) profile.stats.transmogs = { count: transmogs, accountWide: true }
+  }
+
   // The day's reading, filed by the one function that knows how (`fileDailyReading`): the same call a
   // character page makes when it reads a profile in full, so the two can never write the day's row
   // differently - or leave one of them unfiled.
@@ -219,13 +235,24 @@ export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US')
   // handed over once per account when the pass ends (`syncDueCharacters`), so a pass over a hundred
   // alts is not a hundred leaderboard writes.
   try {
-    const mounts = await getCharacterMountIds(row.realm_slug, row.name_key, row.region, locale)
-    const factions = await getMaxedReputationIds(row.realm_slug, row.name_key, row.region, locale)
+    const [mounts, factions, titles, quests, recipes] = await Promise.all([
+      getCharacterMountIds(row.realm_slug, row.name_key, row.region, locale),
+      getMaxedReputationIds(row.realm_slug, row.name_key, row.region, locale),
+      // The three figures a character *earns*: read here as ids, because a count cannot be unioned with
+      // anything and the account's own figure is exactly that union (`syncPoolFigures`).
+      getCharacterTitleIds(row.realm_slug, row.name_key, row.region),
+      getCharacterQuestIds(row.realm_slug, row.name_key, row.region),
+      getCharacterRecipeIds(row.realm_slug, row.name_key, row.region)
+    ])
 
-    const added = addToPool(row.user_id, 'mounts', mounts) + syncPoolReputations(row.user_id, factions)
+    const added =
+      addToPool(row.user_id, 'mounts', mounts) +
+      syncPoolReputations(row.user_id, factions) +
+      syncPoolFigures(row.user_id, { titles, quests, recipes })
+
     if (added) syncMainToLeaderboard(row.user_id)
   } catch {
-    // A reputation read that failed leaves the pool as it was; the next pass tries again.
+    // A read that failed leaves the pool as it was; the next pass tries again.
   }
 
   // The professions ride along on the answer, so a tile that was just refreshed can draw them
@@ -262,7 +289,7 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
 
     due = useDb()
       .prepare(
-        `SELECT c.id, c.user_id, c.region, c.realm_slug, c.name, c.name_key
+        `SELECT c.id, c.user_id, c.region, c.realm_slug, c.name, c.name_key, c.is_main
            FROM characters c
           WHERE NOT EXISTS (
                   SELECT 1 FROM snapshots s
@@ -272,7 +299,7 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
           ORDER BY c.is_main DESC, COALESCE(c.level, 0) DESC, c.last_seen_at DESC
           LIMIT ?`
       )
-      .all(...(params as any[])) as DueCharacter[]
+      .all(...(params as any[])) as unknown as DueCharacter[]
   } catch {
     return 0
   }

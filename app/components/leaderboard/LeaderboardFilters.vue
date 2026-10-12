@@ -49,7 +49,7 @@ const { realmLabel } = useRealmNames()
  * so the three cannot drift apart: the chips, the table's own headers and the sort the API accepts
  * are the same list of names, read in the same order - the row above the table lists the figures the
  * table draws. The overall chip opens the row because it is the state the others leave behind, and
- * the two figures a collector does not gather by name (`M+`, `ilvl`) close it.
+ * the three figures a collector does not gather by name (`M+`, the honorable kills, `ilvl`) close it.
  *
  * A chip wears the site's own name for the figure it turns on - a "mount lord" where the column says
  * "mounts" - so a reader who has met one in the table knows which chip to reach for. The site has a
@@ -69,6 +69,7 @@ const COLUMN_CHIPS: { key: LeaderboardSort; icon: string; label: string; literal
   { key: 'decor', icon: 'decor', label: 'lbPresetDecor' },
   { key: 'reputations', icon: 'exalted-rep', label: 'reputations' },
   { key: 'mplus', icon: 'key', label: 'lbPresetMplus' },
+  { key: 'kills', icon: 'kills', label: 'honorableKills' },
   { key: 'ilvl', icon: 'item-level', label: 'ilvl', literal: true }
 ]
 

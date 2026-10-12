@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <g id="Layer_2" data-name="Layer 2" class="cls-1">
+    <!-- A hanger with a cloak on it: the hook is a ring cut open at the bottom (`evenodd` again), the bar is
+         the hanger's shoulders, and the cloak hangs from the bar down to a rounded hem. The cloak is narrower
+         than the bar, which is what keeps the hanger's own shoulders visible beside it. -->
+    <path fill-rule="evenodd" d="M204 104 A52 52 0 1 0 308 104 A52 52 0 1 0 204 104 Z M228 104 A28 28 0 1 1 284 104 A28 28 0 1 1 228 104 Z" />
+    <rect x="244" y="140" width="24" height="72" />
+    <path d="M256 168 L488 296 L456 328 L256 224 L56 328 L24 296 Z" />
+    <path d="M88 296 L424 296 L456 440 Q456 464 432 464 L80 464 Q56 464 56 440 Z" />
+  </g>
+</svg>

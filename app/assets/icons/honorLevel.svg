@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <g id="Layer_2" data-name="Layer 2" class="cls-1">
+    <!-- A shield with the two chevrons a rank is worn as, cut through it (`evenodd`): the shield is one
+         outline and the chevrons are the holes inside it, which is what a single-colour icon has to do. -->
+    <path fill-rule="evenodd" d="M256 40 L464 104 L464 240 Q464 368 256 472 Q48 368 48 240 L48 104 Z M120 300 L256 396 L392 300 L392 348 L256 444 L120 348 Z M120 176 L256 272 L392 176 L392 224 L256 320 L120 224 Z" />
+  </g>
+</svg>
