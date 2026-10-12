@@ -21,12 +21,15 @@
  * `/leaderboard`, is a 301 to this one (`nuxt.config.ts`, `routeRules`), and that is the site's only redirect
  * - it buries an address rather than choosing a language, which no other address of the site does.
  *
- * The row under the header carries the character's own links - the profile, the collections, the achievements,
- * the reputations, the feed - pointing at the character this browser opened last. They are drawn only once
- * there is such a character: a tab that leads to the page the reader is already on is worse than no tab at
- * all, and before the browser has been taught a character there is nothing to point at but the search. The
+ * The row under the header is the site's own navigation, as one component (`app/components/SiteNav.vue`): the
+ * character's five views - the profile under their own name, the collections, the achievements, the
+ * reputations and the feed - pointing at the character this browser opened last, and the site's own two
+ * entries held apart from them past a hairline: the hall of fame and the search. The five are drawn only once
+ * there is such a character: an entry that leads to the page the reader is already on is worse than no entry
+ * at all, and before the browser has been taught a character there is nothing to point at but the search. The
  * table is where a character is learned - pressing a row opens their page, and that is the act that remembers
- * them - so the row is full on the next page a reader opens rather than invented here.
+ * them - so the row is full on the next page a reader opens rather than invented here. Below `lg` the entries
+ * move into the panel that row drops, because a phone has room for the search and the corner alone.
  *
  * What the page does not own is the data. Every filter, every preset and every page number is one request to
  * `/api/leaderboard`, which is cached for an hour and answers from memory (see
@@ -43,6 +46,10 @@ import { useSearchHistory, searchHistoryKey, type SearchHistoryEntry } from '~/c
 // The way into the search from outside it: the empty table asks for it on the name that matched nothing
 // (see the composable for why the ask is shared state rather than a prop).
 import { useCharacterLookup } from '~/composables/characterLookup'
+// Where a row of the table stands, which is what a character page's tile is answered with, and the two
+// spellings of the question itself: which columns a link lights, and which row it asks for.
+import { leaderboardRowFromQuery, LEADERBOARD_ROW_PARAM } from '~/composables/leaderboardView'
+import type { LeaderboardPlayer, LeaderboardStanding } from '#shared/data/leaderboardSchema'
 import { formatNumber } from '#shared/utils/formatNumber'
 
 // The picture the page stands on: the hall of fame's own artwork (`app/assets/img`), which is part of the
@@ -56,7 +63,7 @@ import backdrop from '~/assets/img/hf-bg_01.webp'
 import hoaPrev from '~/assets/img/hoa-prev.jpg'
 
 const { t } = useI18n()
-const localeUrl = useLocaleUrl()
+const route = useRoute()
 const publicConfig = useRuntimeConfig().public
 
 const {
@@ -271,9 +278,9 @@ const meKey = computed(() => (history.value[0] ? searchHistoryKey(history.value[
 
 /**
  * The row the plate in the bar stands for, keyed the way a row is keyed, which is what its button walks to
- * (`LeaderboardTable`'s `you`): the character `current` names - a signed-in reader's main, or a guest's last
- * lookup. It is deliberately a value of its own rather than one of the two badges: the plate is about one
- * character, and the badges are about two different questions.
+ * (`revealRow`): the character `you` names - a signed-in reader's main, or a guest's last lookup. It is
+ * deliberately a value of its own rather than one of the two badges: the plate is about one character, and the
+ * badges are about two different questions.
  */
 const plateKey = computed(() => (you.value ? searchHistoryKey(you.value) : ''))
 
@@ -292,72 +299,148 @@ const ownerKey = computed(() => {
 })
 
 /**
- * How the reader's own row is reached from the plate in the bar.
+ * How a row is found once the table has been asked for it.
  *
- * The plate knows the place the reader holds, and a place is the one thing about a row that the table can be
- * asked for. Turning it into a page is the page's own step (`revealRank`), and then the row has to be *seen*:
- * it is drawn one request later, so the scroll to it waits for the answer rather than looking for a row that
- * is not on the screen yet. The row marks itself (`data-you`) for that scroll, which is what keeps a row's
- * address inside the table where rows are drawn - and it is the row of the character the *plate* stands for,
- * which is this page's `current`: a signed-in reader's main, or a guest's last lookup. Looking for the
- * character this browser leafed through instead was how the button came to walk to somebody else's row, or to
- * no row at all.
+ * Two things lead to a row in this table, and both end here. The plate in the bar leads to the row of the
+ * character it stands for - a signed-in reader's main, or the last character a guest looked up. A tile on a
+ * character page leads to the row of the character whose page was pressed on: the tile's link carries that
+ * character's key into this page's address (`leaderboardRowQuery`), and the table is turned to it below.
+ *
+ * A place is the one thing about a row the table can be asked for, and turning a place into a page is the
+ * page's own step (`revealRank`); then the row has to be *seen*, and it is drawn one answer later - so the
+ * scroll waits for that answer rather than looking for a row that is not on the screen yet. Every row carries
+ * its own key (`data-key`, written by `LeaderboardTable` from the same `searchHistoryKey` the row is drawn
+ * under), and that is what makes the walk an attribute rather than a position: the row is found wherever the
+ * table happens to have put it, on whatever page, without the page counting rows.
  */
-const scrollToMe = ref(false)
+const scrollTarget = ref<string | null>(null)
 
-/** Brings the marked row into the middle of the window. The sticky header is why it is the middle. */
-function scrollToRow() {
-  nextTick(() => document.querySelector('[data-you="true"]')?.scrollIntoView({ block: 'center' }))
+/**
+ * Brings a row into the middle of the window, by the key it is drawn under. The sticky header is why it is the
+ * middle: a row scrolled to the top of the window would land under the bar.
+ */
+function scrollToRow(key: string) {
+  nextTick(() => document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center' }))
 }
 
-/** Answers the plate's button: the reader's place, turned into the page that holds their row. */
-function revealRow(rank: number) {
-  // The row the plate stands for, keyed the way a row is keyed.
-  const key = plateKey.value
+/**
+ * Walks to a row: the scroll when it is already drawn, and the page that holds it plus a scroll once that page
+ * lands when it is not.
+ *
+ * A row already drawn is a scroll rather than a request, on purpose: the reader is looking at the table they
+ * asked for, and reordering it would move the very row they have just found.
+ */
+function reveal(key: string, rank: number) {
+  if (!key) return
 
-  // A row already drawn is a scroll rather than a request: the reader is looking at the table they asked for,
-  // and reordering it would move the very row they just found.
-  if (key && rows.value.some((player) => searchHistoryKey(player) === key)) {
-    scrollToRow()
+  if (rows.value.some((player: LeaderboardPlayer) => searchHistoryKey(player) === key)) {
+    scrollToRow(key)
     return
   }
 
   revealRank(rank)
-  scrollToMe.value = true
+  scrollTarget.value = key
+}
+
+/** Answers the plate's button: the reader's place, turned into the page that holds their row. */
+function revealRow(rank: number) {
+  reveal(plateKey.value, rank)
 }
 
 // The page the reader asked for arrives a moment after the request: `pending` falling is what says it is
-// drawn, and the scroll happens once per button, not once per page of the table.
+// drawn, and the scroll happens once per row that was walked to, not once per page of the table.
 watch(pending, (busy) => {
-  if (busy || !scrollToMe.value) return
-  scrollToMe.value = false
-  scrollToRow()
+  if (busy || !scrollTarget.value) return
+
+  const key = scrollTarget.value
+  scrollTarget.value = null
+  scrollToRow(key)
 })
 
 /**
- * The character's own views, as the row under the header draws them: the addresses the tabs and the two menus
- * point at.
+ * The row a link into this table asked for: the character whose page the reader pressed it on.
  *
- * They are built as one object rather than as five computeds, because the row is one thing - it is drawn whole
- * or not at all - and `null` is the honest answer while this browser knows nobody: there is no address to
- * offer, and a link that guessed at one would point at the page the reader is already reading. The two menus
- * are handed the subtrees they hang their entries from; the tabs are handed the three whole addresses, in the
- * language being read.
+ * A tile on a character page is a link into the table - the figure under the reader's eye is a column of it -
+ * and the reader pressing one is asking a question about *that* character: where do they stand among
+ * everybody on this figure? Landing at the top of the table would answer a different question and leave the
+ * reader to page through fifty screens for the one row they wanted, so the link names the row as well as the
+ * column (`leaderboardRowQuery`), and this page turns the name into the place the overall table gives that
+ * character and then walks to it.
  */
-const links = computed(() => {
-  const entry = reading.value
-  if (!entry) return null
+const askedKey = computed(() => leaderboardRowFromQuery(route.query[LEADERBOARD_ROW_PARAM]))
 
-  const base = `/${regionPath(entry.region)}/${entry.realm}/${entry.name}`
+/**
+ * The row that has already been walked to, so a link is followed once rather than on every render of the
+ * table around it.
+ */
+const walked = ref<string | null>(null)
 
-  return {
-    overview: localeUrl(base),
-    activity: localeUrl(`${base}/activity`),
-    reputations: localeUrl(`${base}/reputations`),
-    collections: `${base}/collections`,
-    achievements: `${base}/achievements`
-  }
-})
+/**
+ * Where the character a tile asked for stands - read in the browser, after the page has been drawn.
+ *
+ * A place is a question of its own, and one no other reader can be answered from, which is why it is a
+ * request rather than part of the table's answer (`server/api/leaderboard/[region]/[realm]/[name]`). It is
+ * asked for only when an address names a row, which is what makes the read lazy: a plain visit to the hall of
+ * fame asks for the table and nothing else.
+ *
+ * It is asked for in the browser rather than while the page is being rendered, because what it leads to - the
+ * scroll to the row - is something only a browser can do. The table itself is still rendered on the server,
+ * with the columns the link named, so a reader arriving from a tile sees the figure they pressed from the
+ * first frame while the place they hold on it is being looked up behind them.
+ */
+const { data: askedStanding, refresh: loadAskedStanding } = await useFetch<LeaderboardStanding | null>(
+  () => {
+    const key = askedKey.value
+    if (!key) return ''
+
+    const [region, realm, name] = key.split(':')
+    if (!region || !realm || !name) return ''
+
+    return `/api/leaderboard/${region}/${realm}/${encodeURIComponent(name)}`
+  },
+  { key: 'hoa-leaderboard-asked', immediate: false, default: () => null }
+)
+
+/**
+ * And the walk to it, once the place is known.
+ *
+ * Two things make this read the way it does. The first is that the row may already be on the screen: the table
+ * the reader is looking at is the answer the server sent, so a character in it is scrolled to without asking
+ * for a place at all. The second is that an address asks once - `walked` remembers the row this page has
+ * already been turned to, so a table that re-renders around it (a filter changed by hand, an answer landing)
+ * does not drag the reader back to a row they have already seen.
+ *
+ * A place that cannot be read leaves the page exactly as it is: a character the table does not know - one of
+ * an account's alts, which the hall of fame enters as the main its account leads with, or a character whose
+ * page nobody has rendered yet - has no row to walk to, and the ask is simply left unanswered.
+ */
+watch(
+  [askedKey, askedStanding],
+  ([key, standing]) => {
+    // A scroll is the browser's: a server render has no window to move, and the place is read there for the
+    // answer alone (hence `immediate: false` above).
+    if (!import.meta.client || !key) return
+    if (walked.value === key) return
+
+    if (!standing) {
+      if (rows.value.some((player: LeaderboardPlayer) => searchHistoryKey(player) === key)) {
+        walked.value = key
+        scrollToRow(key)
+        return
+      }
+
+      loadAskedStanding()
+      return
+    }
+
+    // A place without a rank is not a place: the answer is only used once it says where the row stands.
+    if (!standing.rank) return
+
+    walked.value = key
+    reveal(key, standing.rank)
+  },
+  { immediate: true }
+)
 
 // The history lives in the browser and the server has none, so it is read once the page is mounted: the first
 // render carries no character at all - no plate in the bar, no character links in the row - and both sides
@@ -375,8 +458,8 @@ onMounted(loadHistory)
     <SiteBackdrop :image="backdrop" />
 
     <!-- The same header the character pages wear: the brand, the page's name where a character's name would be,
-         one line about the page under it, and the row of links below - the language pair and the account ending
-         it, exactly where they sit on every other page (`app/components/SiteHeader.vue`). -->
+         and, under it, the very row those pages carry - the character's five views, the site's own two entries,
+         the languages and the account (`app/components/SiteNav.vue`). -->
     <SiteHeader :title="t('lbTitle')" :meta="meta">
       <!-- What the bar carries on the right, and it is one of two things depending on who is reading.
 
@@ -406,34 +489,18 @@ onMounted(loadHistory)
         <CharacterSearchForm v-else-if="!account?.user" compact />
       </template>
 
-      <!-- The character's own views, pointing at the character this reader came from. They are drawn only once
-           this browser knows one, which is the one thing this page does differently from every other: the hall of
-           fame used to lead these to the front door while no character was known, and the front door is now this
-           page - a tab pointing at the page it stands on is not a link. The two menus are the very components a
-           character page's row carries, so their dropdowns, their entries and their addresses are the ones a
-           reader has already met. -->
-      <template v-if="links">
-        <NuxtLink :to="links.overview" class="hoa-tab hoa-liquid-glass">{{ t('tabOverview') }}</NuxtLink>
+      <!-- The whole row, and it is the same component a character page wears: the five views of whichever
+           character this browser is reading, the site's own two entries held apart from them by the hairline,
+           the languages, the account and the search - and, on a phone, the panel all of those move into
+           (`app/components/SiteNav.vue`).
 
-        <CollectionMenu :path="links.collections" :active="false" />
-        <AchievementMenu :path="links.achievements" :active="false" />
-
-        <NuxtLink :to="links.reputations" class="hoa-tab hoa-liquid-glass">{{ t('tabReputations') }}</NuxtLink>
-        <NuxtLink :to="links.activity" class="hoa-tab hoa-liquid-glass">{{ t('tabActivity') }}</NuxtLink>
-      </template>
-
-      <!-- And the hall of fame itself, which is the page being read: on a character's page this tab is the way
-           here, and here it marks where the reader stands. -->
-      <NuxtLink
-        :to="localeUrl('/')"
-        class="hoa-tab hoa-liquid-glass hoa-tab-active"
-        aria-current="page"
-      >{{ t('lbNav') }}</NuxtLink>
-
-      <!-- And the way to somebody the table does not hold: the front door's own two fields, dropped as a sheet
-           under this row when the button is pressed - and opened on the name the table was given when the table
-           found nobody at all. It is the shortcut the whole page answers to as well (`Ctrl`/`⌘`+`K`). -->
-      <CharacterSearchDialog />
+           The character is the one this reader came from, and it is also the one thing this page does
+           differently from a character page: the row above is drawn only once this browser knows somebody,
+           because the hall of fame used to lead these entries to the front door while no character was known -
+           and the front door is now this page, where an entry pointing at the page it stands on is not a link.
+           The hall of fame is one of the row's own entries and *is* the page being read, so the row is simply
+           told which entry is lit and warms it with the gold without a special case. -->
+      <SiteNav :character="reading" :label="t('lbTitle')" active="leaderboard" />
     </SiteHeader>
 
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
@@ -464,7 +531,10 @@ onMounted(loadHistory)
       <!-- The table, with the name that matched nothing handed to the search when the answer comes back empty: a
            character the site has never rendered has no row here, and the field the reader filled in is not the
            place to find that out the hard way. The press leaves the table as an event and becomes an ask here
-           (`app/composables/characterLookup.ts`), which the sheet in the row above answers. -->
+           (`app/composables/characterLookup.ts`), which the sheet in the row above answers.
+
+           The rows are handed their `you` no longer: a page walks to a row by the key the row itself carries,
+           so what it needs to know is the key and not whether it happens to be the plate's. -->
       <LeaderboardTable
         class="mt-3"
         :players="rows"
@@ -474,7 +544,6 @@ onMounted(loadHistory)
         :pending="pending"
         :highlight="meKey"
         :owner="ownerKey"
-        :you="plateKey"
         :online="online"
         @update:sort="setSort"
         @inspect="lookUp(search)"

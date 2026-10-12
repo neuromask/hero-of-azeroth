@@ -13,10 +13,12 @@
  * from the sitemap's index, which never kept a URL - or one whose picture fails to load draws a
  * monogram in the class colour instead, so a row is never a broken image.
  *
- * One of the rows can be the character this browser opened last (see `app/pages/leaderboard.vue`),
- * and the table marks such a row rather than moving it: the order is the endpoint's to decide, and a
- * table that pulled a row to the top because it happened to be the one being read would no longer be
- * the table it was handed.
+ * One of the rows can be the character this browser opened last (see `app/pages/index.vue`), and the table marks
+ * such a row rather than moving it: the order is the endpoint's to decide, and a table that pulled a row to the
+ * top because it happened to be the one being read would no longer be the table it was handed. Every row also
+ * carries its own key (`data-key`), because a row is a thing a page walks to as well as a thing it draws - the
+ * plate in the bar turns the table to the reader's place, and a tile on a character page turns it to that
+ * character's row.
  */
 import { searchHistoryKey } from '~/composables/searchHistory'
 import { formatNumber } from '#shared/utils/formatNumber'
@@ -49,14 +51,6 @@ const props = defineProps<{
    * absent from a page that does not hold the account's main.
    */
   owner?: string
-  /**
-   * The row the plate in the bar walks to, written the same way: the character that plate stands for - a
-   * signed-in reader's main, or the last character a guest looked up (`app/pages/index.vue`). It is a row's
-   * *address* rather than a badge, which is why it is passed beside `highlight` and `owner` instead of being
-   * derived from them: the button scrolls to the row of the character the plate is about, and reading it off the
-   * "selected" mark walked to whoever this browser happened to leaf through last.
-   */
-  you?: string
   /**
    * The mains whose account is on the site right now, keyed the way `searchHistoryKey` writes a row
    * (`app/composables/presence.ts`). A row whose character is in it wears the green dot on its portrait;
@@ -119,16 +113,6 @@ function profileUrl(player: LeaderboardPlayer): string {
  */
 function isSelected(player: LeaderboardPlayer): boolean {
   return !!props.highlight && props.highlight === searchHistoryKey(player)
-}
-
-/**
- * Whether this row is the one the plate in the bar stands for, which is what the button under that plate
- * scrolls to (`data-you`). It is not the same question as either badge: a guest's row is their last lookup,
- * while a signed-in reader's is their main - and a reader who looked somebody up carries both marks on two
- * different rows.
- */
-function isYou(player: LeaderboardPlayer): boolean {
-  return !!props.you && props.you === searchHistoryKey(player)
 }
 
 /**
@@ -345,13 +329,20 @@ function open(player: LeaderboardPlayer) {
         </thead>
 
         <tbody>
-          <!-- A row that is the selected character is marked as such, and the mark rides on the row: a
+          <!-- A row carries its own key (`data-key`), which is what lets a page walk to it: the button under
+               the plate in the bar scrolls to the row of the character it stands for, and a tile on a character
+               page turns the table to that character's row (`app/pages/index.vue`). It is written from the same
+               `searchHistoryKey` the row is drawn under, so the row that is looked for and the row that is
+               drawn are one key rather than two spellings of a name - and the key is an address, so the row is
+               found wherever the table has put it, on whatever page, without anything counting rows.
+
+               A row that is the selected character is marked as such, and the mark rides on the row: a
                bar of the brand gold down its edge, the glass warmed with it, and the badge that says
                whose row it is. Nothing about the order changes - a row is where the table put it. -->
           <tr
             v-for="(player, index) in players"
             :key="searchHistoryKey(player)"
-            :data-you="isYou(player) ? 'true' : undefined"
+            :data-key="searchHistoryKey(player)"
             class="cursor-pointer border-b border-white/5 transition-colors last:border-b-0"
             :class="isSelected(player) ? 'bg-wow-gold/[0.08] hover:bg-wow-gold/15' : 'hover:bg-white/[0.05]'"
             @click="open(player)"

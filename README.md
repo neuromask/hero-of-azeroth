@@ -81,6 +81,28 @@ The hall of fame's old address, `/leaderboard`, is a 301 to `/` (`nuxt.config.ts
 page now, and only the address that no longer names anything redirects - every other page of the site still
 refuses to.
 
+### One row of navigation, in two groups — and a panel for a phone
+
+Every page wears the same row (`app/components/SiteNav.vue`), and it is deliberately *grouped*. It is also the only
+place the languages, the account and the search are drawn at all - a header of a page that has no row of its own is
+handed this very component - so no page can carry them twice. Five of the row's entries are about the character
+being read: the profile - which carries the character's own name and portrait rather than the word "character", so
+a reader always sees who the bar is about - the collections, the achievements, the reputations and the feed. Two of
+them are the site's own and answer a different question: the hall of fame the figures are ranked in, and the search
+that opens the next character. Those two stand at the far end of the row, past a hairline, in the corner the
+languages and the account already close the row with. A page that is not about a character - a document, the account
+page - wears the same row with those five left out.
+
+Below `lg` that row does not fit, and a row that wraps to three lines costs a phone a whole screen of the page it
+came for. So the entries that are navigation move into the panel the burger opens - the five of a character and the
+hall of fame, under two headings, with the collections and the achievements as lists indented under the entry that
+opens them (a pane dropped inside a pinned bar would cover the panel it came from, and a phone reads an indented
+list better than a second layer of glass). What stays in the row is the search, the languages and the account: the
+one thing a phone must always have within reach, and the corner every row of the site ends in. The button carries
+`aria-expanded` and swaps its label between opening and closing in the reader's own language, Escape and a press
+outside the panel close it, and picking an entry closes it too - the link that was just followed is the page being
+read.
+
 ## 🚀 Quick start
 
 ```bash
@@ -189,9 +211,9 @@ a second implementation is a second answer.
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name and the row of tabs), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's five views under the character's own name, the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with the five left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable`, `LeaderboardYou` (the reader's own place in the table) |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView`, `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView`, `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView` (what the table is asked for, and the two questions a link into it spells out: which columns it lights, and which character's row it asks for), `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
@@ -262,10 +284,20 @@ not a dead end.
 The character the page is *about* is the one this browser opened last, or - for a reader who is signed in and has
 looked nobody up on this device - the main of their account: `/api/profile` is read for the row's own badge in any
 case, so the main costs the page no second request, and a reader who signed in somewhere else finds their
-character waiting in the bar instead of a pair of empty fields. The row under the page's name carries that
-character's own views - profile, collections, achievements, reputations, feed - and draws them only once there is
-one; the bar carries their place in place of the account chip
-(`app/components/leaderboard/LeaderboardYou.vue`).
+character waiting in the bar instead of a pair of empty fields. The row under the page's name is the site's own
+navigation and the very component a character page wears (`app/components/SiteNav.vue`), drawn only once there is
+somebody for its five character entries to point at; the bar carries that character's place instead of the account
+chip (`app/components/leaderboard/LeaderboardYou.vue`).
+
+The table is a *destination* rather than only a list. Every stat tile on a character page links into it with the
+figure's own chip lit **and** that character's row named (`leaderboardColumnsQuery`, `leaderboardRowQuery` - the
+same pair the page reads the address back with), because a reader who presses a tile is asking one question:
+where does *this* character stand on this figure? So the hall of fame reads the place the table gives that row
+(`/api/leaderboard/<region>/<realm>/<name>`), turns to the page that holds it and scrolls to the row itself - a
+row already on the screen is scrolled to without asking for anything at all, and a character the table does not
+know (an alt of an account whose main is the row it enters) leaves the page exactly as it was. The walk happens
+once per link, and `data-key` on every row is what makes a row an address a page can walk to rather than a
+position it has to count to. The button under the reader's own plate walks the same way.
 
 ## 🎯 Collections: where the numbers come from
 

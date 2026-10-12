@@ -48,12 +48,6 @@ withDefaults(
 )
 
 const { t } = useI18n()
-const localeUrl = useLocaleUrl()
-
-/** The one page a reader may have come from, offered as every page's own row offers its links. It is the front
- * door, which is the hall of fame, so the two links this row used to carry - the home page and the table - are
- * one address now and are drawn once. */
-const links = computed(() => [{ label: t('lbNav'), to: localeUrl('/') }])
 
 /** The paragraphs of a section: its body is one message, split on the blank lines it carries. */
 const paragraphs = (body: string) => String(t(body)).split('\n\n')
@@ -66,8 +60,9 @@ const paragraphs = (body: string) => String(t(body)).split('\n\n')
     <SiteBackdrop :image="image" />
 
     <!-- The heading and its one line are messages like every label of the site, so they are keys here and
-         translated once, where the header draws them. -->
-    <SiteHeader :title="t(title)" :meta="t(meta)" :links="links" />
+         translated once, where the header draws them. The row under them is the site's own navigation, which
+         the header draws for a page that has none of its own (`app/components/SiteNav.vue`). -->
+    <SiteHeader :title="t(title)" :meta="t(meta)" />
 
     <div
       class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4 lg:grid lg:max-w-5xl lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-x-6"

@@ -10,13 +10,14 @@ import { formatNumber } from '#shared/utils/formatNumber'
 // overview's alone, so everything they draw is computed here.
 import { useCharacterView } from '~/composables/characterView'
 // Where a tile leads. The query a link carries is built by the very composable the hall of fame reads
-// it back with, so a tile and the chip row that answers it can never spell the same choice differently.
-import { leaderboardColumnsQuery } from '~/composables/leaderboardView'
+// it back with, so a tile and the chip row - or the row of the table - that answers it can never spell the
+// same choice differently: the figure the tile prints, and the character that figure belongs to.
+import { leaderboardColumnsQuery, leaderboardRowQuery } from '~/composables/leaderboardView'
 // The figures a tile stands for are the table's own columns, so the keys below are that type rather
 // than any string: a tile added for a collection the hall of fame has no column for would not compile.
 import type { LeaderboardSort } from '#shared/data/leaderboardSchema'
 
-const { character } = useCharacterView()
+const { character, region, realm, name } = useCharacterView()
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()
 
@@ -101,15 +102,23 @@ const tileColumns = computed<StatTile[][]>(() => {
 })
 
 /**
- * Where a tile leads: the hall of fame with this collection's chip already lit, in the language being read. The
- * hall of fame is the site's front door (`app/pages/index.vue`), so this is the one link into the table that
- * starts from a number a reader was looking at rather than from a menu.
+ * Where a tile leads: the hall of fame with this collection's chip already lit and this character's own row
+ * asked for, in the language being read.
  *
- * Every figure a tile prints is a figure the table has a column for: the chip they find switched on is the very
- * tile they pressed, and the table is narrowed to it.
+ * The hall of fame is the site's front door (`app/pages/index.vue`), so this is the one link into the table
+ * that starts from a number a reader was looking at rather than from a menu - and a reader who presses a figure
+ * is asking about *this* character: where do they stand among everybody on it? So the link names both halves of
+ * the question, and both of them through the composable that reads them back (`leaderboardColumnsQuery` for the
+ * chip, `leaderboardRowQuery` for the row), which is what keeps a tile and the table from ever spelling the
+ * same choice differently. Every figure a tile prints is a figure the table has a column for: the chip they
+ * find switched on is the very tile they pressed, the table is narrowed to it, and it opens on the page that
+ * holds the character's row rather than on the top of the table.
  */
 function tileUrl(key: LeaderboardSort) {
-  return { path: localeUrl('/'), query: leaderboardColumnsQuery([key]) }
+  return {
+    path: localeUrl('/'),
+    query: { ...leaderboardColumnsQuery([key]), ...leaderboardRowQuery({ region, realm, name }) }
+  }
 }
 </script>
 

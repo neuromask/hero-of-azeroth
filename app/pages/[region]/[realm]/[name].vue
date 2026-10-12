@@ -11,7 +11,7 @@ import type { CharacterData } from '~~/server/utils/blizzard'
 import type { ActivityFeed } from '#shared/utils/activity'
 // The search history the front page offers: a character that rendered here is a search that
 // worked, and that is what is worth keeping (see the composable for the shape and the limit).
-import { useSearchHistory } from '~/composables/searchHistory'
+import { useSearchHistory, type SearchHistoryEntry } from '~/composables/searchHistory'
 // What the shell hands to the views it renders (see the composable for the shape).
 import { provideCharacterView } from '~/composables/characterView'
 // The Russian copy of this subtree is the same component under `/ru`; the middleware reads the
@@ -35,26 +35,41 @@ if (!region) {
 const apiLocale = computed(() => (locale.value === 'ru' ? 'ru_RU' : 'en_US'))
 
 /**
- * The three views of the character, as addresses: the profile the page opens on, the feed of what
- * the character has done lately, and the collections it has gathered. A tab is a link rather than a
- * button, so the browser keeps every view in its history, a shared link can point at one, and a
- * crawler reaches each on its own.
+ * The four views of the character that are not the profile itself, as the addresses they stand at: the feed,
+ * the collections, the achievements and the reputation journal. They are read here rather than in the row,
+ * because the shell is the one that knows the character and the address - the row is handed *who* it is about
+ * and never guesses it (see `app/components/SiteNav.vue`).
  */
-const overviewPath = computed(() => `/${regionPath(region)}/${realm}/${name}`)
-const activityPath = computed(() => `${overviewPath.value}/activity`)
-/** The collections subtree, which opens on the summary (see the `collections/` folder). */
-const collectionsPath = computed(() => `${overviewPath.value}/collections`)
-/** The achievements subtree, which opens on the summary (see the `achievements/` folder). */
-const achievementsPath = computed(() => `${overviewPath.value}/achievements`)
-/** The reputation journal, which is one page rather than a menu of shelves (see `.../reputations.vue`). */
-const reputationsPath = computed(() => `${overviewPath.value}/reputations`)
-/** The view the address names, which is what the tabs are lit by. */
 const onActivityTab = computed(() => /\/activity\/?$/.test(route.path))
 const onCollectionsTab = computed(() => /\/collections(?:\/|$)/.test(route.path))
 const onAchievementsTab = computed(() => /\/achievements(?:\/|$)/.test(route.path))
 const onReputationsTab = computed(() => /\/reputations\/?$/.test(route.path))
-/** Whether `kind` is the shelf being read, which is the entry the collections menu lights. */
-const onShelf = (kind: string) => new RegExp(`/collections/${kind}/?$`).test(route.path)
+
+/**
+ * The character as the row is built from, in the shape a remembered character has: the three segments of the
+ * address this page stands at, with the portrait and the class of the tab that carries their name.
+ *
+ * The name and the address are handed over at once - they are read from the address, which is known before
+ * Blizzard is - and the face fills in behind them, so the row is whole on the first frame and its first
+ * entry gains a picture a moment later rather than appearing out of nowhere.
+ */
+const navCharacter = computed<SearchHistoryEntry>(() => ({
+  name,
+  realm,
+  region,
+  realmName: character.value?.realm || realm,
+  classId: character.value?.classId,
+  avatar: character.value?.avatarUrl
+}))
+
+/** Which of the row's five entries the address names, which is the one that is lit. */
+const activeTab = computed(() => {
+  if (onReputationsTab.value) return 'reputations' as const
+  if (onActivityTab.value) return 'activity' as const
+  if (onCollectionsTab.value) return 'collections' as const
+  if (onAchievementsTab.value) return 'achievements' as const
+  return 'overview' as const
+})
 
 const { data: character, pending, error } = await useFetch<CharacterData>(
   () => `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}`
@@ -874,71 +889,11 @@ onBeforeUnmount(() => {
             class="pointer-events-none absolute inset-x-0 top-0 z-0 h-12 bg-gradient-to-b from-wow-dark/90 via-wow-dark/55 to-transparent"
             aria-hidden="true"
           />
-          <!-- The row of tabs: the profile, the shelves, the feed - and then the hall of fame, the
-               site's other public page, one click away from the character a reader has just looked
-               up. It is deliberately one row and one look: stepping from a character into the table
-               of everybody keeps the bar, the tabs and the language pair exactly where they are, so
-               the two pages read as one site rather than two. The fade behind the row lets the cards
-               below dissolve into the bar rather than poke at its edge. -->
-          <div class="relative flex flex-wrap items-center gap-2">
-            <NuxtLink
-              :to="localeUrl(overviewPath)"
-              class="hoa-tab hoa-liquid-glass"
-              :class="{ 'hoa-tab-active': !onActivityTab && !onCollectionsTab && !onAchievementsTab && !onReputationsTab }"
-              :aria-current="
-                !onActivityTab && !onCollectionsTab && !onAchievementsTab && !onReputationsTab ? 'page' : undefined
-              "
-            >
-              {{ $t('tabOverview') }}
-            </NuxtLink>
-            <!-- The collections are four shelves - mounts, pets, toys, decor - and the menu that
-                 chooses between them is part of this navigation rather than a row of tabs on the page
-                 (`app/components/CollectionMenu.vue`). It stands where a reader looks for it: right
-                 after the profile. -->
-            <CollectionMenu :path="collectionsPath" :active="onCollectionsTab" />
-            <!-- The achievements are fifteen categories, chosen the same way: the menu is part of this
-                 navigation (`app/components/AchievementMenu.vue`), right after the collections. -->
-            <AchievementMenu :path="achievementsPath" :active="onAchievementsTab" />
-            <!-- The reputations are one journal rather than a menu of shelves - every expansion is drawn
-                 on the one page (`app/components/ReputationShelf.vue`) - so the tab is a plain link. -->
-            <NuxtLink
-              :to="localeUrl(reputationsPath)"
-              class="hoa-tab hoa-liquid-glass"
-              :class="{ 'hoa-tab-active': onReputationsTab }"
-              :aria-current="onReputationsTab ? 'page' : undefined"
-            >
-              {{ $t('tabReputations') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="localeUrl(activityPath)"
-              class="hoa-tab hoa-liquid-glass"
-              :class="{ 'hoa-tab-active': onActivityTab }"
-              :aria-current="onActivityTab ? 'page' : undefined"
-            >
-              {{ $t('tabActivity') }}
-            </NuxtLink>
-            <!-- The hall of fame, in the same row and wearing the same tab as the views beside it: it is not a
-                 view of this character, but the site's front door and the table of everybody, which is where a
-                 reader who has just looked somebody up wants to go next. It stands at the end of the row for
-                 that, and it is the same address this tab carries on the front door itself. -->
-            <NuxtLink
-              :to="localeUrl('/')"
-              class="hoa-tab hoa-liquid-glass"
-            >
-              {{ $t('lbNav') }}
-            </NuxtLink>
-            <!-- And the way to somebody who is not this character: the very button the hall of fame
-                 carries in its own row, dropping the same two fields (`CharacterSearchDialog`), so a
-                 reader who has just looked one character up can look the next one up without going
-                 back to the front door first. It stands after the tabs, exactly where it stands in
-                 that row, and before the languages that end every row on the site. -->
-            <CharacterSearchDialog />
-            <!-- The languages sit at the far end of the row the tabs are on: a reader looks for the
-                 switch where the navigation is, and the pair travels with the header as it is pinned
-                 to the top of the window. The account plate stands to their right, as everywhere. -->
-            <LocaleSwitch class="ml-auto" />
-            <AuthMenu />
-          </div>
+          <!-- The row itself: the character's five views, the site's own two entries held apart from them,
+               the languages, the account and the panel a phone opens all of it in - the whole row is one
+               component (`app/components/SiteNav.vue`). The shell hands over *who* the row is about and which
+               of the five entries the address names, and the row draws the rest. -->
+          <SiteNav :character="navCharacter" :label="character.name" :active="activeTab" />
         </nav>
       </header>
 

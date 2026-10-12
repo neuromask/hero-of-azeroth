@@ -1,16 +1,20 @@
 <script setup lang="ts">
 /**
- * The site's own header: the brand, what the page is, and the row of links under it.
+ * The site's own header: the brand, what the page is, and the site's navigation under it.
  *
  * It is the frame a character page wears, drawn for a page that is not about a character. Where the
  * character shell prints the character's name, its title and the row of facts under it, this prints
  * the page's name and one line about the page - and where the shell offers Refresh and Download on
  * the right, this leaves that side to whatever the page hands it through the `actions` slot.
  *
- * The row underneath is the page's own links and the language pair, in one flat row - the same row a
- * character page wears, so that stepping between the two pages keeps the bar, the tabs and the switch
- * exactly where they are. The fade under the bar belongs here rather than to the row, because it is
- * the bar that is pinned and the fade that lets the page dissolve under it.
+ * The row underneath is the site's navigation, and it is one component (`app/components/SiteNav.vue`) for
+ * every page of the site - this header included: a page that draws a row of its own (the hall of fame hands
+ * over the character's views beside the site's own) writes it into the slot, and a page that has no row of its
+ * own is given the same component, which is what every page ends up wearing. Nothing about that row is this
+ * header's - not the languages, not the account - so a page can no more carry them twice than it can wear two
+ * bars: it is the same row a character page wears, so stepping between the pages keeps the bar, the entries
+ * and the switch exactly where they are. The fade under the bar belongs here rather than to the row, because
+ * it is the bar that is pinned and the fade that lets the page dissolve under it.
  *
  * The bar is pinned to the top of the window (`sticky`), above the page (`z-40`), and its panel
  * keeps only its bottom corners rounded because it stands flush against the top edge - all of it
@@ -25,8 +29,6 @@ defineProps<{
   title: string
   /** One line under it: the facts the page is about, in the page's own language. */
   meta?: string
-  /** The page's own links, when it has any. The site's own two are added by `SiteNav`. */
-  links?: { label: string; to: string; active?: boolean }[]
 }>()
 
 const localeUrl = useLocaleUrl()
@@ -70,7 +72,7 @@ const localeUrl = useLocaleUrl()
     </div>
 
     <nav class="relative pt-3" :aria-label="title">
-      <!-- The fade the row of links sits on, so the page below dissolves into the bar rather than
+      <!-- The fade the row sits on, so the page below dissolves into the bar rather than
            poking at its edge. It is kept under everything and light enough to dim rather than
            black out. -->
       <div
@@ -79,29 +81,16 @@ const localeUrl = useLocaleUrl()
       />
 
       <div class="relative flex flex-wrap items-center gap-2">
-        <!-- The page's own tabs. A page whose row is plain links hands them over as `links`; a page
-             whose row carries a control rather than a link - the hall of fame borrows the collections
-             menu from a character page - writes the whole row into the slot instead. -->
+        <!-- The page's own row. It is the whole site's navigation, drawn by one component for every page of
+             the site (`app/components/SiteNav.vue`): the character's five views when the page is about a
+             character, the site's own two entries, the search, the language pair and the account. A page that
+             draws a row of its own hands it over through the slot; a page that has none - the account page, a
+             document - is given the site's, which is what every page ends up wearing. The corner is that
+             component's, never this header's: only one thing draws the languages and the account, so no page
+             can carry them twice. -->
         <slot>
-          <NuxtLink
-            v-for="link in links || []"
-            :key="link.to"
-            :to="link.to"
-            class="hoa-tab hoa-liquid-glass"
-            :class="{ 'hoa-tab-active': link.active }"
-            :aria-current="link.active ? 'page' : undefined"
-          >
-            {{ link.label }}
-          </NuxtLink>
+          <SiteNav :label="title" />
         </slot>
-
-        <!-- The languages sit at the far end of the row the links are on, exactly where a reader
-             finds them on a character page. -->
-        <LocaleSwitch class="ml-auto" />
-
-        <!-- And the account, to the right of the languages: the blue Battle.net plate while nobody
-             is signed in, the profile and the way out once somebody is. -->
-        <AuthMenu />
       </div>
     </nav>
   </header>

@@ -12,11 +12,12 @@
  * letter at a time, so the box keeps its own value and hands the server a debounced copy - a
  * reader typing `neromask` asks once, not eight times.
  *
- * One piece of the page's state travels in the address as well as in this composable: which columns
- * the table shows. It is here because a tile on a character page links *into* the table - pressing
- * the decor tile opens the hall of fame with the decor chip lit - so the page has to be able to open
- * with the chips already chosen. The two functions below are that agreement, written once, so a link
- * and the chip row that answers it can never spell it differently.
+ * Two pieces of the page's state travel in the address as well as in this composable, and both of them because
+ * a tile on a character page links *into* the table: which columns it shows (pressing the decor tile opens the
+ * hall of fame with the decor chip lit) and which character's row the reader came to find (that tile's figure
+ * is a column of the table, and the character it belongs to is a row of it). The functions below are those two
+ * agreements, written once each, so a link and the row of chips - or the row of the table - that answers it can
+ * never spell the same choice differently.
  */
 import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
 import type {
@@ -25,6 +26,10 @@ import type {
   LeaderboardQuery,
   LeaderboardSort
 } from '#shared/data/leaderboardSchema'
+// The key a row is compared by, and the region an address segment names: the pair below turns a character into
+// an address and an address back into a character, in the one spelling the table and the link both write.
+import { searchHistoryKey } from '~/composables/searchHistory'
+import { regionFromPath } from '~/composables/urls'
 
 /** How long the search box waits after the last keystroke before it asks the server. */
 const SEARCH_DEBOUNCE = 300
@@ -61,6 +66,40 @@ export function leaderboardColumnsFromQuery(value: unknown): LeaderboardSort[] |
   const picked = LEADERBOARD_SORTS.filter((key) => key !== 'total' && said.includes(key))
 
   return picked.length ? picked : null
+}
+
+/** The query parameter a character's row is asked for by, and the one a link from a character page names. */
+export const LEADERBOARD_ROW_PARAM = 'row'
+
+/**
+ * The row a link into the table names: the character whose page it was pressed on, written the way a row of
+ * the table is keyed (`searchHistoryKey`), so the address and the table agree on *who* is meant rather than on
+ * how the name happens to be spelled.
+ */
+export function leaderboardRowQuery(entry: { region: string; realm: string; name: string }): Record<string, string> {
+  return { [LEADERBOARD_ROW_PARAM]: searchHistoryKey(entry) }
+}
+
+/**
+ * The row an address names, in the one spelling a row is compared by - or `null` when it names none.
+ *
+ * The three segments are normalised the way the table's own keys are: a region is read through
+ * `regionFromPath` (so `EU` and `eu` are one region, and a segment that names none is dropped), a realm is a
+ * slug and a name is compared case-insensitively (`searchHistoryKey`). So an address that was typed by hand
+ * with a capital letter in it still finds the row it means, and one that reads as nothing at all asks the page
+ * for nothing rather than for a row at the top of the table.
+ */
+export function leaderboardRowFromQuery(value: unknown): string | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string') return null
+
+  const [region, realm, name] = raw.split(':')
+  if (!region || !realm || !name) return null
+
+  const code = regionFromPath(region)
+  if (!code) return null
+
+  return searchHistoryKey({ region: code, realm: realm.toLowerCase(), name })
 }
 
 export function useLeaderboardView() {
