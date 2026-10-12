@@ -538,6 +538,12 @@ character up still costs nothing and needs no account.
 - **Battle.net does not issue refresh tokens.** The stored `refresh_token` column is honoured if one
   ever arrives, but the normal path when the 24-hour access token runs out is a fresh sign-in - which
   Battle.net's own SSO cookie (about 30 days) answers without asking for a password again.
+- **A sign-in that stops working says so.** A renewal the token endpoint *refuses* - a rotated client
+  secret, a grant Battle.net revoked - is the one failure a reader cannot see: every page still renders
+  from what the site already holds, while the roster and the account's collections quietly stop moving.
+  That case marks the account (`users.auth_expired`, `server/utils/session`) and the header and the
+  profile page turn the mark into a "sign in again" plate. A timeout, a DNS hiccup or a 5xx does not:
+  those say nothing about the grant, and the account is left alone for the next request.
 - **Storage** is a single SQLite file, `server/data/hoa.db`, opened through the built-in `node:sqlite`
   driver (`server/utils/db.ts`): accounts, characters, sessions and one snapshot per character per
   day. No database server, no native dependency, no migration step - the schema is created on first

@@ -59,6 +59,11 @@ export default defineEventHandler(async (event) => {
 
     const user = db.prepare('SELECT id FROM users WHERE bnet_sub = ?').get(info.sub) as { id: number }
 
+    // A fresh pair of tokens is the one proof that the grant works again, so this is where the account stops
+    // being marked as having a dead one (`server/utils/session`, which sets the mark when a renewal is
+    // refused).
+    db.prepare('UPDATE users SET auth_expired = 0 WHERE id = ?').run(user.id)
+
     // The session row the cookie names: its own id, thirty days of life, the token kept beside it.
     const sid = randomUUID()
     db.prepare('INSERT INTO sessions (id, user_id, token_enc, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')

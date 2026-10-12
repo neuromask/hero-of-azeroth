@@ -21,11 +21,20 @@
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()
 
-const { data } = await useFetch<{ user: { battletag: string | null } | null }>('/api/profile', {
+const { data } = await useFetch<{ user: { battletag: string | null; authExpired?: boolean } | null }>('/api/profile', {
   key: 'profile-identity'
 })
 
 const user = computed(() => data.value?.user || null)
+
+/**
+ * Whether the account's Battle.net sign-in stopped working (`server/utils/session`).
+ *
+ * The plate answers it rather than the profile page alone: this corner of the bar is where a reader who is
+ * signed in looks to get anywhere, and a session that quietly stopped working while the plate went on naming
+ * the account is exactly the state that cost a reader an afternoon.
+ */
+const authExpired = computed(() => user.value?.authExpired === true)
 
 /** The battletag without the account number the game appends, which is what a button can hold. */
 const accountName = computed(() => (user.value?.battletag || '').split('#')[0] || 'Battle.net')
@@ -44,9 +53,12 @@ const accountName = computed(() => (user.value?.battletag || '').split('#')[0] |
   </a>
 
   <!-- Signed in: the same plate with the account in it, and the way out beside it - one class for both
-       states, so nothing moves or resizes when a reader signs in. -->
+       states, so nothing moves or resizes when a reader signs in. An account whose sign-in stopped working
+       gets the Battle.net plate back instead, saying what it is for ("sign in again"), because naming an
+       account the site can no longer read is the one thing that corner must not do. -->
   <div v-else class="flex shrink-0 items-center gap-1.5">
     <NuxtLink
+      v-if="!authExpired"
       :to="localeUrl('/profile')"
       :title="t('myProfile')"
       class="hoa-plate hoa-plate-bnet"
@@ -54,6 +66,16 @@ const accountName = computed(() => (user.value?.battletag || '').split('#')[0] |
       <AppIcon name="user" class="h-[1.15em] w-[1.15em]" />
       <span class="hidden max-w-[10rem] truncate sm:inline">{{ accountName }}</span>
     </NuxtLink>
+
+    <a
+      v-else
+      href="/api/auth/login"
+      :title="t('sessionExpired')"
+      class="hoa-plate hoa-plate-bnet"
+    >
+      <AppIcon name="battlenet" class="h-[1.15em] w-[1.15em]" />
+      <span class="hidden max-w-[10rem] truncate sm:inline">{{ t('signInAgain') }}</span>
+    </a>
 
     <a
       href="/api/auth/logout"

@@ -17,7 +17,8 @@ import { DatabaseSync } from 'node:sqlite'
 const SCHEMA = `
 CREATE TABLE users (
   id INTEGER PRIMARY KEY,
-  hide_from_fame INTEGER NOT NULL DEFAULT 0
+  hide_from_fame INTEGER NOT NULL DEFAULT 0,
+  auth_expired INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE characters (

@@ -78,6 +78,14 @@ interface ProfileResponse {
     mainCharacterId: number | null
     /** Whether the account asked to be left out of the Hall of Fame. */
     hideFromFame: boolean
+    /**
+     * Whether the account's Battle.net sign-in stopped working (`server/utils/session`).
+     *
+     * What it freezes is exactly what this page draws from the account: the roster and the collections behind
+     * the totals. The flag is what lets the page say so instead of leaving the reader to work it out from a
+     * button that answers with a 401.
+     */
+    authExpired: boolean
   } | null
   characters: ProfileCharacter[]
 }
@@ -92,6 +100,9 @@ const { data, refresh } = await useFetch<ProfileResponse>('/api/profile')
 
 const user = computed(() => data.value?.user || null)
 const characters = computed(() => data.value?.characters || [])
+
+/** Whether the account's Battle.net sign-in has stopped working (`server/utils/session`). */
+const authExpired = computed(() => user.value?.authExpired === true)
 
 /** The character the account leads with, or the first one while nobody has named a main yet. */
 const main = computed(() => characters.value.find((entry) => entry.isMain) || characters.value[0] || null)
@@ -1381,9 +1392,25 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- The one state a reader cannot see for themselves: the Battle.net grant behind the account stopped
+               working, so the roster and the account's own collections are frozen at whatever the site last
+               read (see `server/utils/session`, which learns it when a renewal is refused). The way out is a
+               fresh sign-in, offered here rather than left to a button that can only answer with a 401. -->
+          <div
+            v-if="authExpired"
+            class="hoa-panel mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3"
+          >
+            <p class="text-xs leading-relaxed text-wow-goldLight">{{ t('sessionExpired') }}</p>
+            <a href="/api/auth/login" :title="t('signInAgain')" class="hoa-plate hoa-plate-bnet shrink-0">
+              <AppIcon name="battlenet" class="h-[1.15em] w-[1.15em]" />
+              <span>{{ t('signInAgain') }}</span>
+            </a>
+          </div>
+
           <div v-if="!characters.length" class="hoa-panel mt-2 rounded-2xl p-5">
             <p class="text-sm text-gray-400">{{ t('profileNoCharacters') }}</p>
             <button
+              v-if="!authExpired"
               type="button"
               class="hoa-tab hoa-liquid-glass mt-3 px-4 py-1.5 text-xs disabled:opacity-40"
               :disabled="refreshingRoster"

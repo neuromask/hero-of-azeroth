@@ -96,6 +96,15 @@ CREATE TABLE IF NOT EXISTS users (
    * all (see server/utils/leaderboardExclusions).
    */
   hide_from_fame INTEGER NOT NULL DEFAULT 0,
+  /**
+   * Whether the Battle.net sign-in behind this account stopped working.
+   *
+   * The token endpoint refusing a renewal - a rotated client secret, a grant Battle.net revoked - is the one
+   * failure a reader cannot see for themselves: every page still renders from what the site already holds,
+   * while the roster and the account's collections quietly stop moving (see server/utils/session). A page
+   * that finds this set asks for a fresh sign-in instead of serving figures nobody can place.
+   */
+  auth_expired INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   last_login_at INTEGER NOT NULL,
   /**
@@ -206,6 +215,9 @@ const ADDED_COLUMNS = [
   'ALTER TABLE users ADD COLUMN hide_from_fame INTEGER NOT NULL DEFAULT 0',
   // When the account was last seen on the site, which is what the hall of fame's online dot is read from.
   'ALTER TABLE users ADD COLUMN last_seen_at INTEGER',
+  // A sign-in that stopped working, which is what the token endpoint refusing a renewal means: the site says
+  // so on the reader's own pages rather than leaving a roster that silently stopped moving.
+  'ALTER TABLE users ADD COLUMN auth_expired INTEGER NOT NULL DEFAULT 0',
   // The figures that are not collections of items, beside the six the rating weighs (see the note on the
   // `snapshots` table).
   'ALTER TABLE snapshots ADD COLUMN titles INTEGER',

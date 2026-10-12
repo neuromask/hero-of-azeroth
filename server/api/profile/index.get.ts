@@ -269,7 +269,15 @@ export default defineEventHandler(async (event) => {
       bnetSub: user.bnetSub,
       battletag: user.battletag,
       mainCharacterId: user.mainCharacterId,
-      hideFromFame: user.hideFromFame
+      hideFromFame: user.hideFromFame,
+      /**
+       * Whether the account's Battle.net sign-in has stopped working (`server/utils/session`).
+       *
+       * It rides along with the identity because it changes what the page *says* rather than what it holds:
+       * the roster and the account's collections are the figures a dead grant freezes, and the page draws the
+       * notice and the way back in with this flag rather than discovering it from a failed button.
+       */
+      authExpired: user.authExpired
     },
     characters,
     totals

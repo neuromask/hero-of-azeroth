@@ -158,6 +158,34 @@ export async function refreshAccessToken(region: BlizzardRegion, refreshToken: s
   })
 }
 
+/**
+ * Whether a failed renewal was *refused* rather than merely unlucky.
+ *
+ * The distinction is the whole point of this function, and the one thing a caller must not get wrong: a
+ * refusal means the grant is dead - the client secret was rotated, Battle.net revoked the account, the reader
+ * changed their password - and the only way forward is a fresh sign-in. A timeout, a DNS hiccup or a 5xx says
+ * nothing about the grant at all, and a site that sent a reader to sign in again over one of those would be
+ * blaming them for somebody else's outage.
+ *
+ * The token endpoint answers a dead grant with a 4xx carrying an OAuth error (`invalid_grant` and its
+ * neighbours), so that is what is looked for: the body's own `error`, or a 401/403, which is a refusal
+ * whatever the body says.
+ */
+export function isAuthRefused(error: unknown): boolean {
+  const failure = error as
+    | { response?: { status?: number }; statusCode?: number; data?: { error?: unknown } }
+    | null
+    | undefined
+
+  if (!failure) return false
+
+  const status = failure.response?.status ?? failure.statusCode ?? 0
+  const said = typeof failure.data?.error === 'string' && failure.data.error.length > 0
+
+  if (status === 401 || status === 403) return true
+  return said && status >= 400 && status < 500
+}
+
 /** Who the token belongs to: the stable `sub`, the numeric `id` and the battletag. */
 export async function getUserInfo(region: BlizzardRegion, accessToken: string): Promise<BnetUserInfo> {
   return await $fetch<BnetUserInfo>(`https://${region}.battle.net/oauth/userinfo`, {
