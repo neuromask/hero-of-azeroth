@@ -765,40 +765,45 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- The Refresh button reads Blizzard again, and the card it redraws is the one the
-               download hands out - the profile, the card and the feed all at once. The download
-               button has taken the place the summary figures held, and their amber frame with it -
-               the one warm accent the header has - with a glow that answers the pointer. The share
-               tray is the same control, so it travels with the button and opens downwards, the
-               header standing at the top of the page, and it is the site's menu pane (`.hoa-pop`),
-               like the collections menu in the row below it. It is the same pane there as everywhere
-               else: the panel it opens out of wears no filter of its own (`hoa-panel-layered`), so the
-               tray blurs the page it hangs over instead of sampling the bar, which is also the
-               arrangement Chromium smears over the bottom edge of a frosted bar. The pane and the
-               reason it can be one pane everywhere are written in `app/assets/css/main.css`, beside
-               the class. -->
+          <!-- The two actions of the character, drawn at the height of the reader's corner beside them: a
+               control of forty-four pixels, which is what the group of glass in that corner is, so the row of
+               the bar reads as one row rather than as one control standing taller than the next.
+
+               The Refresh button reads Blizzard again, and the card it redraws is the one the download hands
+               out - the profile, the card and the feed all at once. It is the icon alone: a refresh is a
+               refresh in every language, and the words it used to carry are what its own title says - to a
+               pointer, to a screen reader, and while it rests: the seconds a refresh is held back for are
+               spelled out there rather than printed on the button, which is the one thing about it that a
+               reader cannot see. The download button has taken the place the summary figures held, and their
+               amber frame with it - the one warm accent the header has - with a glow that answers the pointer.
+               The share tray is the same control, so it travels with the button and opens downwards, the
+               header standing at the top of the page, and it is the site's menu pane (`.hoa-pop`), like the
+               collections menu in the row below it. It is the same pane there as everywhere else: the panel it
+               opens out of wears no filter of its own (`hoa-panel-layered`), so the tray blurs the page it
+               hangs over instead of sampling the bar, which is also the arrangement Chromium smears over the
+               bottom edge of a frosted bar. The pane and the reason it can be one pane everywhere are written
+               in `app/assets/css/main.css`, beside the class. -->
           <div class="flex w-full items-stretch gap-3 lg:w-auto">
             <button
               type="button"
               :disabled="!canRefresh"
-              class="flex shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300 hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:py-3.5 sm:text-lg"
-              :title="$t('refreshProfile')"
-              :aria-label="$t('refreshProfile')"
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300 hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+              :title="refreshLabel"
+              :aria-label="refreshLabel"
               @click="refreshProfile"
             >
-              <AppIcon name="refresh" class="h-[1.2em] w-[1.2em]" :class="refreshing ? 'animate-spin' : ''" />
-              <span class="tabular-nums">{{ refreshLabel }}</span>
+              <AppIcon name="refresh" class="h-5 w-5" :class="refreshing ? 'animate-spin' : ''" />
             </button>
 
             <div ref="actionsEl" class="relative flex-1 lg:flex-none">
-              <div class="flex w-full items-stretch overflow-hidden rounded-xl border border-amber-500/60 bg-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/90 hover:bg-amber-900/40 hover:shadow-[0_0_28px_rgba(245,158,11,0.5)]">
+              <div class="flex h-11 w-full items-stretch overflow-hidden rounded-xl border border-amber-500/60 bg-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/90 hover:bg-amber-900/40 hover:shadow-[0_0_28px_rgba(245,158,11,0.5)]">
               <button
                 type="button"
                 :disabled="downloading"
-                class="flex flex-1 items-center justify-center gap-2.5 px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-white/10 disabled:cursor-wait disabled:opacity-60 sm:px-7 sm:py-3.5 sm:text-lg"
+                class="flex flex-1 items-center justify-center gap-2.5 px-5 text-base font-semibold text-white transition-colors hover:bg-white/10 disabled:cursor-wait disabled:opacity-60 sm:px-7 sm:text-lg"
                 @click="downloadCard"
               >
-                <AppIcon name="download-button" class="h-[1.2em] w-[1.2em]" />
+                <AppIcon name="download-button" class="h-5 w-5" />
                 {{ downloading ? $t('loading') : $t('downloadCard') }}
               </button>
 
@@ -881,6 +886,17 @@ onBeforeUnmount(() => {
               </a>
             </div>
           </div>
+
+            <!-- The reader's own corner, held apart from the character's two actions by the hairline: the same
+                 group every header of the site ends in (`app/components/HeaderTools.vue`), so the language a
+                 reader is reading in and the account they are reading with stand in one place on every page -
+                 under the hall of fame's bar exactly as under this one. It is `self-center` so it answers the
+                 buttons beside it rather than stretching to their height, and it is drawn from `lg` up: below
+                 that width the pair is in the panel the row beneath this header opens
+                 (`app/components/SiteNav.vue`). -->
+            <span class="hidden h-6 w-px shrink-0 self-center bg-white/10 lg:block" aria-hidden="true" />
+
+            <HeaderTools class="self-center" />
           </div>
         </div>
       <!-- The page's own navigation: the profile it opens on, the feed of what the character has
@@ -901,10 +917,11 @@ onBeforeUnmount(() => {
             class="pointer-events-none absolute inset-x-0 top-0 z-0 h-12 bg-gradient-to-b from-wow-dark/90 via-wow-dark/55 to-transparent"
             aria-hidden="true"
           />
-          <!-- The row itself: the character's five views, the site's own two entries held apart from them,
-               the languages, the account and the panel a phone opens all of it in - the whole row is one
-               component (`app/components/SiteNav.vue`). The shell hands over *who* the row is about and which
-               of the five entries the address names, and the row draws the rest. -->
+          <!-- The row itself: the character's five views and the site's own two entries held apart from them,
+               and the panel a phone opens all of it in - the whole row is one component
+               (`app/components/SiteNav.vue`). The shell hands over *who* the row is about and which of the five
+               entries the address names, and the row draws the rest - including, below `lg`, the language and
+               the account the header's corner carries at wider widths. -->
           <SiteNav :character="navCharacter" :label="character.name" :active="activeTab" />
         </nav>
       </header>

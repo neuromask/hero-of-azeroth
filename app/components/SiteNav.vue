@@ -14,20 +14,23 @@ import type { SearchHistoryEntry } from '~/composables/searchHistory'
  *
  * It is the *only* row the site has. The character shell draws it under the character's header, the hall of
  * fame draws it under its own, and `app/components/SiteHeader.vue` gives it to a page that has none of its own
- * (the account page, the documents) - so no page can wear the languages, the account or the search twice, and a
- * reader stepping between two pages finds the same row in the same place. A page that is not about a character
- * wears it with the first group left out: what is left is the site's own two entries, the search and the corner,
- * which is everything such a page has.
+ * (the account page, the documents) - so no page can wear the search twice, and a reader stepping between two
+ * pages finds the same row in the same place. A page that is not about a character wears it with the first
+ * group left out: what is left is the site's own two entries and the search, which is everything such a page
+ * has.
  *
  * There are two kinds of entry in that row, and they answer two different questions. Six of them are about
  * the character being read - their profile, their collections, their achievements, their reputations, their
  * feed and the comparison they can be read against - and two are the site's own: the hall of fame the figures
  * are ranked in and the search that opens the next character. So the two are held apart from the six: they
- * stand at the far end of the row,
- * past a hairline, in the corner the languages and the account already end the row in. One row still, so
- * stepping between a character and the table keeps the bar, the entries and the switch exactly where they
- * are - but a reader can now see which entries are about the character under the bar and which are about the
- * site they are on.
+ * stand at the far end of the row, past a hairline. One row still, so stepping between a character and the
+ * table keeps the bar and the entries exactly where they are - but a reader can see which entries are about
+ * the character under the bar and which are about the site they are on.
+ *
+ * What the row does *not* carry is the reader. The language and the account stand in the header itself
+ * (`app/components/HeaderTools.vue`), because they are properties of the reader rather than ways into a
+ * section, and a page that drew them here as well would be showing the same two controls a finger's width
+ * apart. Below `lg` they are rows of this panel instead, which is the one place a phone has for them.
  *
  * The first of the six carries the character's own name rather than the word "character", because that is
  * the one entry of the row whose subject the page knows: a reader looking at a bar wants to see *who* they
@@ -43,7 +46,7 @@ import type { SearchHistoryEntry } from '~/composables/searchHistory'
  * inside a pinned bar covers the panel it was opened from, and a phone reads an indented list under its
  * parent better than a second layer of glass. What stays in the row is the search, which is not a way of
  * reading the page but the way to the next character (`app/components/CharacterSearchDialog.vue`), and the
- * languages and the account, which end every row of the site: three plates a phone has room for.
+ * panel ends with the language and the account, which the header hands over to it at this width.
  *
  * The button is the row's own tab (`hoa-tab`) and states what it is doing the way every disclosure of the
  * site does: `aria-expanded` says whether the panel is out, its label swaps between opening and closing in the
@@ -392,8 +395,7 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
 
       <!-- And the site's own group under its own heading: the table every figure on this site is ranked in.
            The search is not repeated here - it stands in the row above, one press away at every width and
-           bound to `Ctrl`/`⌘`+`K` as well - and neither are the languages or the account, which never left
-           the row. -->
+           bound to `Ctrl`/`⌘`+`K` as well. -->
       <p class="mt-1 border-t border-white/10" :class="HEADING">{{ t('navSiteGroup') }}</p>
 
       <NuxtLink
@@ -404,6 +406,14 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
       >
         {{ t('lbNav') }}
       </NuxtLink>
+
+      <!-- And the reader's own two settings, which the row above no longer carries: the language and the
+           account, exactly as the header's corner draws them (`app/components/HeaderTools.vue`). The panel is
+           where they land at this width, and it is the same two components in their panel shape - there is one
+           place that draws a language and one that draws an account, so a phone and a window can never be
+           offered different sets of them. Its heading is drawn by the account, whose group of the panel is the
+           one they belong to. -->
+      <HeaderTools variant="panel" />
     </div>
 
     <!-- The character's own entries, on a screen wide enough to hold them: the profile under the
@@ -505,12 +515,10 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
 
       <!-- The way to somebody who is not this character: the two fields, dropped as a sheet under this row. It
            is drawn at every width rather than kept in the panel, because it is not a way of reading this page
-           but the way to the next character - and it brings `Ctrl`/`⌘`+`K` with it wherever it stands. -->
+           but the way to the next character - and it brings `Ctrl`/`⌘`+`K` with it wherever it stands. The
+           language and the account are not here: they belong to the header above this row, and this row ends
+           with the search (`app/components/HeaderTools.vue`). -->
       <CharacterSearchDialog />
-
-      <!-- The languages, and the account to their right: the corner every row of the site ends in. -->
-      <LocaleSwitch />
-      <AuthMenu />
     </div>
   </div>
 </template>

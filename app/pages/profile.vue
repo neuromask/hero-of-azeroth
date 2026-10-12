@@ -119,6 +119,28 @@ type SortKey = (typeof SORTS)[number]
 const FACTIONS = ['all', 'alliance', 'horde'] as const
 
 const settingsOpen = ref(false)
+
+/**
+ * The settings as an address, so the account menu in the header can open them from any page of the site
+ * (`app/components/AuthMenu.vue`). A drawer is this page's own state and no other page can set it, so the ask
+ * travels as `#settings` on this page's own address - and the hash is dropped again as the drawer shuts, which
+ * is what lets the same entry open it a second time rather than landing on an address that has already been
+ * answered.
+ */
+const route = useRoute()
+const router = useRouter()
+
+watch(
+  () => route.hash,
+  (hash) => {
+    settingsOpen.value = hash === '#settings'
+  },
+  { immediate: true }
+)
+
+watch(settingsOpen, (open) => {
+  if (!open && route.hash === '#settings') router.replace({ path: route.path, hash: '' })
+})
 const sort = ref<SortKey>('main')
 const factionFilter = ref<'all' | 'alliance' | 'horde'>('all')
 const classFilter = ref<number | 'all'>('all')
@@ -849,16 +871,20 @@ onMounted(() => {
     <SiteBackdrop :image="mainBackground" treatment="armoury" />
 
     <SiteHeader :title="t('profileTitle')" :meta="user ? accountName : ''">
-      <template #actions>
+      <!-- The two controls of the bar, and only for a reader the page has a roster for: a guest's header is
+           the title and the reader's own corner, with the hairline gone rather than standing over nothing. So
+           the slot itself is what the account gates (`app/components/SiteHeader.vue` draws the hairline only
+           when a page hands it something). -->
+      <template v-if="user" #actions>
         <div class="flex items-center gap-3">
           <!-- The whole roster, in one pass: the same plate the public character page gives its own
                Refresh button, with the same spinner - and it stands down while the pass runs, so a
                second press cannot start a second one. -->
           <button
-            v-if="user && characters.length"
+            v-if="characters.length"
             type="button"
             :disabled="updatingAll"
-            class="flex shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300 hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:text-base"
+            class="flex h-11 shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300 hover:border-white/30 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:text-base"
             :title="t('updateAll')"
             :aria-label="t('updateAll')"
             @click="updateAll"
@@ -871,9 +897,8 @@ onMounted(() => {
                its filters live in the bar above the grid, where they act. The plate is the roster's
                own size, so the two controls in this corner read as one row. -->
           <button
-            v-if="user"
             type="button"
-            class="flex shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300 hover:border-white/30 hover:bg-white/15 sm:px-5 sm:text-base"
+            class="flex h-11 shrink-0 items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300 hover:border-white/30 hover:bg-white/15 sm:px-5 sm:text-base"
             :title="t('profileSettings')"
             :aria-label="t('profileSettings')"
             :aria-expanded="settingsOpen"

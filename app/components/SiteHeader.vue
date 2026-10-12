@@ -7,14 +7,20 @@
  * the page's name and one line about the page - and where the shell offers Refresh and Download on
  * the right, this leaves that side to whatever the page hands it through the `actions` slot.
  *
+ * The reader's own corner is this header's, not a page's: the language and the account are drawn by
+ * `app/components/HeaderTools.vue` after the slot, on the far side of a hairline, so the pair stands in the
+ * same place on every page of the site and no page can hand over a second copy of either. A page's own
+ * actions are what the slot is for, and the hairline is drawn only when there are some.
+ *
  * The row underneath is the site's navigation, and it is one component (`app/components/SiteNav.vue`) for
  * every page of the site - this header included: a page that draws a row of its own (the hall of fame hands
  * over the character's views beside the site's own) writes it into the slot, and a page that has no row of its
  * own is given the same component, which is what every page ends up wearing. Nothing about that row is this
- * header's - not the languages, not the account - so a page can no more carry them twice than it can wear two
- * bars: it is the same row a character page wears, so stepping between the pages keeps the bar, the entries
- * and the switch exactly where they are. The fade under the bar belongs here rather than to the row, because
- * it is the bar that is pinned and the fade that lets the page dissolve under it.
+ * header's - not the search, which is the way to the next character, and not the panel a phone opens the
+ * entries in - so a page can no more carry the row twice than it can wear two bars: it is the same row a
+ * character page wears, so stepping between the pages keeps the bar, the entries and the language exactly
+ * where they are. The fade under the bar belongs here rather than to the row, because it is the bar that is
+ * pinned and the fade that lets the page dissolve under it.
  *
  * The bar is pinned to the top of the window (`sticky`), above the page (`z-40`), and its panel
  * keeps only its bottom corners rounded because it stands flush against the top edge - all of it
@@ -36,14 +42,14 @@ const localeUrl = useLocaleUrl()
 
 <template>
   <header class="hoa-bar sticky top-0 z-40 container mx-auto px-4">
-    <!-- The bar's own frost is drawn by a layer of it (`hoa-panel-layered`), because the identity chip
-         stands in the bar and the way to the profile in that chip is a button of the site's glass - and
-         every way to the character's own pages is one. A `backdrop-filter` on the bar would make the bar
-         the backdrop of those buttons, and a control can only read the block it stands in as a washed
-         copy of it, which is what made them read lighter than the page they were over. With the frost on
-         a layer the bar is a plain box and the chip's buttons keep the page as their backdrop, exactly
-         as the tabs of the row below do. Nothing else about the bar moves: its tint, its hairline and
-         its drop are still its own. -->
+    <!-- The bar's own frost is drawn by a layer of it (`hoa-panel-layered`), because the reader's own group of
+         glass stands in the bar - its plate, and the two dropdowns that hang out of it and down over the
+         page - and every way to the character's own pages is a control of that same glass. A `backdrop-filter`
+         on the bar would make the bar the backdrop of those controls, and a control can only read the block it
+         stands in as a washed copy of it, which is what made them read lighter than the page they were over.
+         With the frost on a layer the bar is a plain box and the plate's own buttons and panes keep the page as
+         their backdrop, exactly as the tabs of the row below do. Nothing else about the bar moves: its tint,
+         its hairline and its drop are still its own. -->
     <div
       class="hoa-panel hoa-panel-layered hoa-panel-flush relative z-30 flex flex-col items-start justify-between gap-4 rounded-t-none border-t-0 px-4 py-1.5 sm:px-6 sm:py-3.5 lg:flex-row lg:items-center"
     >
@@ -66,9 +72,18 @@ const localeUrl = useLocaleUrl()
         </div>
       </div>
 
-      <!-- Whatever the page puts on the right: a character page puts its Refresh and Download
-           there, a page that is not about a character usually puts nothing. -->
-      <slot name="actions" />
+      <!-- Whatever the page puts on the right, and the reader's own corner beside it: the language and the
+           account are drawn by `app/components/HeaderTools.vue` on every page of the site, so a page hands over
+           its own actions alone and never the corner. The hairline stands between the two and is drawn only
+           when there is something to hold apart - a page that offers no action of its own ends in the corner,
+           as a document does and as the hall of fame does. -->
+      <div class="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
+        <slot name="actions" />
+
+        <span v-if="$slots.actions" class="hidden h-6 w-px shrink-0 bg-white/10 lg:block" aria-hidden="true" />
+
+        <HeaderTools />
+      </div>
     </div>
 
     <nav class="relative pt-3" :aria-label="title">
