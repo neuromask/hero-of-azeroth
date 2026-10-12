@@ -221,11 +221,23 @@ const ogImage = computed(() => new URL(cardUrl.value, publicConfig.siteUrl).href
  */
 const missing = computed(() => !pending.value && (Boolean(error.value) || !character.value))
 
-// A character that does not exist has to answer 404 rather than 200, otherwise a
-// crawler keeps a URL whose only content is a "not found" note.
+/**
+ * The status the page answers with when the profile could not be read.
+ *
+ * A character that does not exist has to answer 404 rather than 200, otherwise a crawler keeps a URL whose
+ * only content is a "not found" note. A failure *behind* the page is not that, and answering 404 for it is
+ * how a temporary outage of Blizzard's API came to look like a misspelt name: what the endpoint answered with
+ * is passed on instead - 404 for a character that is not there, 429 when Blizzard is rate-limiting the site,
+ * 5xx for an outage - and a read that never reached the API at all answers 503.
+ */
+function missingStatus(failure: unknown): number {
+  const status = Number((failure as { statusCode?: number } | null)?.statusCode || 0)
+  return status === 404 || status === 429 || status >= 500 ? status : 503
+}
+
 if (error.value) {
   const event = useRequestEvent()
-  if (event) setResponseStatus(event, 404)
+  if (event) setResponseStatus(event, missingStatus(error.value))
 }
 
 /**

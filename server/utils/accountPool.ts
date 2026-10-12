@@ -21,6 +21,9 @@
  */
 import { nowSec } from './db'
 import { readCharacterReading } from './characterReading'
+// The journal a character's mount tile is measured against, which is served out of the Armoury cache alone
+// and is read here rather than taken from the profile this module is handed (`mountDenominator` below).
+import { readMountJournal } from './armory'
 import { ACCOUNT_COLLECTION_KINDS } from './bnetOAuth'
 import type { BlizzardRegion } from './params'
 import type { CharacterData } from './blizzard'
@@ -468,8 +471,30 @@ export function syncMainToLeaderboard(userId: number): void {
 }
 
 /**
+ * The mount denominator a page is answered with: the journal the site holds for this character, or the one
+ * the profile already carries when it holds none.
+ *
+ * Read here rather than taken from the profile because the profile is cached and the journal is not: a
+ * reading lives ten minutes in `getCharacter` (`server/utils/blizzard`) and the answer two hours in the
+ * endpoint's own cache (`server/utils/swrCache`), while the Armoury is read behind the page
+ * (`server/utils/armory`). A denominator captured with the cached reading then outlives the journal that
+ * answered it by up to those two hours, which is a tile printing the shared snapshot while the site already
+ * holds this character's own journal - and the journal is on file within seconds of the first read.
+ *
+ * Nothing is fetched here: `readMountJournal` is served out of the cache alone, so the endpoint still
+ * answers without waiting on anything, and the read behind the page is still the only one.
+ *
+ * `shown` is the count the same tile prints - the account's union, where the character belongs to an
+ * account - and it is the floor, because a denominator below the count draws a bar past 100%.
+ */
+function mountDenominator(profileTotal: number, journal: number | undefined, shown: number): number {
+  return Math.max(journal || profileTotal, shown)
+}
+
+/**
  * The figures a page prints for a character: the reading that was served, with the account's own figures
- * laid over it and the site's record of the character weighed against it.
+ * laid over it, the site's record of the character weighed against it, and the journal the Armoury
+ * published for it read off the cache (`mountDenominator`) rather than out of the cached reading.
  *
  * This is the one place the "guest or account" rule is applied to a live character, and the one place the
  * trading of a cached reading for the record happens (`bestFigures`, `readCharacterReading`). What it
@@ -479,8 +504,9 @@ export function syncMainToLeaderboard(userId: number): void {
  * item level and the rating of a record the site had already filed used to keep coming back as what
  * Blizzard had said).
  *
- * A character with no account behind them is handed back with the flag off and nothing else touched: their
- * figures are Blizzard's own, and a page reads the flag to say which numbers are whose.
+ * A character with no account behind them is handed back with the flag off and nothing else touched but the
+ * mount denominator above: their figures are Blizzard's own, and a page reads the flag to say which numbers
+ * are whose.
  */
 export function overlayPool(
   profile: CharacterData,
@@ -491,9 +517,22 @@ export function overlayPool(
   readAt: number = nowSec()
 ): CharacterData {
   const account = findOwnerTotals(region, realm, name)
+  // Read once, before either branch: the journal is this character's own and belongs to both answers.
+  const journal = readMountJournal(region, realm, name)?.total
 
   if (!account) {
-    return { ...profile, score: calculatePlayerScore(scoreFigures(profile.stats)), pooled: false }
+    return {
+      ...profile,
+      score: calculatePlayerScore(scoreFigures(profile.stats)),
+      pooled: false,
+      stats: {
+        ...profile.stats,
+        mounts: {
+          ...profile.stats.mounts,
+          total: mountDenominator(profile.stats.mounts.total, journal, profile.stats.mounts.count)
+        }
+      }
+    }
   }
 
   // The figures that really are one character's - the item level, the rating, the level - are taken from
@@ -535,7 +574,13 @@ export function overlayPool(
     stats: {
       ...profile.stats,
       achievements: { ...profile.stats.achievements, count: figures.achievements },
-      mounts: { ...profile.stats.mounts, count: figures.mounts },
+      mounts: {
+        ...profile.stats.mounts,
+        count: figures.mounts,
+        // The journal on file, not the denominator the cached reading was answered with: the count above is
+        // the union the tile prints, so it is also the floor the denominator may not fall below.
+        total: mountDenominator(profile.stats.mounts.total, journal, figures.mounts)
+      },
       pets: { ...profile.stats.pets, count: figures.pets },
       toys: { ...profile.stats.toys, count: figures.toys },
       decor: { ...profile.stats.decor, count: figures.decor },

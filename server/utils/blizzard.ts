@@ -1,9 +1,94 @@
-import { armouryMountJournal, resolveArmoryBackground } from './armory'
+import { readMountJournal, refreshMountJournal, resolveArmoryBackground } from './armory'
 import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
 import { isReputationMaxed, reputationTotal } from './reputations'
 import { mountTotal } from './mounts'
 
 let cachedToken: { access_token: string; expires_at: number } | null = null
+
+/**
+ * How long any one call to Blizzard is given before the site stops waiting for it.
+ *
+ * Every call here is a plain `$fetch` with no deadline of its own, so a connection Blizzard never answers
+ * holds the request - and the reader's page - open indefinitely. Fifteen seconds is far beyond the ~200 ms
+ * these calls take and well inside a reader's patience, and a call that runs past it is a document the site
+ * does not have, which is a case the profile read already knows how to answer (`carryForward`).
+ */
+const BLIZZARD_TIMEOUT_MS = 15_000
+
+/**
+ * The one place Blizzard is called, so that every call carries the deadline above.
+ *
+ * The host varies - the game data API, the OAuth token, the account profile - but the need for a bound does
+ * not, and a call added here cannot forget it.
+ */
+function callBlizzard<T>(url: string, options: Record<string, unknown> = {}): Promise<T> {
+  // Typed by the caller rather than by `$fetch`'s inference off the request: every call below names the shape
+  // it expects, and this hands that answer back unchanged.
+  return $fetch(url, { timeout: BLIZZARD_TIMEOUT_MS, ...options }) as Promise<T>
+}
+
+/** Blizzard's own status for a call, whatever shape the failure reached us in. */
+function upstreamStatus(err: unknown): number {
+  const failure = err as { statusCode?: number; status?: number; response?: { status?: number } }
+  return Number(failure?.statusCode || failure?.status || failure?.response?.status || 0)
+}
+
+/** Whether a call ran past the deadline `callBlizzard` set, rather than being refused. */
+function isTimeout(err: unknown): boolean {
+  const failure = err as { name?: string; code?: string; cause?: { name?: string } }
+  const name = failure?.name || failure?.cause?.name
+  return name === 'TimeoutError' || name === 'AbortError' || failure?.code === 'ETIMEDOUT' || upstreamStatus(err) === 408
+}
+
+/**
+ * The one place a failed call to Blizzard becomes the site's own answer.
+ *
+ * The status is a statement about *this site*, and it used to be a false one: any failure of the profile
+ * summary - a refusal, a rate limit, a connection that died - was answered with the 404 that means "there is
+ * no such character". A reader was told the character does not exist, a crawler was invited to remember that,
+ * and the site could not tell its own outages from its own 404s either.
+ *
+ * So each failure is answered with what it actually is:
+ *
+ *   404  Blizzard says the character is not there. The only place a 404 comes from.
+ *   429  Blizzard is rate-limiting the site's client - the site is over its quota, not out of characters.
+ *   503  Blizzard is up but refusing to answer (any 5xx of its own).
+ *   504  the call ran past the deadline `callBlizzard` gave it.
+ *   502  the connection never got an answer at all: DNS, a reset, TLS.
+ *
+ * Nothing of the failure travels with it - no upstream URL, no response body, no exception text, nothing that
+ * would let a reader map the site's insides. What is carried on is a status and a sentence a page can show.
+ */
+function upstreamFailure(err: unknown, what = 'character'): never {
+  const status = upstreamStatus(err)
+
+  if (status === 404) {
+    throw createError({ statusCode: 404, statusMessage: `There is no such ${what} on that realm` })
+  }
+
+  if (status === 429) {
+    // Blizzard's own `Retry-After` is passed on when it sent one: the client that hit the limit is the one
+    // that has to wait, and the site has no better idea of how long.
+    const retryAfter = (err as { response?: { headers?: { get?: (name: string) => string | null } } })?.response?.headers?.get?.(
+      'retry-after'
+    )
+    throw createError({
+      statusCode: 429,
+      statusMessage: 'Blizzard is rate-limiting this site right now',
+      data: retryAfter ? { retryAfter } : undefined
+    })
+  }
+
+  if (status >= 500) {
+    throw createError({ statusCode: 503, statusMessage: 'The Blizzard API is not answering right now' })
+  }
+
+  if (isTimeout(err)) {
+    throw createError({ statusCode: 504, statusMessage: 'The Blizzard API ran past the deadline for an answer' })
+  }
+
+  throw createError({ statusCode: 502, statusMessage: 'The Blizzard API could not be reached' })
+}
 
 export async function getBlizzardToken(region = 'eu') {
   const config = useRuntimeConfig()
@@ -15,7 +100,7 @@ export async function getBlizzardToken(region = 'eu') {
 
   const credentials = Buffer.from(`${config.blizzardClientId}:${config.blizzardClientSecret}`).toString('base64')
 
-  const response = await $fetch<{ access_token: string; expires_in: number }>(`https://${region}.battle.net/oauth/token`, {
+  const response = await callBlizzard<{ access_token: string; expires_in: number }>(`https://${region}.battle.net/oauth/token`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${credentials}`,
@@ -54,11 +139,11 @@ export async function getCollectionTotals(region = 'eu', token?: string): Promis
   const namespace = `namespace=static-${region}`
 
   const [mounts, pets, toys, decor, reputations] = await Promise.all([
-    $fetch<any>(`https://${region}.api.blizzard.com/data/wow/mount/index?${namespace}`, { headers }),
-    $fetch<any>(`https://${region}.api.blizzard.com/data/wow/pet/index?${namespace}`, { headers }),
-    $fetch<any>(`https://${region}.api.blizzard.com/data/wow/toy/index?${namespace}`, { headers }),
-    $fetch<any>(`https://${region}.api.blizzard.com/data/wow/decor/index?${namespace}`, { headers }),
-    $fetch<any>(`https://${region}.api.blizzard.com/data/wow/reputation-faction/index?${namespace}`, { headers })
+    callBlizzard<any>(`https://${region}.api.blizzard.com/data/wow/mount/index?${namespace}`, { headers }),
+    callBlizzard<any>(`https://${region}.api.blizzard.com/data/wow/pet/index?${namespace}`, { headers }),
+    callBlizzard<any>(`https://${region}.api.blizzard.com/data/wow/toy/index?${namespace}`, { headers }),
+    callBlizzard<any>(`https://${region}.api.blizzard.com/data/wow/decor/index?${namespace}`, { headers }),
+    callBlizzard<any>(`https://${region}.api.blizzard.com/data/wow/reputation-faction/index?${namespace}`, { headers })
   ])
 
   const data: CollectionTotals = {
@@ -231,27 +316,42 @@ const FALLBACK_REGIONS = ['eu', 'us']
 /**
  * Loads a character from a single region. Throws a 404 when the character does
  * not exist in that region.
+ *
+ * `force` is a refresh: the site reads Blizzard again rather than serving what it already holds, and it
+ * waits for the one figure it cannot read for itself - the mount journal the Armoury publishes
+ * (`refreshMountJournal`). A page is never made to wait for that page, which is why the plain read starts
+ * the same journal read and answers without it (`server/utils/armory`).
  */
-async function fetchCharacterProfile(realm: string, name: string, region: string, locale: string): Promise<CharacterData> {
+async function fetchCharacterProfile(
+  realm: string,
+  name: string,
+  region: string,
+  locale: string,
+  force = false
+): Promise<CharacterData> {
   const token = await getBlizzardToken(region)
   const headers = { Authorization: `Bearer ${token}` }
   const baseUrl = `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}`
   const ns = `namespace=profile-${region}&locale=${locale}`
 
   const [summary, media, mounts, pets, toys, decor, reps, mplus, totals] = await Promise.allSettled([
-    $fetch<any>(`${baseUrl}?${ns}`, { headers }),
-    $fetch<any>(`${baseUrl}/character-media?${ns}`, { headers }),
-    $fetch<any>(`${baseUrl}/collections/mounts?${ns}`, { headers }),
-    $fetch<any>(`${baseUrl}/collections/pets?${ns}`, { headers }),
-    $fetch<any>(`${baseUrl}/collections/toys?${ns}`, { headers }),
-    $fetch<any>(`${baseUrl}/collections/decor?${ns}`, { headers }),
-    $fetch<any>(`${baseUrl}/reputations?${ns}`, { headers }),
-    $fetch<any>(`${baseUrl}/mythic-keystone-profile?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}/character-media?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}/collections/mounts?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}/collections/pets?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}/collections/toys?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}/collections/decor?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}/reputations?${ns}`, { headers }),
+    callBlizzard<any>(`${baseUrl}/mythic-keystone-profile?${ns}`, { headers }),
     getCollectionTotals(region, token)
   ])
 
   if (summary.status === 'rejected') {
-    throw createError({ statusCode: 404, statusMessage: 'Character not found' })
+    // Thrown exactly as it arrived, and *not* turned into a status here: `getCharacter` is the one place a
+    // failure becomes the site's answer, because it is the one place that also knows whether a 404 should send
+    // the loop on to the next region. Mapping it here as well would map it twice - a 504 and a 502 would come
+    // out of the second pass as a 503, which is how a timeout came to look like an outage.
+    throw summary.reason
   }
 
   const charData = summary.value
@@ -311,10 +411,22 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
   }).catch(() => '')
 
   // The journal a character's mounts are measured against is its own - it follows the faction and the
-  // patch, not the index - so it is read for the character being looked at and kept for a day (see
-  // `mountTotal`). A process that cannot reach the Armoury falls back on the snapshot, and a checkout
-  // that has none on Blizzard's index.
-  const mountJournal = await armouryMountJournal(region, realm, name)
+  // patch, not the index - and the Armoury publishes it as a *web page*, which is the slowest thing this
+  // read touches by an order of magnitude: seconds against the tens of milliseconds every Blizzard call
+  // here takes. So the page is never waited on. A character the site has read inside the day is answered
+  // from the journal already on file; any other is answered with `null`, which leaves `mountTotal` to
+  // stand the snapshot in (`server/utils/mounts`) - and the read below files the journal behind the page,
+  // for the next visit, the card and everything else that reads the same entry.
+  //
+  // A refresh is the one caller that does wait for it, and only for the read the site has not got: the
+  // reader asked for everything about this character, and the denominator is one of the figures they are
+  // looking at. A journal already read inside its day is not read again - the number moves with a patch, not
+  // with a press - so the wait costs a refresh nothing until the copy on file is a day old, and a burst of
+  // presses, with the card and the feed that follow one, all share the one read (`refreshMountJournal`).
+  if (force) await refreshMountJournal(region, realm, name)
+  else void refreshMountJournal(region, realm, name)
+
+  const mountJournal = readMountJournal(region, realm, name)
 
   return {
     name: charData.name,
@@ -369,6 +481,16 @@ async function fetchCharacterProfile(realm: string, name: string, region: string
  */
 const CHARACTER_CACHE_SECONDS = 10 * 60
 
+/**
+ * How soon a refresh may spend another read of the same character, in seconds.
+ *
+ * The button that sends one rests for a minute of its own (`app/pages/[region]/[realm]/[name].vue`), but the
+ * endpoint it calls is public and a script has no such manners - and one read of a character is ten Blizzard
+ * calls. Fifteen seconds is shorter than a person pressing a button can notice and long enough that a burst
+ * of presses, together with the card and the feed that follow one, is one read rather than three.
+ */
+const FORCE_COOLDOWN_SECONDS = 15
+
 /** Characters already read, and when each of them stops being served. */
 const cachedCharacters = new Map<string, { data: CharacterData; expires_at: number }>()
 
@@ -385,6 +507,43 @@ const pendingCharacters = new Map<string, Promise<CharacterData>>()
 const CHARACTER_CACHE_LIMIT = 500
 
 /**
+ * The reading, with any collection figure it could not read taken from the last reading instead.
+ *
+ * A profile is eight Blizzard documents read at once (`fetchCharacterProfile`) and any of them can come back
+ * missing for a reason that is not "none" - a call that ran past its deadline, a document Blizzard refused -
+ * while `CharacterData` has no way to say "unknown". A zero written in its place is not a thin reading but a
+ * wrong one: it is what a page prints as an empty collection, what the account's pool is filled from and what
+ * the day's own row is filed with (`server/utils/profileFeed`), so a moment's bad luck would take the last
+ * real number with it.
+ *
+ * Only the figures that are never really zero are carried - a character with no mounts, pets, toys, decor,
+ * reputations or achievement points does not exist - and only upwards: a figure this read did get is this
+ * read's, whatever it says. The item level and the rating are deliberately not among them, because zero is a
+ * reading a fresh character really gives, and `overlayPool` already weighs those two against the site's own
+ * record of the character.
+ */
+function carryForward(previous: CharacterData | undefined, read: CharacterData): CharacterData {
+  if (!previous) return read
+
+  const held = (kind: keyof CharacterData['stats']) => previous.stats[kind].count
+  const kept = (kind: keyof CharacterData['stats'], value: number) => (value > 0 ? value : held(kind))
+
+  return {
+    ...read,
+    ap: kept('achievements', read.ap),
+    stats: {
+      ...read.stats,
+      achievements: { ...read.stats.achievements, count: kept('achievements', read.stats.achievements.count) },
+      mounts: { ...read.stats.mounts, count: kept('mounts', read.stats.mounts.count) },
+      pets: { ...read.stats.pets, count: kept('pets', read.stats.pets.count) },
+      toys: { ...read.stats.toys, count: kept('toys', read.stats.toys.count) },
+      decor: { ...read.stats.decor, count: kept('decor', read.stats.decor.count) },
+      reputations: { ...read.stats.reputations, count: kept('reputations', read.stats.reputations.count) }
+    }
+  }
+}
+
+/**
  * Loads a character, optionally from a specific region. When no region is given
  * every known region is tried in turn, so deep links such as
  * /en/tichondrius/mychar work without an explicit ?region= parameter.
@@ -392,8 +551,22 @@ const CHARACTER_CACHE_LIMIT = 500
  * The answer is kept for `CHARACTER_CACHE_SECONDS`, which is what keeps the page and the card
  * that follows it from reading Blizzard twice, and a read already under way is shared rather than
  * repeated by whoever asks next.
+ *
+ * `force` is the Refresh button, and it is the one request that does not take the cache's word for it: the
+ * character is read again whatever the age of the copy on file, so the answer carries what Blizzard says now
+ * rather than what it said up to ten minutes ago. What a refresh does *not* do is read twice for one press -
+ * a read already under way is joined, and a copy taken inside `FORCE_COOLDOWN_SECONDS` is the answer - because
+ * a burst of presses, the card drawn beside them and the feed that follows them all ask for the same character
+ * at the same moment (`server/api`). A refresh that fails changes nothing here: the copy on file is left
+ * standing, the error is the caller's, and the next plain request is answered exactly as it was before.
  */
-export async function getCharacter(realm: string, name: string, region?: string, locale = 'ru_RU'): Promise<CharacterData> {
+export async function getCharacter(
+  realm: string,
+  name: string,
+  region?: string,
+  locale = 'ru_RU',
+  force = false
+): Promise<CharacterData> {
   // The language is part of the key: Blizzard localises the names and the earned title the card
   // and the page draw, so the two addresses of one character are genuinely two documents.
   const key = `${region || 'auto'}:${realm}:${name}:${locale}`
@@ -401,7 +574,12 @@ export async function getCharacter(realm: string, name: string, region?: string,
 
   const cached = cachedCharacters.get(key)
   if (cached && cached.expires_at > now) {
-    return cached.data
+    // A refresh inside the cooldown is answered from the copy taken moments ago rather than by reading
+    // again: the reader asked for the newest figures, and the newest figures are the ones just read.
+    const readAt = cached.expires_at - CHARACTER_CACHE_SECONDS
+    if (!force || readAt > now - FORCE_COOLDOWN_SECONDS) {
+      return cached.data
+    }
   }
 
   const inFlight = pendingCharacters.get(key)
@@ -415,7 +593,10 @@ export async function getCharacter(realm: string, name: string, region?: string,
 
     for (const candidate of regions) {
       try {
-        const data = await fetchCharacterProfile(realm, name, candidate, locale)
+        const read = await fetchCharacterProfile(realm, name, candidate, locale, force)
+        // A document this read could not get leaves its figure standing at the last one the site saw, rather
+        // than at the zero the tile would otherwise print (`carryForward`).
+        const data = carryForward(cached?.data, read)
 
         if (cachedCharacters.size >= CHARACTER_CACHE_LIMIT) {
           const cutoff = Math.floor(Date.now() / 1000)
@@ -431,15 +612,20 @@ export async function getCharacter(realm: string, name: string, region?: string,
 
         return data
       } catch (err: any) {
-        const status = err?.statusCode || err?.status || err?.response?.status
-        // A 404 says this region does not hold the character, which is what sends the loop on to
-        // the next one; anything else is the API refusing to answer, and no other region fixes it.
-        if (status !== 404) throw err
-        lastError = err
+        // A 404 says this region does not hold the character, which is what sends the loop on to the next
+        // one; anything else is Blizzard refusing to answer, and no other region fixes that - so it is
+        // answered with the status that says which refusal it was, rather than passed on as whatever the
+        // fetch happened to throw (`upstreamFailure`).
+        if (upstreamStatus(err) === 404) {
+          lastError = err
+          continue
+        }
+        upstreamFailure(err)
       }
     }
 
-    throw lastError || createError({ statusCode: 404, statusMessage: 'Character not found' })
+    // Every region that was tried said the same thing: there is no such character.
+    upstreamFailure(lastError || createError({ statusCode: 404, statusMessage: 'Character not found' }))
   })()
 
   pendingCharacters.set(key, load)

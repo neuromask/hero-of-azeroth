@@ -21,6 +21,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
 
+  // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
+  // of the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
+  if (force) requireRefreshBudget(event, region, realm, name)
+
   try {
     return await feeds(
       `${region}:${locale}:${realm}:${name}`,

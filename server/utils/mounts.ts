@@ -10,10 +10,12 @@
  *
  * The journal of a character is published on Blizzard's own Armoury, and its size is what the tile
  * counts - per character, because it follows the faction as well as the patch (the same two characters
- * read 1,387 and 1,359 on the day this was written). `armouryMountJournal` reads it for the character
- * that is being looked at and keeps it for a day; `armoury-totals.json`, the snapshot the command
- * `npm run refresh:armoury-totals` writes, stands in for a process that cannot reach the Armoury, and
- * the index itself for a checkout that has never run that command.
+ * read 1,387 and 1,359 on the day this was written). The Armoury answers with a *web page*, seconds
+ * where every Blizzard call takes milliseconds, so it is never waited on: `readMountJournal` serves the
+ * journal the site already holds and `refreshMountJournal` (both in `server/utils/armory`) fills it
+ * behind the page. Until a character's first journal is on file, `armoury-totals.json` - the snapshot the
+ * command `npm run refresh:armoury-totals` writes - stands in, and the index itself for a checkout that
+ * has never run that command.
  *
  * `collected` is the character's own list, used as a floor the way `reputationTotal` uses the
  * character's reputation count: a mount released after the journal was cached can push a collection

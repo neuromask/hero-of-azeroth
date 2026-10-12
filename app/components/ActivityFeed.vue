@@ -69,6 +69,27 @@ const counts = computed(() => activityCategoryCounts(props.items))
 const filtered = computed(() => props.items.filter((item) => activityInCategory(item, active.value)))
 
 /**
+ * How many events the server renders into the document, and whether the rest have been drawn yet.
+ *
+ * The feed is a hundred cards, and a hundred cards of HTML is a few hundred kilobytes of markup for a
+ * list a reader scrolls to the bottom of once - the largest thing this page ships, and the one part of
+ * it a reader on a slow connection can feel. So only the first screenful is rendered on the server,
+ * which keeps the timeline itself in the document a crawler and a JavaScript-less reader are handed;
+ * the moment the page is hydrated in the browser the whole feed is drawn, so every event stays
+ * available and nothing changes about what a reader can reach - only when it is paid for. The rail's
+ * counters are taken over `props.items`, so they still count the whole feed on the server.
+ */
+const INITIAL_ITEMS = 24
+const expanded = ref(false)
+
+onMounted(() => {
+  expanded.value = true
+})
+
+/** The events the list draws now: the first screenful before hydration, all of them after it. */
+const rendered = computed(() => (expanded.value ? filtered.value : filtered.value.slice(0, INITIAL_ITEMS)))
+
+/**
  * The look of a card, picked by the accent the server put on the item.
  *
  * Three parts travel together - the frame of the card, the ring around the icon and the node
@@ -170,7 +191,7 @@ function accentOf(item: ActivityItem) {
       />
 
       <li
-        v-for="item in filtered"
+        v-for="item in rendered"
         :key="`${item.id}-${item.completedAt}`"
         class="relative pb-5 pl-16 last:pb-0"
       >

@@ -41,6 +41,10 @@ export default defineEventHandler(async (event) => {
   if (!realm || !name) {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
+
+  // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
+  // of the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
+  if (force) requireRefreshBudget(event, region, realm, name)
   if (category && !isAchievementCategory(category)) {
     throw createError({ statusCode: 400, statusMessage: `Unknown achievement category "${category}"` })
   }
@@ -49,7 +53,7 @@ export default defineEventHandler(async (event) => {
    *  cache the shell above the view reads, so a visitor reading a character pays one read. */
   async function characterLog() {
     const [character, collected] = await Promise.all([
-      getCharacter(realm, name, region, locale),
+      getCharacter(realm, name, region, locale, force),
       getEarnedAchievementIds(region, realm, name, locale)
     ])
     return { collected, faction: character.faction }

@@ -5,6 +5,10 @@
  * an answer stays on hand for two hours and is revalidated behind the request that finds it
  * stale (see `server/utils/swrCache.ts`).
  */
+// The reading this endpoint serves, named rather than left to the DOM's own `CharacterData`: the global is
+// what this file used to be typed against, which is a document node rather than a character.
+import type { CharacterData } from '~~/server/utils/blizzard'
+
 const profiles = createSwrCache<CharacterData>(2 * 60 * 60 * 1000)
 
 export default defineEventHandler(async (event) => {
@@ -21,6 +25,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
 
+  // The one request that spends Blizzard's quota on purpose, charged to whoever asked for it before any of
+  // the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
+  if (force) requireRefreshBudget(event, region, realm, name)
+
   // The key this character's profile is cached under, kept so that the moment it was fetched can be read
   // back out of the cache afterwards (`fetchedAt`): the site's own record of the character is weighed
   // against that moment on the way out (`overlayPool`), and only the cache knows it.
@@ -30,7 +38,7 @@ export default defineEventHandler(async (event) => {
     const character = await profiles(
       key,
       async () => {
-        const profile = await getCharacter(realm, name, region, locale)
+        const profile = await getCharacter(realm, name, region, locale, force)
 
         // A lookup that came back with a character is the one moment the site learns a page exists, so it
         // is written down for the sitemap as the fresh copy is fetched - and what the profile says about

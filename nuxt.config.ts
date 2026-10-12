@@ -81,21 +81,41 @@ export default defineNuxtConfig({
     // Read by `server/plugins/port.ts`, which is the port the built server binds
     // when neither `PORT` nor `NITRO_PORT` is set on the host.
     port: PORT,
-    blizzardClientId: process.env.NUXT_BLIZZARD_CLIENT_ID,
-    blizzardClientSecret: process.env.NUXT_BLIZZARD_CLIENT_SECRET,
     /**
-     * The secret the sign-in cookie is sealed with (h3 `useSession` -> iron). Public game data
-     * still rides the client-credentials client above; this one is only for the reader's own
-     * session, so it is a secret of the site rather than of the Battle.net app.
+     * Blizzard's client credentials and the key the sign-in cookie is sealed with.
+     *
+     * Deliberately **empty here** rather than read out of `process.env` at this point. Nuxt writes a
+     * `runtimeConfig` default into the build, and the build is what the deploy uploads: seeded from the
+     * environment (and from `.env`, which Nuxt loads while building), all three of these would travel to
+     * the host inside `.output/server/chunks`, in plain text, where the Battle.net client secret and the
+     * key that seals every sign-in cookie are readable by anybody who can read that directory - and they
+     * would outlive a rotation. Empty defaults keep the artefact clean.
+     *
+     * Nothing is lost by it. Nitro resolves the same names out of the *runtime* environment when the built
+     * server answers a request - `NUXT_BLIZZARD_CLIENT_ID` to `runtimeConfig.blizzardClientId`, and so on
+     * for the secret and the session key - which is where the host supplies them (`README.md`, "Running
+     * what was uploaded"). `nuxt dev` reads `.env` through the same mechanism, so local sign-in and local
+     * API calls are unaffected. `npm run check:secrets`, and the deploy before it uploads anything, is what
+     * proves the artefact carries none of the three.
      */
-    sessionPassword: process.env.NUXT_SESSION_PASSWORD,
+    blizzardClientId: '',
+    blizzardClientSecret: '',
+    sessionPassword: '',
     /**
      * The OAuth callback, when it has to be named rather than worked out. Left unset, the callback
      * is the site's own host plus `/api/auth/callback` - except on a local address, where it is the
      * address the browser is actually reading (see `server/utils/bnetOAuth.ts`), because a
      * development sign-in must come back to the development server rather than to production.
      */
-    oauthRedirectUri: process.env.NUXT_OAUTH_REDIRECT_URI,
+    oauthRedirectUri: '',
+    /**
+     * Whether the site sits behind a proxy it controls, which is what decides if the caller's address may be
+     * believed (`server/utils/refreshBudget`). Empty by default: until an operator sets `NUXT_TRUST_PROXY`,
+     * `X-Forwarded-For` is treated as the caller's own claim and the refresh budget is shared by everybody
+     * behind the proxy rather than handed out per stranger. Whatever the host is, the process-wide ceilings
+     * of that budget hold either way.
+     */
+    trustProxy: '',
     public: {
       // Absolute host of the public site: canonical URLs, hreflang links, the
       // sitemap and the structured data are all built on it, so none of them

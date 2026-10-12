@@ -525,3 +525,69 @@ export function buildCollectionSummary(
   }
 }
 
+/**
+ * The same shelf with the tiles of every section but the ones `keep` names left out.
+ *
+ * A shelf is every collectable in the game - fifteen hundred items for the mounts alone, and more for the
+ * pets - and a reader opens on its first section, so the whole of it never has to travel to draw the page.
+ * This is what trims it: a section's heading, its id and every count stay exactly as they were (the quick
+ * anchors and the bars are read from them, so the page is complete the moment it is painted), and only its
+ * tiles are dropped - which is what the reader's browser asks for again, section by section, as they are
+ * scrolled to (see `selectCollectionView` and the endpoint).
+ *
+ * It returns a **new** page and a new array per section it empties: the shelf handed in is the one the
+ * endpoint's store holds (`server/utils/swrCache`), and a trimmed answer that wrote into it would leave
+ * the next caller - a full-format request, or another section - reading a shelf whose tiles had been taken
+ * away. Nothing is re-counted and nothing is re-read: a trimmed response costs the same server-side work
+ * as a whole one, because the shelf it trims was already assembled and cached.
+ */
+export function projectCollectionSections(
+  page: CollectionPage,
+  keep: (sectionId: string) => boolean
+): CollectionPage {
+  return {
+    ...page,
+    sections: page.sections.map((section) =>
+      keep(section.id)
+        ? section
+        : { ...section, subgroups: section.subgroups.map((subgroup) => ({ ...subgroup, items: [] })) }
+    )
+  }
+}
+
+/** The slice of a shelf a request names, as the endpoint reads it off the query string. */
+export interface CollectionSliceRequest {
+  /** `first` answers with the shelf's first section only - what a page asks for as it is rendered. */
+  sections?: string
+  /** The id of the one section to answer with - what a page asks for as a section is scrolled to. */
+  section?: string
+}
+
+/**
+ * The shelf an endpoint answers with: the one assembled and cached, trimmed to the slice `request` names.
+ *
+ * The whole decision lives here rather than in the handler because it is the one rule a test can pin without
+ * a server. No params - or any param this build does not understand - is the *whole* shelf, exactly as the
+ * endpoint always answered, so every existing caller keeps the answer it had; `sections=first` is the first
+ * section's tiles with every other section's headings; `section=<id>` is that one section's tiles. A section
+ * id the shelf has not got is answered with the whole shelf rather than an error, which is what a stale page
+ * or a hand-written link deserves.
+ *
+ * Every branch that trims returns a **new** page, so the object the store holds is never written to.
+ */
+export function selectCollectionView(page: CollectionPage, request: CollectionSliceRequest = {}): CollectionPage {
+  const first = page.sections[0]?.id
+
+  const wanted =
+    typeof request.section === 'string' && request.section
+      ? request.section
+      : request.sections === 'first'
+        ? first
+        : undefined
+
+  // Nothing named, or a section this shelf has not got: the whole shelf, as the endpoint always answered.
+  if (!wanted || !page.sections.some((section) => section.id === wanted)) return page
+
+  return projectCollectionSections(page, (id) => id === wanted)
+}
+

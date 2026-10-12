@@ -62,19 +62,57 @@ const ARMORY_SITE = 'https://worldofwarcraft.blizzard.com'
  */
 const ARMORY_LOCALE = 'en-gb'
 
-/** How long a journal size is kept. It moves with a patch and with the faction, not with a day. */
+/**
+ * How long a journal size is served before it is read again. It moves with a patch and with the
+ * faction, not with a day.
+ */
 const JOURNAL_TTL = 24 * 60 * 60 * 1000
 
-/** The journals already read, and when each stops being served. */
-const journalCache = new Map<string, { data: ArmouryJournal | null; expires: number }>()
-
-/** The entries kept before the expired ones are swept, so the map cannot grow without end. */
-const JOURNAL_CACHE_LIMIT = 500
+/**
+ * How soon a read that produced no journal is tried again.
+ *
+ * A read that came back empty is nearly always the Armoury asking for a moment, or a page shape this
+ * build cannot cut a journal out of - both of which pass. Ten minutes keeps the site from asking again
+ * and again while still picking the journal up within the hour; the tile falls back on the snapshot for
+ * exactly that while.
+ */
+const JOURNAL_RETRY_MS = 10 * 60 * 1000
 
 /** How many mounts a character's own journal holds, and how many of them it has. */
 export interface ArmouryJournal {
   total: number
   collected: number
+}
+
+/**
+ * One character's journal as the cache holds it.
+ *
+ * `data` is the last size the Armoury published, `expires` the moment it stops being served and
+ * `retryAt` the earliest moment a read may be attempted again.
+ *
+ * `data` is kept through a failed read on purpose. A journal that could not be refreshed is still the
+ * last thing the Armoury said about *that* character - older than a day's freshness, but a number the
+ * character really has, where the fallback is one character's journal used for everybody - so a read
+ * that came back empty is not allowed to replace it with nothing. Only a successful read clears it.
+ */
+interface JournalEntry {
+  data: ArmouryJournal | null
+  expires: number
+  retryAt: number
+}
+
+/** The journals already read, by character. */
+const journalCache = new Map<string, JournalEntry>()
+
+/** The entries kept before the expired ones are swept, so the map cannot grow without end. */
+const JOURNAL_CACHE_LIMIT = 500
+
+/** The reads in flight, so a burst of requests for one character is one read of the Armoury. */
+const journalReads = new Map<string, Promise<void>>()
+
+/** The key a character's journal is cached under: its three address segments, the name lowercased. */
+function journalKey(region: string, realm: string, name: string): string {
+  return `${region}:${realm}:${name.toLowerCase()}`
 }
 
 /**
@@ -111,35 +149,81 @@ function sliceJson(text: string, start: number): unknown {
 }
 
 /**
- * How many mounts the journal of this character holds - the number the mount tile is measured against.
+ * The character's journal as the site already holds it, or `null` when it holds none to serve.
  *
- * The Armoury publishes the journal of a character as a list of every mount it could hold, each one
- * marked `collected` or not, so the length of that list is the size of the journal and the marked ones
- * are what the character has. It is a character's own number rather than a constant (it follows the
- * faction and the latest patch), which is why it is read here instead of taken from the snapshot the
- * refresh script writes - so a lookup that can reach the Armoury is measured against the journal that
- * character actually reads. The read is cached for a day and `null` when the Armoury cannot be reached,
- * which leaves the snapshot and the index to stand in.
+ * This is the read a profile is answered with, and it never touches the network: a character the site
+ * has read inside the day is answered at once, and one it has not is answered with `null` - which leaves
+ * `mountTotal` to stand the snapshot in (`server/utils/mounts`) while the read below fills the cache
+ * behind the page.
  */
-export async function armouryMountJournal(region: string, realm: string, name: string): Promise<ArmouryJournal | null> {
-  const key = `${region}:${realm}:${name.toLowerCase()}`
-  const now = Date.now()
+export function readMountJournal(region: string, realm: string, name: string): ArmouryJournal | null {
+  const entry = journalCache.get(journalKey(region, realm, name))
+  return entry && entry.expires > Date.now() ? entry.data : null
+}
 
-  const cached = journalCache.get(key)
-  if (cached && cached.expires > now) return cached.data
+/**
+ * Reads a character's journal if one is due, behind the request that asked for it.
+ *
+ * Nothing waits on this. The profile answers with what the site already holds - the journal on file
+ * (`readMountJournal`), or the snapshot through `mountTotal` behind it - and the read started here fills
+ * the cache for the requests that follow: the next visit, the card, the collections page, the background
+ * pass, all of which read the one entry.
+ *
+ * Two reads for one character never run together: a read already in flight is the one handed back, so a
+ * burst of requests is a burst of no Armoury reads at all. A character read inside its day is not asked
+ * for, and one whose read came back empty is left alone until `JOURNAL_RETRY_MS` has passed. The promise
+ * never rejects: a failed read is a stale number, not a broken page.
+ */
+export function refreshMountJournal(region: string, realm: string, name: string): Promise<void> {
+  const key = journalKey(region, realm, name)
+
+  const running = journalReads.get(key)
+  if (running) return running
+
+  const entry = journalCache.get(key)
+  if (entry && entry.retryAt > Date.now()) return Promise.resolve()
+
+  const read = readJournalFromArmoury(key, region, realm, name)
+    .catch(() => {})
+    .finally(() => {
+      journalReads.delete(key)
+    })
+
+  journalReads.set(key, read)
+  return read
+}
+
+/**
+ * The one place a journal is fetched off the Armoury and filed.
+ *
+ * A read that came back with a journal is kept for the day; one that came back empty keeps whatever the
+ * cache already held - so the last real number is not lost to a moment's bad luck - and is due again in
+ * ten minutes. It cannot reject: its caller is a page that has already been answered.
+ */
+async function readJournalFromArmoury(key: string, region: string, realm: string, name: string): Promise<void> {
+  const now = Date.now()
+  const previous = journalCache.get(key)
+
+  const file = (data: ArmouryJournal | null, ok: boolean): void => {
+    if (journalCache.size >= JOURNAL_CACHE_LIMIT) {
+      for (const [expiredKey, entry] of journalCache) {
+        if (entry.retryAt <= now) journalCache.delete(expiredKey)
+      }
+    }
+
+    const kept = ok ? data : previous?.data ?? null
+
+    journalCache.set(key, {
+      data: kept,
+      // A journal that could not be refreshed keeps being served - it is the last thing the Armoury said
+      // about this character - while a character the site has never heard from is left to the snapshot.
+      expires: kept ? now + JOURNAL_TTL : previous?.expires ?? now,
+      retryAt: now + (ok ? JOURNAL_TTL : JOURNAL_RETRY_MS)
+    })
+  }
 
   const url =
     `${ARMORY_SITE}/${ARMORY_LOCALE}/character/${region}/${realm}/${encodeURIComponent(name)}/collections/mounts`
-
-  const remember = (data: ArmouryJournal | null) => {
-    if (journalCache.size >= JOURNAL_CACHE_LIMIT) {
-      for (const [expiredKey, entry] of journalCache) {
-        if (entry.expires <= now) journalCache.delete(expiredKey)
-      }
-    }
-    journalCache.set(key, { data, expires: now + JOURNAL_TTL })
-    return data
-  }
 
   try {
     const page = await $fetch<string>(url, {
@@ -149,21 +233,18 @@ export async function armouryMountJournal(region: string, realm: string, name: s
     })
 
     const collectedAt = page.indexOf('"mountsCollected":')
-    if (collectedAt === -1) return remember(null)
+    if (collectedAt === -1) return file(null, false)
 
     const listAt = page.indexOf('"mounts":[', collectedAt)
-    if (listAt === -1) return remember(null)
+    if (listAt === -1) return file(null, false)
 
     const list = sliceJson(page, page.indexOf('[', listAt))
-    if (!Array.isArray(list)) return remember(null)
+    if (!Array.isArray(list)) return file(null, false)
 
-    return remember({
-      total: list.length,
-      collected: list.filter((entry: any) => entry?.collected).length
-    })
+    file({ total: list.length, collected: list.filter((entry: any) => entry?.collected).length }, true)
   } catch {
-    // A character the Armoury has not got, a page it would not serve: the caller falls back.
-    return remember(null)
+    // A character the Armoury has not got, a page it would not serve: the cache keeps what it had.
+    file(null, false)
   }
 }
 

@@ -66,6 +66,17 @@ export default defineEventHandler(async (event) => {
   const locale = (query.locale as string) || 'en_US'
   const kind = query.kind ? String(query.kind) : ''
   const force = isOn(query.force)
+  /**
+   * How much of the shelf this request is answered with (the rule itself is `selectCollectionView`).
+   *
+   * A shelf is every collectable in the game, so the whole of it is the largest document the site sends -
+   * and a page opens on one section. `sections=first` is what the shelf page asks for as it is rendered,
+   * and `section=<id>` what it asks for as a section is scrolled to. Neither is part of the cache key
+   * below, so both are answered from the one shelf assembled there: a reader who walks every section still
+   * costs one read of Blizzard and one assembly.
+   */
+  const sectionsParam = typeof query.sections === 'string' ? query.sections : ''
+  const sectionParam = typeof query.section === 'string' ? query.section : ''
   const view: CollectionViewOptions = {
     unobtainable: isOn(query.unobtainable),
     upcoming: isOn(query.upcoming),
@@ -75,6 +86,10 @@ export default defineEventHandler(async (event) => {
   if (!realm || !name) {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
+
+  // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
+  // of the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
+  if (force) requireRefreshBudget(event, region, realm, name)
   if (kind && !isCollectionKind(kind)) {
     throw createError({ statusCode: 400, statusMessage: `Unknown collection "${kind}"` })
   }
@@ -111,7 +126,7 @@ export default defineEventHandler(async (event) => {
         async () => {
           // The character is read for its faction and for the shelves the pool has nothing for - and the
           // shelves it *does* have are counted without a faction, which is what makes them the account's.
-          const character = await getCharacter(realm, name, region, locale)
+          const character = await getCharacter(realm, name, region, locale, force)
           const own = await getCollectedByKind(region, realm, name, locale)
           const collectedByKind = Object.fromEntries(
             COLLECTION_KINDS.map((shelf) => [shelf, pooled[shelf] || own[shelf]])
@@ -130,7 +145,11 @@ export default defineEventHandler(async (event) => {
     const pooled = accountView !== null ? accountCollectedIds(accountView, kind) : null
     const account = pooled !== null
 
-    return await shelves(
+    // The whole shelf is assembled here and kept by the store; what travels is the slice this request
+    // named. The projection sits *after* the cache on purpose - and it copies rather than edits - so the
+    // shelf in the store is never written to and every read (the first response and each section the page
+    // asks for as it is scrolled to) is served from that one assembled shelf.
+    const page = await shelves(
       `${region}:${locale}:${kind}:${realm}:${name}:${view.unobtainable ? 'u' : ''}${view.upcoming ? 'p' : ''}` +
         `${account ? `:a${accountView}` : ''}`,
       async () => {
@@ -139,7 +158,7 @@ export default defineEventHandler(async (event) => {
         // fetches, from the same ten-minute cache, so a visitor reading a character pays one read -
         // while the account's own shelf pays none, both its ids and its lack of a faction coming from
         // the site: the account's pool, and the fact that an account plays both sides.
-        const character = account ? null : await getCharacter(realm, name, region, locale)
+        const character = account ? null : await getCharacter(realm, name, region, locale, force)
         const collected = pooled || (await getCollectedIds(region, realm, name, kind, locale))
 
         return {
@@ -150,6 +169,8 @@ export default defineEventHandler(async (event) => {
       },
       force
     )
+
+    return selectCollectionView(page, { sections: sectionsParam, section: sectionParam })
   } catch (err: any) {
     if (err.statusCode) throw err
     throw createError({

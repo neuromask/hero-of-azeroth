@@ -46,6 +46,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { findSecrets, readDotenv, secretValues } from './lib/secrets.mjs'
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
 const OUTPUT = path.join(ROOT, '.output')
@@ -555,6 +556,40 @@ const buildStats = fs.existsSync(path.join(OUTPUT, 'server', 'index.mjs')) ? mea
 
 if (!SKIP_FTP && !buildStats) {
   fail('`.output/server/index.mjs` is missing. Run `npm run build` first, or drop --no-build.')
+}
+
+/**
+ * The gate: the artefact must not carry the site's runtime secrets.
+ *
+ * Nuxt writes a `runtimeConfig` default into the build, so a credential that is in the environment - or in
+ * `.env`, which Nuxt loads while building - would end up inside `.output`, which is the thing this script
+ * uploads, and inside the directory the host serves from. `nuxt.config.ts` therefore gives those fields
+ * empty defaults and Nitro reads them from the host's environment per request; this check is what makes the
+ * arrangement hold, because it fails the deploy instead of warning about it (`./lib/secrets.mjs`).
+ *
+ * It runs after the build and before anything leaves the machine - before the sources are pushed as well, so
+ * a dirty artefact costs neither a commit nor an upload. A secret that is not in this environment is not
+ * looked for (there is nothing to look for); the values themselves are never printed.
+ */
+if (!SKIP_FTP) {
+  step('Checking the artefact for runtime secrets')
+
+  const secrets = secretValues({ dotenv: readDotenv(DOTENV) })
+
+  if (!secrets.size) {
+    log('   none of the runtime secrets is set here or in .env, so there is nothing to look for')
+    log('   (the build keeps them out of the artefact: see nuxt.config.ts)')
+  } else {
+    const findings = findSecrets(OUTPUT, secrets)
+    if (findings.length) {
+      for (const finding of findings) log(`   !! ${finding.key} is in ${finding.file}`)
+      fail(
+        'The build carries a runtime secret (listed above), so it is not uploaded. Rebuild with the secret\n' +
+          '   out of the environment and out of .env, or check it by hand with `npm run check:secrets`.'
+      )
+    }
+    log(`   ok: ${secrets.size} secret(s) looked for across ${findings.searched} file(s), none of them found`)
+  }
 }
 
 // Step 2 — the sources. Only sources go to GitHub: the build output is gitignored.

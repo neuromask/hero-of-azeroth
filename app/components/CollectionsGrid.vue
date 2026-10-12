@@ -8,12 +8,24 @@ import { formatNumber } from '#shared/utils/formatNumber'
 // seen: the grid asks once, however many links it has just added (see the composable).
 import { useWowheadPower, wowheadUrl } from '~/composables/wowheadPower'
 
-const props = defineProps<{ page: CollectionPage }>()
+const props = defineProps<{
+  page: CollectionPage
+  /**
+   * The shelf's sections, with the ones read back after the first response folded in (`useCollection`).
+   * Absent for a shelf drawn from the response alone, which is the page's own list.
+   */
+  sections?: CollectionSection[]
+  /** Reads one section's tiles, answering whether the page now holds them. */
+  loadSection?: (id: string) => Promise<boolean>
+}>()
 
 const { locale } = useI18n()
 const { refreshLinks } = useWowheadPower()
 // The shelf's switches, of which one - the collected items - is drawn here rather than asked for.
 const view = useCollectionView()
+
+/** The sections to draw: the ones read since the first response when handed in, the page's own otherwise. */
+const list = computed(() => props.sections ?? props.page.sections)
 
 /** WoW's own question-mark icon, which a tile whose sprite failed to load is replaced with. */
 const ICON_FALLBACK = 'https://wow.zamimg.com/images/wow/icons/medium/inv_misc_questionmark.jpg'
@@ -69,10 +81,51 @@ function scheduleRefresh(): void {
   })
 }
 
-/** Builds `index`'s tiles and, if that added any links, hands them to the widget. */
+/**
+ * Whether a section's tiles are still to be read.
+ *
+ * A shelf sends only its first section's tiles with the document, so every later section arrives as a
+ * heading whose subgroups hold no items - the counts are all there, the tiles are not. A section with no
+ * subgroups at all is a genuinely empty one rather than a deferred one, and is left alone.
+ */
+function isDeferred(section: CollectionSection): boolean {
+  return section.subgroups.length > 0 && section.subgroups.every((subgroup) => subgroup.items.length === 0)
+}
+
+/**
+ * Hands a section that could not be read back to the observer, so scrolling past it offers it again.
+ *
+ * A read that fails (a dropped connection, a server that was busy) leaves the section without its tiles;
+ * putting it back among the unrevealed is what turns that into a retry the next time it comes into view,
+ * rather than a section that is empty for the rest of the visit.
+ */
+function offerAgain(index: number): void {
+  revealed.value = new Set([...revealed.value].filter((entry) => entry !== index))
+  const element = sectionEls.get(index)
+  if (element) observer?.observe(element)
+}
+
+/**
+ * Builds `index`'s tiles - reading them first if they are still on the server.
+ *
+ * The whole shelf is assembled and cached on the server, and a section of it is one more request, so the
+ * tiles of a section below the first are read as that section comes near the viewport. The nudge the
+ * widget is given waits for the tiles to really be in the page; a read that produced none hands the
+ * section back to the observer (`offerAgain`).
+ */
 function reveal(index: number): void {
   if (revealed.value.has(index)) return
   revealed.value = new Set([...revealed.value, index])
+
+  const section = list.value[index]
+  if (section && isDeferred(section)) {
+    void Promise.resolve(props.loadSection?.(section.id)).then((loaded) => {
+      if (!loaded) offerAgain(index)
+      scheduleRefresh()
+    })
+    return
+  }
+
   scheduleRefresh()
 }
 
@@ -92,7 +145,7 @@ function reveal(index: number): void {
  * grid is laid out by this as well: a two-column grid whose first column holds nothing would draw the
  * shelf itself in the width of a rail, which is what a shelf of one group did before.
  */
-const anchored = computed(() => props.page.sections.length > 1)
+const anchored = computed(() => list.value.length > 1)
 
 const railEl = ref<HTMLElement | null>(null)
 const stickyTop = ref(0)
@@ -229,10 +282,15 @@ const SUBGROUP_TITLE = 22
  */
 function placeholderHeight(section: CollectionSection): string {
   const rows = rowsOf(section)
-  const tiles = rows.reduce((sum, row) => sum + row.items.length, 0)
+  const loaded = rows.reduce((sum, row) => sum + row.items.length, 0)
+
+  // A section whose tiles have not been read yet has no rows to measure, so its own counts stand in and the
+  // page keeps the room the section will take rather than jumping when it arrives. The collected switch is
+  // honoured in the estimate exactly as `rowsOf` honours it.
+  const tiles = loaded || (view.value.collected ? section.total : Math.max(0, section.total - section.collected))
   const lines = Math.ceil(tiles / TILES_PER_LINE)
   // Only a named block takes the room of a heading.
-  const headings = rows.filter((row) => row.label).length * SUBGROUP_TITLE
+  const headings = (loaded ? rows.filter((row) => row.label).length : section.subgroups.length) * SUBGROUP_TITLE
   return `${lines * TILE_LINE + headings}px`
 }
 </script>
@@ -268,7 +326,7 @@ function placeholderHeight(section: CollectionSection): string {
         :aria-label="$t(page.kind)"
       >
         <button
-          v-for="(section, index) in page.sections"
+          v-for="(section, index) in list"
           :key="section.id"
           :ref="(element) => setChip(index, element as Element | null)"
           type="button"
@@ -287,7 +345,7 @@ function placeholderHeight(section: CollectionSection): string {
          leaves the shelf rather than a width of its own. -->
     <div class="min-w-0 flex-1 space-y-5">
       <section
-        v-for="(section, index) in page.sections"
+        v-for="(section, index) in list"
         :key="section.id"
         :ref="(element) => setSection(index, element as Element | null)"
         :data-section="index"

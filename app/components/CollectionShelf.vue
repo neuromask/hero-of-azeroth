@@ -46,7 +46,7 @@ const LEGEND = [
   { title: 'collectionsLegendGameTitle', text: 'collectionsLegendGameText' }
 ] as const
 
-const { data, pending, error, refresh } = await useCollection(() => props.kind, view)
+const { data, pending, error, refresh, sections, loadSection } = await useCollection(() => props.kind, view)
 
 /**
  * What the note says about the numbers: the three reasons a shelf reads lower than the game's own counter, and
@@ -190,7 +190,7 @@ usePageLoading().follow('character:collections', pending)
         </div>
       </div>
 
-      <CollectionsGrid :page="data" />
+      <CollectionsGrid :page="data" :sections="sections" :load-section="loadSection" />
     </template>
   </div>
 </template>

@@ -20,6 +20,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
   }
 
+  // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
+  // of the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
+  if (force) requireRefreshBudget(event, region, realm, name)
+
   // The card is a picture with photographs in it, so it is written and served as a JPEG: a
   // chat network's crawler fetches an `og:image` on a deadline of a couple of seconds, and
   // the bytes it has to pull inside that deadline are half of whether the preview appears.
@@ -29,7 +33,7 @@ export default defineEventHandler(async (event) => {
   return cards(
     `${region}:${locale}:${realm}:${name}`,
     async () => {
-      const character = await getCharacter(realm, name, region, locale)
+      const character = await getCharacter(realm, name, region, locale, force)
 
       // The card is drawn from a profile, and reading a profile is what the site learns a character
       // from - so a card is fed into the sitemap's index, into the hall of fame's table, and, as
