@@ -16,6 +16,11 @@
  *      that travels - they are the credentials of the transfer itself - and the
  *      `.env` that was there is kept as `.env.previous`, so a bad configuration
  *      can be put back. `--no-env` sends none of it, `--env-all` sends it verbatim.
+ *      The file is only sent when it says something different from the copy the
+ *      host already has: a configuration that rarely changes should not be
+ *      re-uploaded, and should not be reported as a change - the restart note
+ *      printed beside it is only true when something moved. `--env-force` sends
+ *      it regardless.
  *   5. Before any of that, the data the site has written on the host is read back
  *      into `backups/<date>/server-data/`: the SQLite database, the character
  *      index the sitemap is built from and the hall of fame's table (the one
@@ -40,6 +45,7 @@
  *                        the size it was built with (one request per file)
  *   --no-env             do not upload the `.env` beside this checkout
  *   --env-all            upload that `.env` verbatim, `FTP_*` settings included
+ *   --env-force          upload the `.env` even when the host already says the same thing
  *   --no-backup          do not read the site's data directory back before uploading
  *   --dry-run            report what would happen; nothing is built or uploaded
  *   -m, --message <text> commit message (default: `Deploy <date> <time>`)
@@ -63,6 +69,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { sameEnv } from './lib/envFile.mjs'
 import { findSecrets, readDotenv, secretValues } from './lib/secrets.mjs'
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -74,6 +81,15 @@ const BACKUPS = path.join(ROOT, 'backups')
 
 /** The remote directory that holds what the site writes: nothing in `.output` replaces it. */
 const DATA_DIR = 'server/data'
+
+/**
+ * The same directory, spelled the way a listing needs it.
+ *
+ * The trailing slash is not cosmetic: an FTP `LIST` of a path without one answers with the *parent*
+ * directory's contents - `server/` rather than `server/data/` - which turns a backup into a folder of
+ * names it then fails to fetch, and nothing about it looks wrong until the day the copy is needed.
+ */
+const DATA_LISTING = `${DATA_DIR}/`
 
 /** A credential helper may want to open a dialog, so pushes never hang forever. */
 const PUSH_TIMEOUT_MS = 5 * 60 * 1000
@@ -105,6 +121,8 @@ const DRY_RUN = hasFlag('--dry-run')
 /** The `.env` beside the server is uploaded with the build unless `--no-env`; `--env-all` sends it verbatim. */
 const SKIP_ENV = hasFlag('--no-env')
 const ENV_ALL = hasFlag('--env-all')
+/** A `.env` the host already says the same thing about is left alone unless `--env-force`. */
+const ENV_FORCE = hasFlag('--env-force')
 /** The site's own data is read back before the upload unless `--no-backup`. */
 const SKIP_BACKUP = hasFlag('--no-backup')
 const DEFAULT_MESSAGE = `Deploy ${new Date().toISOString().replace('T', ' ').slice(0, 16)}`
@@ -381,10 +399,19 @@ function putFile(target, netrc, local, remote) {
 /**
  * Sends the configuration the host reads when it starts: the `.env` itself, and - when there was one - the
  * `.env` it replaces, kept as `.env.previous` so a bad configuration is one upload away from being put back.
+ *
+ * Nothing is sent when the host already says the same thing. The configuration rarely changes, and
+ * re-uploading an identical file would rotate `.env.previous` for no reason and report a change - with the
+ * restart that goes with it - that nobody made. `--env-force` overrules the comparison.
  */
 function sendEnvFile(target, netrc, prepared) {
-  const result = { sent: 0, kept: 0, problems: [] }
+  const result = { sent: 0, kept: 0, unchanged: 0, problems: [] }
   const previous = remoteEnv(target, netrc)
+
+  if (previous && !ENV_FORCE && sameEnv(previous, prepared.contents)) {
+    result.unchanged = 1
+    return result
+  }
 
   if (previous) {
     const kept = tempFile('hoa-env-previous', previous)
@@ -478,8 +505,9 @@ function remoteNames(target, netrc, dir) {
  * there, which is not a problem worth reporting.
  */
 function backupRemoteData(target, netrc) {
-  const names = (remoteNames(target, netrc, DATA_DIR) || []).filter((name) => name !== '.' && name !== '..')
-  if (!names.length) return null
+  const listed = remoteNames(target, netrc, DATA_LISTING)
+  const names = (listed || []).filter((name) => name !== '.' && name !== '..')
+  if (!names.length) return { nothing: true }
 
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
   const directory = path.join(BACKUPS, stamp, 'server-data')
@@ -490,9 +518,14 @@ function backupRemoteData(target, netrc) {
 
   for (const name of names) {
     const local = path.join(directory, name)
-    const result = curl([...ftpArgs(target, netrc), '--output', local, ftpUrl(target, `${DATA_DIR}/${name}`)], {
-      allowFailure: true
-    })
+    // Retried like an upload: this kind of host throttles a burst of transfers, and a data file that is
+    // skipped because the server was briefly busy is a file the copy does not have.
+    const result = curlWithRetry([
+      ...ftpArgs(target, netrc),
+      '--output',
+      local,
+      ftpUrl(target, `${DATA_DIR}/${name}`)
+    ])
 
     if (result.status === 0 && fs.existsSync(local) && fs.statSync(local).size > 0) {
       kept.push(name)
@@ -778,7 +811,7 @@ if (SKIP_FTP) {
     if (!SKIP_ENV && fs.existsSync(DOTENV)) {
       const prepared = preparedEnv()
       const left = prepared.dropped ? `${prepared.dropped} FTP_* line(s) left out of it` : 'every line, no FTP_* ones'
-      log(`   would upload .env beside them, for the site to read when it starts (${left})`)
+      log(`   would upload .env beside them if it differs from the host's copy (${left})`)
     }
   if (PRUNE) log('   --prune: stale files below public/ and server/chunks/ would be deleted')
   if (VERIFY) log('   --verify: every directory would be read back afterwards')
@@ -818,9 +851,17 @@ if (SKIP_FTP) {
     if (!SKIP_BACKUP) {
       const kept = backupRemoteData(target, netrc)
 
-      if (kept) {
+      if (kept.nothing) {
+        // A host that has never run the site has nothing there, which is not a problem - the line is here so
+        // that every deploy says what it saw either way.
+        log(`   ${DATA_DIR} <- nothing to read back there yet`)
+      } else {
         log(`   ${DATA_DIR} <- ${kept.kept.length} file(s) kept in ${kept.relative}`)
-        for (const name of kept.failed) log(`   !! could not read ${DATA_DIR}/${name} back`)
+
+        for (const name of kept.failed) {
+          log(`   !! could not read ${DATA_DIR}/${name} back`)
+          problems.push(`the copy of ${DATA_DIR}/${name} could not be read back`)
+        }
       }
     }
 
@@ -835,7 +876,9 @@ if (SKIP_FTP) {
     if (sentEnv) {
       for (const problem of sentEnv.problems) problems.push(problem)
 
-      if (sentEnv.sent) {
+      if (sentEnv.unchanged) {
+        log('   .env <- the host already says the same thing, left as it is')
+      } else if (sentEnv.sent) {
         const left = envFile.dropped ? `${envFile.dropped} FTP_* line(s) left out` : 'no FTP_* lines in it'
         log(`   .env <- the configuration the site reads when it starts (${left})`)
         if (sentEnv.kept) log('   .env.previous <- the one it replaced, kept so a bad one can be put back')

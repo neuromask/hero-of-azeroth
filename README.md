@@ -620,8 +620,11 @@ FTP_INSECURE=true    # waive the certificate check when the host's certificate
 
 The `.env` travels beside them as a separate file: the local one, with its `FTP_*` settings left out - those
 are the credentials of the transfer itself, and the directory they would land in is the one the site is
-served from. The copy that was there before is kept as `.env.previous`, so a bad configuration can be put
-back; `--env-all` sends the file verbatim, `--no-env` sends none of it.
+served from. It is only sent when it says something different from the copy the host already has - a
+configuration that rarely changes should not be re-uploaded, and should not be reported as a change (the
+restart note beside it is only true when something moved). When it does change, the copy that was there is
+kept as `.env.previous`, so a bad configuration can be put back. `--env-all` sends the file verbatim,
+`--no-env` sends none of it, and `--env-force` sends it even when the host already says the same thing.
 
 The transfers are plain `curl` calls
 (Windows 10+ ships curl, and it speaks FTP and FTPS); the password travels in a throwaway netrc file, so
@@ -677,6 +680,7 @@ npm run deploy -- --prune          # also delete remote files this build no long
 npm run deploy -- --verify         # read every directory back and report missing files
 npm run deploy -- --no-env         # leave the remote `.env` alone
 npm run deploy -- --env-all        # send that `.env` verbatim, `FTP_*` settings included
+npm run deploy -- --env-force      # send it even when the host already says the same thing
 npm run deploy -- --no-backup      # do not read the site's data directory back first
 npm run deploy -- -m "Fix the card"
 ```
