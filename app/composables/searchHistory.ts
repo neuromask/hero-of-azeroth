@@ -57,8 +57,14 @@ export function searchHistoryKey(entry: { region: string; realm: string; name: s
   return `${entry.region}:${entry.realm}:${entry.name.toLowerCase()}`
 }
 
-/** A value from storage as an entry, or `null` when it is not the shape this wrote. */
-function toEntry(value: unknown): SearchHistoryEntry | null {
+/**
+ * A value from storage as an entry, or `null` when it is not the shape this wrote.
+ *
+ * Exported because a second `localStorage` list keeps the same shape - the characters saved for a quick
+ * comparison (`app/composables/versusFavorites.ts`) - and a second parser for one type is how two lists come
+ * to disagree about what a character is. The reader stays here, where the shape is written.
+ */
+export function toSearchHistoryEntry(value: unknown): SearchHistoryEntry | null {
   const entry = value as Partial<SearchHistoryEntry>
   if (!entry || typeof entry.name !== 'string' || typeof entry.realm !== 'string' || !entry.name || !entry.realm) {
     return null
@@ -92,7 +98,7 @@ function readStorage(): SearchHistoryEntry[] {
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed.map(toEntry).filter((entry): entry is SearchHistoryEntry => entry !== null)
+    return parsed.map(toSearchHistoryEntry).filter((entry): entry is SearchHistoryEntry => entry !== null)
   } catch {
     return []
   }
@@ -104,6 +110,25 @@ function writeStorage(entries: SearchHistoryEntry[]) {
   } catch {
     // Nothing to do: losing the list breaks nothing.
   }
+}
+
+/**
+ * The list a search field offers: the characters this browser saved for a quick compare, and the ones it
+ * looked up, as one list.
+ *
+ * The two are the same thing remembered for two reasons - a character somebody searched for, and a character
+ * somebody starred (`app/composables/versusFavorites.ts`) - and a reader looking for one of them does not care
+ * which list it went into, so a field offers them together rather than as two sections that would each have to
+ * be searched. The saved ones come first (they were chosen on purpose), and the pair is deduplicated by the key
+ * a character is unique on (`searchHistoryKey`) - so a saved character is never also drawn as a lookup of
+ * itself, however the two happen to spell its case.
+ */
+export function mergeSearchEntries(
+  saved: SearchHistoryEntry[],
+  lookedUp: SearchHistoryEntry[]
+): SearchHistoryEntry[] {
+  const seen = new Set(saved.map((entry) => searchHistoryKey(entry)))
+  return [...saved, ...lookedUp.filter((entry) => !seen.has(searchHistoryKey(entry)))]
 }
 
 /**

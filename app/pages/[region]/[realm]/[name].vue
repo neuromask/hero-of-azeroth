@@ -35,15 +35,21 @@ if (!region) {
 const apiLocale = computed(() => (locale.value === 'ru' ? 'ru_RU' : 'en_US'))
 
 /**
- * The four views of the character that are not the profile itself, as the addresses they stand at: the feed,
- * the collections, the achievements and the reputation journal. They are read here rather than in the row,
- * because the shell is the one that knows the character and the address - the row is handed *who* it is about
- * and never guesses it (see `app/components/SiteNav.vue`).
+ * The five views of the character that are not the profile itself, as the addresses they stand at: the feed,
+ * the collections, the achievements, the reputation journal and the comparison. They are read here rather
+ * than in the row, because the shell is the one that knows the character and the address - the row is handed
+ * *who* it is about and never guesses it (see `app/components/SiteNav.vue`).
  */
 const onActivityTab = computed(() => /\/activity\/?$/.test(route.path))
 const onCollectionsTab = computed(() => /\/collections(?:\/|$)/.test(route.path))
 const onAchievementsTab = computed(() => /\/achievements(?:\/|$)/.test(route.path))
 const onReputationsTab = computed(() => /\/reputations\/?$/.test(route.path))
+/**
+ * The comparison, which has two addresses: `/vs` with nobody to compare against yet - the search for a second
+ * character stands there - and `/vs/region/realm/name` once one has been picked. The second one carries three
+ * more segments below the `vs`, so the match is on the segment rather than on the end of the address.
+ */
+const onVsTab = computed(() => /\/vs(?:\/|$)/.test(route.path))
 
 /**
  * The character as the row is built from, in the shape a remembered character has: the three segments of the
@@ -66,6 +72,7 @@ const navCharacter = computed<SearchHistoryEntry>(() => ({
 const activeTab = computed(() => {
   if (onReputationsTab.value) return 'reputations' as const
   if (onActivityTab.value) return 'activity' as const
+  if (onVsTab.value) return 'vs' as const
   if (onCollectionsTab.value) return 'collections' as const
   if (onAchievementsTab.value) return 'achievements' as const
   return 'overview' as const
@@ -179,6 +186,7 @@ const seoTitle = computed(() => {
   if (onActivityTab.value) return `${base} - ${t('tabActivity')}`
   if (onCollectionsTab.value) return `${base} - ${t('tabCollections')}`
   if (onReputationsTab.value) return `${base} - ${t('tabReputations')}`
+  if (onVsTab.value) return `${base} - ${t('tabVs')}`
   return base
 })
 
@@ -524,7 +532,11 @@ provideCharacterView({
   activityPending,
   activityError,
   loadActivity,
-  toast
+  toast,
+  refreshProfile,
+  refreshing,
+  cooldown,
+  canRefresh
 })
 /** The rendered card, cached so the share sheet can open without waiting for it. */
 async function loadCardBlob(force = false): Promise<Blob | null> {

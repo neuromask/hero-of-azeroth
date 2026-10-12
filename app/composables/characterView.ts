@@ -38,6 +38,21 @@ export interface CharacterViewContext {
   loadActivity: (force?: boolean) => Promise<void>
   /** The one message the shell shows, raised by the Refresh button and the share tray. */
   toast: Ref<string>
+  /**
+   * The shell's own Refresh, as the act it is: it re-reads the profile from Blizzard (`?force=true`), redraws
+   * the card, refreshes the feed the shell is holding and raises the shell's one toast.
+   *
+   * A view that offers a Refresh button of its own - the comparison board does, beside each character's star -
+   * calls this rather than repeating it, so the header's button and the board's are one act with one cooldown
+   * and one toast rather than two that could race each other into a 429 (`server/utils/refreshBudget`).
+   */
+  refreshProfile: () => Promise<void>
+  /** True while that read is in flight, which is what spins the button wherever it stands. */
+  refreshing: Ref<boolean>
+  /** Seconds left before another refresh may be taken (`0` when one may), shared for the reason above. */
+  cooldown: Ref<number>
+  /** Whether a refresh may be taken right now: not already reading, and not cooling down. */
+  canRefresh: ComputedRef<boolean>
 }
 
 /** The key the context is provided and injected under. A symbol, so nothing can collide with it. */

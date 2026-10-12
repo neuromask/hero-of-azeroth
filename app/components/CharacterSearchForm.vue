@@ -18,7 +18,7 @@
  * `server/api/character/[region]/[realm]/[name].get.ts`), so the progress the button shows while the
  * realm is being read is the progress of a character being added to the ranking.
  */
-import { useSearchHistory, searchHistoryKey, type SearchHistoryEntry } from '~/composables/searchHistory'
+import { useSearchHistory, searchHistoryKey, mergeSearchEntries, type SearchHistoryEntry } from '~/composables/searchHistory'
 
 const props = withDefaults(
   defineProps<{
@@ -46,8 +46,24 @@ const props = withDefaults(
      * the very thing this component exists to prevent.
      */
     compact?: boolean
+    /**
+     * Where a search leads.
+     *
+     * Everywhere else on the site a search opens the character's own page, because rendering that page is
+     * what reads the profile and writes the character into the table. The comparison page asks the same two
+     * fields for a different reason - the second character is looked up only to be read beside the first -
+     * so the address it opens is the comparing one (`/${current}/vs/${region}/${realm}/${name}`) and nothing
+     * else about the act changes: the realm list, the remembered characters and the progress are the same.
+     */
+    target?: 'profile' | 'versus'
+    /**
+     * The address of the comparison page this form stands on, in the language being read, and only used when
+     * `target` is `versus`: the path the looked-up character's own three segments are appended to. It is
+     * handed in rather than worked out here, because only the page knows which character is being compared.
+     */
+    vsBase?: string
   }>(),
-  { autofocus: false, initialName: '', compact: false }
+  { autofocus: false, initialName: '', compact: false, target: 'profile', vsBase: '' }
 )
 
 /**
@@ -146,6 +162,26 @@ const nameActiveIndex = ref(-1)
  * page once a search has actually found somebody, so it records successes rather than tries.
  */
 const { history, load: loadHistory, forget } = useSearchHistory()
+
+/**
+ * The characters saved for a quick comparison, which the star on a remembered row toggles.
+ *
+ * The saved characters are not a list of their own: they are offered under the name field beside the ones this
+ * browser looked up, as one list (see `historyMatches`), because a reader looking for a character does not care
+ * which of the two remembered it. The star is therefore on every row rather than only on the comparison page's
+ * rows - a list a reader can see is a list a reader can change - and the state is shared rather than private
+ * (`useVersusFavorites`), because the comparison board draws the same list.
+ */
+const {
+  favorites,
+  load: loadVersusFavorites,
+  has: isVersusFavorite,
+  toggle: toggleVersusFavorite,
+  remove: removeFavorite
+} = useVersusFavorites()
+
+/** Whether this form is the one that opens a comparison, which is where a search leads on the board. */
+const versusMode = computed(() => props.target === 'versus')
 
 /**
  * What the form remembers for the length of a visit: the realm that was last picked. A session
@@ -337,15 +373,18 @@ const historyRealmName = (entry: SearchHistoryEntry) => {
 }
 
 /**
- * The history narrowed by what is being typed - matched on the character, the realm name and the
- * slug alike, the same way the realm list narrows. An empty field shows the whole list, which is
+ * The list under the name field: what this browser looked up and what it saved for a quick compare, merged
+ * into one list (`mergeSearchEntries`), then narrowed by what is being typed - matched on the character, the
+ * realm name and the slug alike, the same way the realm list narrows. An empty field shows everything, which is
  * what makes focusing the field the way back to it.
  */
 const historyMatches = computed<SearchHistoryEntry[]>(() => {
-  const query = name.value.trim().toLowerCase()
-  if (!query) return history.value
+  const list = mergeSearchEntries(favorites.value, history.value)
 
-  return history.value.filter((entry) =>
+  const query = name.value.trim().toLowerCase()
+  if (!query) return list
+
+  return list.filter((entry) =>
     entry.name.toLowerCase().includes(query) ||
     historyRealmName(entry).toLowerCase().includes(query) ||
     entry.realm.includes(query)
@@ -356,7 +395,7 @@ const historyMatches = computed<SearchHistoryEntry[]>(() => {
 const openName = () => {
   // A fresh list has nothing highlighted, the way the realm list starts on every keystroke.
   nameActiveIndex.value = -1
-  if (history.value.length) nameOpen.value = true
+  if (history.value.length || favorites.value.length) nameOpen.value = true
 }
 
 
@@ -380,11 +419,16 @@ const selectHistory = (entry: SearchHistoryEntry) => {
   nameActiveIndex.value = -1
 }
 
-/** Drops one row from the list, and closes it once the last one has gone. */
+/**
+ * Drops one row from the list. The row may be there because the character was looked up, because it was saved,
+ * or because of both - and the cross means "not this one any more" rather than "not in this half of the list",
+ * so it goes from both. The list shuts once the last row has gone.
+ */
 const removeHistory = (entry: SearchHistoryEntry) => {
   forget(entry)
+  if (isVersusFavorite(entry)) removeFavorite(entry)
   nameActiveIndex.value = -1
-  if (!history.value.length) nameOpen.value = false
+  if (!history.value.length && !favorites.value.length) nameOpen.value = false
 }
 
 /**
@@ -482,7 +526,16 @@ const handleSearch = async () => {
   searching.value = true
   startSearchStatus()
   try {
-    await router.push(localePath(locale.value, `/${regionPath(realm.region)}/${realm.slug}/${character}`))
+    // A search on the comparison page does not open the character's own page - it opens the comparison of
+    // this character against them, which is why the second character's three segments are appended to the
+    // board's own address rather than standing as an address of their own. The segments are spelled the way
+    // the comparison address spells them (`/vs/eu/azuregos/name`): the region bare, the way the address was
+    // asked for, and the realm's slug rather than its name.
+    const address = versusMode.value && props.vsBase
+      ? `${props.vsBase}/${realm.region}/${realm.slug}/${character}`
+      : localePath(locale.value, `/${regionPath(realm.region)}/${realm.slug}/${character}`)
+
+    await router.push(address)
   } catch {
     // The navigation never left - a guard turned it away, say - so the form goes back to normal.
     stopSearchStatus()
@@ -501,6 +554,7 @@ onMounted(() => {
   // after hydration keeps the rendered page the same for everyone.
   restoreSession()
   loadHistory()
+  loadVersusFavorites()
   applyInitialName()
   focusStart()
   document.addEventListener('mousedown', onDocumentClick)
@@ -568,7 +622,7 @@ onBeforeUnmount(() => {
       >
         <div class="max-h-72 overflow-y-auto">
           <p class="hoa-pop-title">
-            {{ $t('searchHistory') }}
+            {{ $t('searchListTitle') }}
           </p>
           <div
             v-for="(entry, i) in historyMatches"
@@ -579,7 +633,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               :data-active="nameActiveIndex === i"
-              class="w-full text-left px-4 py-2 pr-10 text-sm transition-colors"
+              class="w-full text-left px-4 py-2 pr-16 text-sm transition-colors"
               :class="nameActiveIndex === i ? 'bg-wow-gold/15 text-wow-gold' : 'text-gray-200 hover:bg-white/5'"
               @click="selectHistory(entry)"
             >
@@ -589,6 +643,33 @@ onBeforeUnmount(() => {
                 <span v-for="(part, k) in highlightName(entry.name)" :key="k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span>
               </CharacterName>
               <span class="text-gray-500 text-xs"> · <span v-for="(part, k) in highlightName(historyRealmName(entry))" :key="'realm-' + k" :class="part.hit ? 'text-wow-gold font-bold' : ''">{{ part.text }}</span></span>
+            </button>
+            <!-- The star, on every row: the list under this field holds both what was looked up and what was
+                 saved for a comparison, so the way to change which of the two a character is has to stand
+                 beside it. It is the gesture the account page offers for a main (`app/pages/profile.vue`) - a
+                 hollow star is a press away from being saved, a filled one is already saved - and it wears the
+                 brand gold when filled, the colour the site saves a choice with. -->
+            <button
+              type="button"
+              class="absolute right-8 top-1/2 -translate-y-1/2 grid h-6 w-6 place-items-center rounded transition-colors hover:bg-white/10"
+              :class="isVersusFavorite(entry) ? 'text-wow-goldLight' : 'text-gray-500 hover:text-wow-goldLight'"
+              :aria-label="isVersusFavorite(entry) ? $t('vsFavoriteRemove') : $t('vsFavoriteAdd')"
+              :title="isVersusFavorite(entry) ? $t('vsFavoriteRemove') : $t('vsFavoriteAdd')"
+              :aria-pressed="isVersusFavorite(entry)"
+              @click.stop="toggleVersusFavorite(entry)"
+            >
+              <svg
+                class="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                :fill="isVersusFavorite(entry) ? 'currentColor' : 'none'"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+              </svg>
             </button>
             <button
               type="button"

@@ -82,7 +82,7 @@ const localeUrl = useLocaleUrl()
 
       <div class="relative flex flex-wrap items-center gap-2">
         <!-- The page's own row. It is the whole site's navigation, drawn by one component for every page of
-             the site (`app/components/SiteNav.vue`): the character's five views when the page is about a
+             the site (`app/components/SiteNav.vue`): the character's six views when the page is about a
              character, the site's own two entries, the search, the language pair and the account. A page that
              draws a row of its own hands it over through the slot; a page that has none - the account page, a
              document - is given the site's, which is what every page ends up wearing. The corner is that

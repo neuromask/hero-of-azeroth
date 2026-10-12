@@ -341,6 +341,15 @@ export interface CharacterData {
    * player and is attached by the overlay, which every page and the card are served through.
    */
   score?: number
+  /**
+   * When Blizzard was asked for this reading, in unix seconds, set by the endpoint that serves the page.
+   *
+   * A profile is answered from a two-hour cache (`server/api/character`), so this moment - not the moment the
+   * page was opened - is the only honest answer to "how old are these figures". A page that prints it is
+   * saying when the character was read rather than when it was looked at (`app/components/CharacterVersus.vue`).
+   * Absent from a reading that never came through the endpoint.
+   */
+  fetchedAt?: number
   stats: {
     mounts: CharacterStat
     pets: CharacterStat

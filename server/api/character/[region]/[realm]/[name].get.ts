@@ -74,7 +74,10 @@ export default defineEventHandler(async (event) => {
 
     await feedProfile({ region, realm, name, profile: character })
 
-    return overlayPool(character, region, realm, name, readAt)
+    // The moment Blizzard was asked for this reading rides out with it (`fetchedAt`): a profile is answered
+    // from a two-hour cache, so it is the only honest answer to "how old are these figures", which the
+    // comparison board prints under each character's Refresh button.
+    return { ...overlayPool(character, region, realm, name, readAt), fetchedAt: readAt }
   } catch (err: any) {
     if (err.statusCode) throw err
     throw createError({

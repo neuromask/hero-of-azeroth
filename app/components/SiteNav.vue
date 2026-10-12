@@ -19,16 +19,17 @@ import type { SearchHistoryEntry } from '~/composables/searchHistory'
  * wears it with the first group left out: what is left is the site's own two entries, the search and the corner,
  * which is everything such a page has.
  *
- * There are two kinds of entry in that row, and they answer two different questions. Five of them are about
- * the character being read - their profile, their collections, their achievements, their reputations and
- * their feed - and two are the site's own: the hall of fame the figures are ranked in and the search that
- * opens the next character. So the two are held apart from the five: they stand at the far end of the row,
+ * There are two kinds of entry in that row, and they answer two different questions. Six of them are about
+ * the character being read - their profile, their collections, their achievements, their reputations, their
+ * feed and the comparison they can be read against - and two are the site's own: the hall of fame the figures
+ * are ranked in and the search that opens the next character. So the two are held apart from the six: they
+ * stand at the far end of the row,
  * past a hairline, in the corner the languages and the account already end the row in. One row still, so
  * stepping between a character and the table keeps the bar, the entries and the switch exactly where they
  * are - but a reader can now see which entries are about the character under the bar and which are about the
  * site they are on.
  *
- * The first of the five carries the character's own name rather than the word "character", because that is
+ * The first of the six carries the character's own name rather than the word "character", because that is
  * the one entry of the row whose subject the page knows: a reader looking at a bar wants to see *who* they
  * are looking at. It wears the class colour and the portrait the table's own rows do, so the tab and the row
  * a click later are recognisably the same character, and the word it stands for is not lost - it is the tab's
@@ -36,7 +37,7 @@ import type { SearchHistoryEntry } from '~/composables/searchHistory'
  *
  * Below `lg` the row is not the row at all. A phone cannot hold seven entries, a divider and a corner in one
  * line, and a row that wraps to three lines costs a reader a whole screen of the page they came for. So the
- * entries that are *navigation* move into the panel the button opens: the five of a character and the hall of
+ * entries that are *navigation* move into the panel the button opens: the six of a character and the hall of
  * fame, under the two headings they are grouped by. Inside the panel the two menus keep their subtrees as
  * inline lists under the entry that opened them rather than as panes hanging off a caret - a pane opened
  * inside a pinned bar covers the panel it was opened from, and a phone reads an indented list under its
@@ -57,13 +58,13 @@ import type { SearchHistoryEntry } from '~/composables/searchHistory'
 const props = defineProps<{
   /**
    * The character whose views the row offers: the one the page is about, or the last one this browser read.
-   * `null` on a page that knows nobody, where the five entries are left out and only the site's two remain.
+   * `null` on a page that knows nobody, where the character's entries are left out and only the site's two remain.
    */
   character?: SearchHistoryEntry | null
   /** What this navigation is the navigation of, which is what an assistive reader hears it called. */
   label: string
   /** The entry the address names, which is the one wearing the gold the rest of the site accents with. */
-  active?: 'overview' | 'collections' | 'achievements' | 'reputations' | 'activity' | 'leaderboard' | null
+  active?: 'overview' | 'collections' | 'achievements' | 'reputations' | 'activity' | 'vs' | 'leaderboard' | null
 }>()
 
 const { t } = useI18n()
@@ -88,7 +89,8 @@ const links = computed(() => {
     collections: `${base}/collections`,
     achievements: `${base}/achievements`,
     reputations: localeUrl(`${base}/reputations`),
-    activity: localeUrl(`${base}/activity`)
+    activity: localeUrl(`${base}/activity`),
+    vs: localeUrl(`${base}/vs`)
   }
 })
 
@@ -363,6 +365,29 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
         >
           {{ t('tabActivity') }}
         </NuxtLink>
+
+        <!-- The comparison, in the panel as in the row: the same entry, the same glyph, right after the
+             feed. A reader on a phone meets the entries in the order the row above lays them out. -->
+        <NuxtLink
+          :to="links.vs"
+          :class="active === 'vs' ? ROW_ON : ROW_OFF"
+          :aria-current="active === 'vs' ? 'page' : undefined"
+          @click="close"
+        >
+          <svg
+            class="h-4 w-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+          </svg>
+          {{ t('tabVs') }}
+        </NuxtLink>
       </template>
 
       <!-- And the site's own group under its own heading: the table every figure on this site is ranked in.
@@ -381,7 +406,7 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
       </NuxtLink>
     </div>
 
-    <!-- The character's own five entries, on a screen wide enough to hold them: the profile under the
+    <!-- The character's own entries, on a screen wide enough to hold them: the profile under the
          character's own name, the two menus, the journal and the feed. The name is the tab's visible text and
          `tabOverview` leads its accessible name, so the entry says both which page it opens and whose it
          is - the label of a control always contains the words a reader can see on it. -->
@@ -431,6 +456,32 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
         :aria-current="active === 'activity' ? 'page' : undefined"
       >
         {{ t('tabActivity') }}
+      </NuxtLink>
+
+      <!-- The comparison the character's own figures can be read against: a second character, side by side
+           with this one. It stands after the feed, which is the last of the character's four views, and it
+           points at the comparing address - `/vs` on its own, where the search for that second character
+           stands. The glyph is the two arrows pointing opposite ways, and it is the one part of the entry
+           that says what it does rather than where it goes, the way the search's magnifier does. -->
+      <NuxtLink
+        :to="links.vs"
+        class="hoa-tab hoa-liquid-glass"
+        :class="{ 'hoa-tab-active': active === 'vs' }"
+        :aria-current="active === 'vs' ? 'page' : undefined"
+      >
+        <svg
+          class="h-4 w-4 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+        </svg>
+        {{ t('tabVs') }}
       </NuxtLink>
     </div>
 

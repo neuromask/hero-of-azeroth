@@ -85,16 +85,17 @@ refuses to.
 
 Every page wears the same row (`app/components/SiteNav.vue`), and it is deliberately *grouped*. It is also the only
 place the languages, the account and the search are drawn at all - a header of a page that has no row of its own is
-handed this very component - so no page can carry them twice. Five of the row's entries are about the character
+handed this very component - so no page can carry them twice. Six of the row's entries are about the character
 being read: the profile - which carries the character's own name and portrait rather than the word "character", so
-a reader always sees who the bar is about - the collections, the achievements, the reputations and the feed. Two of
+a reader always sees who the bar is about - the collections, the achievements, the reputations, the feed and the
+comparison. Two of
 them are the site's own and answer a different question: the hall of fame the figures are ranked in, and the search
 that opens the next character. Those two stand at the far end of the row, past a hairline, in the corner the
 languages and the account already close the row with. A page that is not about a character - a document, the account
-page - wears the same row with those five left out.
+page - wears the same row with those entries left out.
 
 Below `lg` that row does not fit, and a row that wraps to three lines costs a phone a whole screen of the page it
-came for. So the entries that are navigation move into the panel the burger opens - the five of a character and the
+came for. So the entries that are navigation move into the panel the burger opens - the six of a character and the
 hall of fame, under two headings, with the collections and the achievements as lists indented under the entry that
 opens them (a pane dropped inside a pinned bar would cover the panel it came from, and a phone reads an indented
 list better than a second layer of glass). What stays in the row is the search, the languages and the account: the
@@ -210,10 +211,10 @@ a second implementation is a second answer.
 | `app/pages/about.vue` | About the site: what it is, the four things it does, and the fact that it is free |
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
-| `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity` |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's five views under the character's own name, the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with the five left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row) |
+| `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity`, `vs/*` (the comparison - `/vs` with nobody to compare against yet, and `/vs/:vsRegion/:vsRealm/:vsName` with a second character) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's six views under the character's own name, the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with those left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row), `CharacterVersus` (the comparison board: two characters and their fifteen figures side by side, each row's winner lit), `CharacterCardActions` (the pair of buttons a comparison card carries - save the character, read them again - and the moment their figures were read, under them) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable`, `LeaderboardYou` (the reader's own place in the table) |
-| `app/composables/` | `characterView`, `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView` (what the table is asked for, and the two questions a link into it spells out: which columns it lights, and which character's row it asks for), `realmNames`, `lang`, `seo`, `searchHistory`, `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView` (what the shell hands its views: the profile, the feed, and its own Refresh with its cooldown), `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView` (what the table is asked for, and the two questions a link into it spells out: which columns it lights, and which character's row it asks for), `realmNames`, `lang`, `seo`, `searchHistory` (the characters looked up, and the merge that draws them beside the saved ones), `versusFavorites` (the characters saved with a star, which the board and every search field offer), `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
 | `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
@@ -290,12 +291,18 @@ and looking somebody up is what writes their row. That last one asks for the sea
 (`app/composables/characterLookup.ts`) and hands over the name the reader typed into the filter, so the field is
 not a dead end.
 
+The list that opens under the name field is one list holding two kinds of remembered character: the ones this
+browser looked up, and the ones it saved with a star for a comparison (`mergeSearchEntries`,
+`app/composables/searchHistory.ts`). They are drawn together because a reader looking for a character does not
+care which of the two remembered it, and each row carries the star, so the list a reader can see is the list a
+reader can change.
+
 The character the page is *about* is the one this browser opened last, or - for a reader who is signed in and has
 looked nobody up on this device - the main of their account: `/api/profile` is read for the row's own badge in any
 case, so the main costs the page no second request, and a reader who signed in somewhere else finds their
 character waiting in the bar instead of a pair of empty fields. The row under the page's name is the site's own
 navigation and the very component a character page wears (`app/components/SiteNav.vue`), drawn only once there is
-somebody for its five character entries to point at; the bar carries that character's place instead of the account
+somebody for its six character entries to point at; the bar carries that character's place instead of the account
 chip (`app/components/leaderboard/LeaderboardYou.vue`).
 
 The table is a *destination* rather than only a list. Every stat tile on a character page links into it with the
@@ -419,6 +426,42 @@ account's pool of finished factions is what the rows are marked and counted from
 (a faction an alt of the other faction finished is part of the account), and the shelf's total becomes every
 ladder of the atlas - the very numbers the tile prints (`reputationReachableTotal`,
 `server/utils/reputations`).
+
+## ⇄ Comparing two characters
+
+A character page's sixth view is a comparison: the character's own figures beside a second character's, row by
+row. Its address is the character's own with `/vs` after it — `/region-eu/gordunni/neromask/vs` opens on the
+search, and picking somebody writes them into the address (`/vs/eu/azuregos/dzheykb`) — so a comparison is a
+link that can be shared like any other page, and the two characters are read from the very endpoints their own
+pages are.
+
+The board (`app/components/CharacterVersus.vue`) is two columns of the site's glass, each under its own card,
+with the same fifteen figures in the same order below them: the site's score, the collections (achievements,
+mounts, toys, pets, decor), the titles, the item level, the Mythic+ rating, the reputations, the wardrobe, the
+quests, the recipes, the honorable kills and the honor level. Every row says whose figure it is — the account's
+own in the brand gold, the character's own in grey — because a reader who came with an account is shown the
+account's numbers and a stranger is shown the character's, which is the rule every tile of the site already
+prints. The higher of the two figures is lit in green with the `+X` it won by beside it, and a figure that is
+not there to print is a dash rather than a zero: a wardrobe nobody has read and an empty one are different
+answers.
+
+The wardrobe is the one figure of the fifteen that no profile carries — 2.5 MB of Blizzard's own — so it is
+read by the endpoint that keeps it off a page (`/api/transmog`), in the browser, and its two rows fill in a
+moment after the board opens.
+
+Each card carries the same pair of buttons (`app/components/CharacterCardActions.vue`): the star that saves the
+character for a quick compare, and the refresh that reads them from Blizzard again. The first character's
+refresh *is* the button the header carries — the same act, the same minute of cooldown, the same toast, handed
+to the board through the shell's own context (`app/composables/characterView.ts`), so two buttons cannot race
+each other into a 429 (`server/utils/refreshBudget`) — while the second character's is the board's own read.
+Under the buttons stands when that character's figures were last read, which is the moment the endpoint fetched
+them (`fetchedAt`) rather than the moment the page was opened: a profile is answered from a two-hour cache, so
+that moment is the only honest answer, and a reader who has just pressed the refresh sees it read "just now".
+
+A saved character is one press from the board, and the star is not the only place the list appears: the search
+field's own list holds the saved characters beside the ones this browser looked up, as one list
+(`mergeSearchEntries`). The list itself is the browser's own (`app/composables/versusFavorites.ts`), like the
+search history.
 
 ## 🔄 Keeping the data current
 

@@ -22,9 +22,10 @@
  * - it buries an address rather than choosing a language, which no other address of the site does.
  *
  * The row under the header is the site's own navigation, as one component (`app/components/SiteNav.vue`): the
- * character's five views - the profile under their own name, the collections, the achievements, the
- * reputations and the feed - pointing at the character this browser opened last, and the site's own two
- * entries held apart from them past a hairline: the hall of fame and the search. The five are drawn only once
+ * character's six views - the profile under their own name, the collections, the achievements, the
+ * reputations, the feed and the comparison - pointing at the character this browser opened last, and the
+ * site's own two entries held apart from them past a hairline: the hall of fame and the search. They are
+ * drawn only once
  * there is such a character: an entry that leads to the page the reader is already on is worse than no entry
  * at all, and before the browser has been taught a character there is nothing to point at but the search. The
  * table is where a character is learned - pressing a row opens their page, and that is the act that remembers
@@ -458,7 +459,7 @@ onMounted(loadHistory)
     <SiteBackdrop :image="backdrop" />
 
     <!-- The same header the character pages wear: the brand, the page's name where a character's name would be,
-         and, under it, the very row those pages carry - the character's five views, the site's own two entries,
+         and, under it, the very row those pages carry - the character's six views, the site's own two entries,
          the languages and the account (`app/components/SiteNav.vue`). -->
     <SiteHeader :title="t('lbTitle')" :meta="meta">
       <!-- What the bar carries on the right, and it is one of two things depending on who is reading.
@@ -489,7 +490,7 @@ onMounted(loadHistory)
         <CharacterSearchForm v-else-if="!account?.user" compact />
       </template>
 
-      <!-- The whole row, and it is the same component a character page wears: the five views of whichever
+      <!-- The whole row, and it is the same component a character page wears: the six views of whichever
            character this browser is reading, the site's own two entries held apart from them by the hairline,
            the languages, the account and the search - and, on a phone, the panel all of those move into
            (`app/components/SiteNav.vue`).
