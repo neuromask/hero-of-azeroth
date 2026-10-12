@@ -68,7 +68,11 @@ const { data: standing, status } = useFetch<LeaderboardStanding | null>(url, {
   // history, so at first it stands for the main - and is then re-pointed at whoever the reader is looking at. A key
   // written out as one string froze that first fetch under the main's key and served the main's place and name
   // back for every character after it, while the plate's own link already led to the right one.
-  key: () => `hoa-leaderboard-standing:${searchHistoryKey(props.character)}`
+  key: () => `hoa-leaderboard-standing:${searchHistoryKey(props.character)}`,
+  // And the answer is asked for afresh: the endpoint's `cache-control` lets a browser keep this reading for the
+  // hour Nitro puts on a cached answer, while a place in the table moves the moment anybody's page is rendered.
+  // A reader's own place is the one figure of the site that must never be a copy of an older one.
+  headers: { 'cache-control': 'no-cache' }
 })
 
 /** The row the table draws for the character, or `null` until the answer lands. */

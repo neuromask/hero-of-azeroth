@@ -250,6 +250,15 @@ totals between the two. It is built so that opening it costs the rest of the sit
   character up. A record that already says everything the profile does is not written again, which is
   what keeps a reader from costing the disk anything at all.
 
+The figures a reader is most likely to have moved themselves are the ones on the page they are looking at: every
+character page anybody renders hands the table that character's numbers, so a reader who has just looked somebody up
+has very likely changed the totals the table is about to print. So the page asks for its answer twice — once with
+the document the server rendered, and once, silently, when the browser draws the page without the server having just
+rendered it (a reader stepping back from a character page). Both asks carry `cache-control: no-cache`, because a
+browser is allowed to keep the endpoint's answer for an hour (`max-age` is Nitro's own, built from the endpoint's
+cache — a header a handler cannot set for itself), and the second writes what comes back straight into the table on
+screen: nothing waits, nothing dims, and the counts correct themselves a moment later.
+
 The storage sits behind `server/utils/leaderboardStorage.ts`, and that module is the only thing that
 knows the data is a JSON file — `getLeaderboard`, `upsertPlayer` and `getGlobalStats` are the whole
 contract, so moving it to SQLite (`better-sqlite3`, `db0`) is a rewrite of that one file and a change

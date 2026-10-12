@@ -36,9 +36,9 @@ export default defineCachedEventHandler(
       throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
     }
 
-    // The freshness the table promises, spelled for a browser and for a CDN: a reading of the table
-    // is worth a minute in the browser, and the hour the handler caches for everywhere else.
-    setHeader(event, 'cache-control', 'public, max-age=60, s-maxage=3600, stale-while-revalidate=600')
+    // The freshness of this reading is Nitro's to write, out of the options below: a header set in here is
+    // overwritten before the answer leaves. The plate that reads it asks with `cache-control: no-cache`
+    // (`app/components/leaderboard/LeaderboardYou.vue`), so a reader's own place is never somebody's copy of it.
 
     const standing = await getLeaderboardStanding({ region, realm, name })
     if (!standing) {

@@ -72,9 +72,10 @@ export default defineCachedEventHandler(
   async (event) => {
     const query = getQuery(event)
 
-    // The page's own answer is public and identical for every visitor, so a browser may hold it
-    // for a minute and a CDN for the hour the handler caches for.
-    setHeader(event, 'cache-control', 'public, max-age=60, s-maxage=3600, stale-while-revalidate=600')
+    // Nothing about freshness is written here: a cached answer's `cache-control` is Nitro's to build out of the
+    // options below, and anything set in this handler is overwritten before the answer leaves. What a caller
+    // does about the hour that leaves behind is ask to be answered afresh - the page that reads this table sends
+    // `cache-control: no-cache` with every request (`app/composables/leaderboardView.ts`).
 
     return await getLeaderboard({
       sort: parseSort(query.sort),

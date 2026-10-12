@@ -12,12 +12,11 @@
  * letter at a time, so the box keeps its own value and hands the server a debounced copy - a
  * reader typing `neromask` asks once, not eight times.
  *
- * Two pieces of the page's state travel in the address as well as in this composable, and both of them because
- * a tile on a character page links *into* the table: which columns it shows (pressing the decor tile opens the
- * hall of fame with the decor chip lit) and which character's row the reader came to find (that tile's figure
- * is a column of the table, and the character it belongs to is a row of it). The functions below are those two
- * agreements, written once each, so a link and the row of chips - or the row of the table - that answers it can
- * never spell the same choice differently.
+ * One piece of the page's state travels in the address as well as in this composable: which columns
+ * the table shows - and with it which character's row a link asked for. Beyond that the page has one thing
+ * the composable owns rather than derives: the answer is asked for again when the browser draws the page
+ * without the server having just rendered it, because the table is written to by the pages themselves and an
+ * answer kept from the start of a session is stale by construction (see `revalidate` below).
  */
 import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
 import type {
@@ -216,6 +215,20 @@ export function useLeaderboardView() {
   const { data, pending, error, refresh } = useFetch<LeaderboardPage>('/api/leaderboard', {
     key: 'hoa-leaderboard',
     query: request,
+    /**
+     * Every request of this page asks to be answered afresh.
+     *
+     * The endpoint's answer is public and a browser may keep it for the hour Nitro puts on a cached answer
+     * (`max-age`, built from the endpoint's own `maxAge`) - and an hour is longer than this table stays true, even
+     * though the server's copy of it is exact to the second (the stamp in the endpoint's cache key). Without this
+     * a filter the reader has asked for before - a row of chips they come back to, the address of a link they
+     * followed an hour ago - would be answered out of the browser's own store, and the figures under it would be
+     * the ones they were shown then.
+     *
+     * It costs one request the server answers from memory in single-digit milliseconds, which is what the hour of
+     * caching is *for*; nothing on screen waits for it (`revalidate` below is the same ask, made silently).
+     */
+    headers: { 'cache-control': 'no-cache' },
     // A failure of the table is a row of dashes, not a broken page: the shell still renders.
     default: () => null
   })
@@ -225,6 +238,74 @@ export function useLeaderboardView() {
 
   const rows = computed(() => page.value?.players || [])
   const stats = computed(() => page.value?.stats || null)
+
+  /** The question this page is asking, as one string: what a reply has to match to still answer it. */
+  const requestKey = computed(() => JSON.stringify(request.value))
+
+  /**
+   * The answer itself, as Nuxt holds it under this page's key (`useNuxtData`): the ref `useFetch` above draws
+   * from, the one a later visit to this page is initialised from, and therefore the only place a corrected answer
+   * belongs - a re-read that wrote into a copy of its own would leave the next visit reading the old one.
+   */
+  const answer = useNuxtData<LeaderboardPage | null>('hoa-leaderboard').data
+
+  /**
+   * The table asked for again, in the background, when the page opens without the server having just rendered it.
+   *
+   * A reader who steps into a character page and comes back is shown the answer this browser read earlier in the
+   * session. It is not Nuxt's cache of the HTTP response and not a stale hour of the endpoint's own: it is the
+   * answer `useFetch` already holds, which the client keeps for as long as the app lives and does not ask for
+   * again - a mounted page whose key is already `success` fetches nothing (see `useAsyncData`). A full reload is
+   * what has been correcting it, and that is the tell: the page never asked.
+   *
+   * It matters here more than on any other page, because this table is written to by the pages themselves: every
+   * character page anybody renders adds its figures to the table (`server/utils/leaderboardStorage`), so a reader
+   * who has just looked a character up has very likely moved the very total they are about to be shown - and the
+   * browser's own minute of the answer (`cache-control` in `server/api/leaderboard/index.ts`) is a second, smaller
+   * window of the same staleness.
+   *
+   * So the page asks once more and writes what comes back straight into the data it is drawing. Nothing is
+   * awaited and `pending` is deliberately left alone: the reader keeps the table already on screen - nothing
+   * dims, nothing re-orders under their hands, the wait is not theirs to pay - and the figures correct themselves
+   * the moment the answer lands. That is the endpoint's own stale-while-revalidate, one layer out, and it costs
+   * one request the process answers from memory, which is where the hour of caching actually lives. A failure is
+   * dropped: the answer on screen is a real answer, and a reader whose second request failed has lost nothing.
+   *
+   * Once per opening is the whole of it, and deliberately: a reader who *stays* on the table is reading the
+   * answer they were given, and a beat on a timer would ask the same question over and over for a page most
+   * readers leave again within the minute (`app/composables/presence.ts` beats because presence goes out on its
+   * own; these figures do not).
+   */
+  async function revalidate(): Promise<void> {
+    const asked = requestKey.value
+
+    try {
+      const fresh = await $fetch<LeaderboardPage>('/api/leaderboard', {
+        query: request.value,
+        // A re-ask the browser answers from its own copy of the answer is not an ask at all, and `no-cache` on a
+        // request is exactly what says the stored copy may not be used without asking the server.
+        headers: { 'cache-control': 'no-cache' }
+      })
+
+      // A reader who changed a filter while this was in flight is reading the answer to *their* question: the
+      // reply to a question nobody is asking any more is dropped rather than written over it.
+      if (fresh && requestKey.value === asked) answer.value = fresh
+    } catch {
+      // Nothing to do: the answer being drawn stands.
+    }
+  }
+
+  /**
+   * And the one call of it, at the one moment the distinction can still be made: this composable's own setup,
+   * where `isHydrating` says whether the page being drawn is the one the server has just sent. A page the server
+   * rendered keeps its answer - it is the freshest thing this browser has - and a page the browser navigated to
+   * on its own asks again.
+   *
+   * The call is not awaited, and nothing is registered for a later lifecycle to hold: the composable is called by
+   * the page's own script, and a hook registered after an `await` belongs to no component at all (see the note on
+   * that in `app/composables/presence.ts`).
+   */
+  if (import.meta.client && !useNuxtApp().isHydrating) void revalidate()
 
   /** Every setter resets the page, so a filter change always lands on the top of the new list. */
   function setSort(sort: LeaderboardSort) {
