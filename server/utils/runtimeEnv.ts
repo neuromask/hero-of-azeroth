@@ -21,23 +21,50 @@
  * none of them should be refused because of it.
  */
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { parseEnv } from 'node:util'
 
 /**
- * Reads `file` (`.env` beside the running server by default) into `process.env`, and reports how many values
- * it took. Called once from `server/plugins/env`, and again from `server/plugins/port` before it looks at
- * `PORT`: the function is idempotent, so the second call costs a file read and changes nothing.
+ * Where the `.env` is looked for, in order.
+ *
+ * The first candidate is the working directory, because that is where the command in the README runs from
+ * (`cd <the app> && node server/index.mjs`). The others are there because a host does not always work that
+ * way: a panel or a process manager can start the same command with a working directory of its own, and then
+ * `process.cwd()` says nothing about where the configuration is - which is exactly the state a site whose
+ * Battle.net credentials are "missing" is usually in. The script Node is running does say: the deploy puts
+ * `.env` beside the `server/` directory the entry lives in, so that is where the last two look.
  */
-export function loadRuntimeEnv(file: string = resolve(process.cwd(), '.env')): number {
+export function runtimeEnvCandidates(): string[] {
+  const candidates = [resolve(process.cwd(), '.env')]
+  const entry = process.argv[1]
+
+  if (entry) {
+    const entryDirectory = dirname(resolve(entry))
+    candidates.push(resolve(entryDirectory, '..', '.env'), resolve(entryDirectory, '.env'))
+  }
+
+  return [...new Set(candidates)]
+}
+
+/**
+ * Reads `file` into `process.env`, and reports which file it was and how many values it took.
+ *
+ * Called from `server/plugins/env` (which logs the answer) and from `server/plugins/port` before it looks at
+ * `PORT`. It is idempotent: a value already in the environment is left alone, so the second call takes
+ * nothing. Without a `file` the candidates above are tried in order, and the first one that exists is read.
+ */
+export function loadRuntimeEnv(file?: string): { file: string | null; taken: number } {
+  const candidates = file ? [file] : runtimeEnvCandidates()
+  const found = candidates.find((candidate) => existsSync(candidate))
   let values: Record<string, string | undefined>
 
+  if (!found) return { file: null, taken: 0 }
+
   try {
-    if (!existsSync(file)) return 0
-    values = parseEnv(readFileSync(file, 'utf8'))
+    values = parseEnv(readFileSync(found, 'utf8'))
   } catch {
     // A file that cannot be read is a host without configuration, not a reason to refuse to start.
-    return 0
+    return { file: null, taken: 0 }
   }
 
   let taken = 0
@@ -49,7 +76,7 @@ export function loadRuntimeEnv(file: string = resolve(process.cwd(), '.env')): n
     }
   }
 
-  return taken
+  return { file: found, taken }
 }
 
 /**

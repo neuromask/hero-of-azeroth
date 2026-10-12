@@ -83,6 +83,12 @@ function upstreamFailure(err: unknown, what = 'character'): never {
     })
   }
 
+  if (status === 401 || status === 403) {
+    // The site's own credentials were refused. Nothing about the reader, and nothing about a character - the
+    // one failure that belongs to whoever runs the site, and says so instead of looking like an outage.
+    throw createError({ statusCode: 502, statusMessage: 'The site could not authenticate with the Blizzard API' })
+  }
+
   if (status >= 500) {
     throw createError({ statusCode: 503, statusMessage: 'The Blizzard API is not answering right now' })
   }
@@ -117,7 +123,9 @@ export async function getBlizzardToken(region = 'eu') {
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: new URLSearchParams({ grant_type: 'client_credentials' })
-  })
+    // A token the API refused is the site's credentials or the API's own state - not a reader's character -
+    // and ofetch's message would carry the upstream URL and status with it, so it is mapped like the rest.
+  }).catch((err: unknown) => upstreamFailure(err))
 
   cachedToken = {
     access_token: response.access_token,

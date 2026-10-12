@@ -7,7 +7,7 @@
  * host being configured by its file and not: a variable that is already set for the process wins over the
  * file, and a caller that has no request to hand over (`privateSetting`) still finds what the file said.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -34,13 +34,13 @@ afterEach(() => {
 })
 
 describe('the .env beside the running server', () => {
-  it('puts what it holds into the environment, and says how much it took', () => {
+  it('puts what it holds into the environment, and says which file it was', () => {
     const file = join(dir, '.env')
     writeFileSync(file, 'NUXT_BLIZZARD_CLIENT_ID=from-the-file\nNUXT_SESSION_PASSWORD="a quoted key"\n')
     setEnv('NUXT_BLIZZARD_CLIENT_ID', undefined)
     setEnv('NUXT_SESSION_PASSWORD', undefined)
 
-    expect(loadRuntimeEnv(file)).toBe(2)
+    expect(loadRuntimeEnv(file)).toEqual({ file, taken: 2 })
     expect(process.env.NUXT_BLIZZARD_CLIENT_ID).toBe('from-the-file')
     expect(process.env.NUXT_SESSION_PASSWORD).toBe('a quoted key')
   })
@@ -50,16 +50,16 @@ describe('the .env beside the running server', () => {
     writeFileSync(file, 'NUXT_BLIZZARD_CLIENT_ID=from-the-file\n')
     setEnv('NUXT_BLIZZARD_CLIENT_ID', 'from-the-process')
 
-    expect(loadRuntimeEnv(file)).toBe(0)
+    expect(loadRuntimeEnv(file)).toEqual({ file, taken: 0 })
     expect(process.env.NUXT_BLIZZARD_CLIENT_ID).toBe('from-the-process')
   })
 
   it('is quiet about a host that has no file', () => {
-    expect(loadRuntimeEnv(join(dir, 'nothing-here'))).toBe(0)
+    expect(loadRuntimeEnv(join(dir, 'nothing-here'))).toEqual({ file: null, taken: 0 })
   })
 
   it('is quiet about something it cannot read as a file at all', () => {
-    expect(loadRuntimeEnv(dir)).toBe(0)
+    expect(loadRuntimeEnv(dir)).toEqual({ file: null, taken: 0 })
   })
 
   it('does not overrule what it already took, so reading it twice changes nothing', () => {
@@ -67,9 +67,58 @@ describe('the .env beside the running server', () => {
     writeFileSync(file, 'NUXT_SESSION_PASSWORD=one\n')
     setEnv('NUXT_SESSION_PASSWORD', undefined)
 
-    expect(loadRuntimeEnv(file)).toBe(1)
-    expect(loadRuntimeEnv(file)).toBe(0)
+    expect(loadRuntimeEnv(file)).toEqual({ file, taken: 1 })
+    expect(loadRuntimeEnv(file)).toEqual({ file, taken: 0 })
     expect(process.env.NUXT_SESSION_PASSWORD).toBe('one')
+  })
+
+  it('finds it beside the app even when the working directory is somewhere else', () => {
+    // The deploy leaves `.env` beside `server/`, and a host may start the app with a working directory of its
+    // own - which is exactly the state a site whose credentials look "missing" is in.
+    const app = join(dir, 'app')
+    const elsewhere = join(dir, 'elsewhere')
+    mkdirSync(join(app, 'server'), { recursive: true })
+    mkdirSync(elsewhere, { recursive: true })
+    writeFileSync(join(app, '.env'), 'NUXT_BLIZZARD_CLIENT_ID=beside-the-app\n')
+
+    const argv = process.argv[1]
+    const cwd = process.cwd()
+
+    try {
+      process.chdir(elsewhere)
+      process.argv[1] = join(app, 'server', 'index.mjs')
+      setEnv('NUXT_BLIZZARD_CLIENT_ID', undefined)
+
+      expect(loadRuntimeEnv()).toEqual({ file: join(app, '.env'), taken: 1 })
+      expect(process.env.NUXT_BLIZZARD_CLIENT_ID).toBe('beside-the-app')
+    } finally {
+      process.chdir(cwd)
+      process.argv[1] = argv
+    }
+  })
+
+  it('prefers the working directory when the file is there', () => {
+    const here = join(dir, 'here')
+    const app = join(dir, 'app')
+    mkdirSync(join(app, 'server'), { recursive: true })
+    mkdirSync(here, { recursive: true })
+    writeFileSync(join(here, '.env'), 'NUXT_BLIZZARD_CLIENT_ID=from-the-working-directory\n')
+    writeFileSync(join(app, '.env'), 'NUXT_BLIZZARD_CLIENT_ID=beside-the-app\n')
+
+    const argv = process.argv[1]
+    const cwd = process.cwd()
+
+    try {
+      process.chdir(here)
+      process.argv[1] = join(app, 'server', 'index.mjs')
+      setEnv('NUXT_BLIZZARD_CLIENT_ID', undefined)
+
+      expect(loadRuntimeEnv().file).toBe(join(here, '.env'))
+      expect(process.env.NUXT_BLIZZARD_CLIENT_ID).toBe('from-the-working-directory')
+    } finally {
+      process.chdir(cwd)
+      process.argv[1] = argv
+    }
   })
 })
 
