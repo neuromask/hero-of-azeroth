@@ -27,7 +27,8 @@
  * `backfillFromIndex`).
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { dataDirectory } from './appPaths'
 // The formula, which lives on the server alone: the table's own column, the account's totals and every
 // page's rating are one number because they are one call (`server/utils/playerScore`).
 import { calculatePlayerScore, totalCollectables, SCORE_VERSION } from './playerScore'
@@ -55,11 +56,15 @@ import type {
 import { LEADERBOARD_SORTS, isAtItemLevelCap } from '#shared/data/leaderboardSchema'
 
 /**
- * Where the table is kept: the folder the Nitro storage mount for the character index writes into
- * (`./server/data`, see `nuxt.config.ts`), resolved against the working directory of the running
- * server so that the built `.output` and a local `npm run dev` agree on the path.
+ * Where the table is kept: the app's own data directory (`./appPaths`), the same one the database and the
+ * character index use.
+ *
+ * It used to be resolved against the working directory, which is not the app's directory whenever a panel
+ * or a process manager starts the server from somewhere else - and the table a site had been building then
+ * came up empty, written from scratch into a second, fresh data directory. The table is the site's front
+ * page, so the path is taken from the running script instead.
  */
-const DATA_DIR = resolve(process.cwd(), 'server/data')
+const DATA_DIR = dataDirectory()
 const DATA_FILE = join(DATA_DIR, 'leaderboard.json')
 
 /** The record shape this build writes, so a file from an older build can be told apart. */

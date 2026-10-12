@@ -61,7 +61,11 @@ export function loadRuntimeEnv(file?: string): { file: string | null; taken: num
   if (!found) return { file: null, taken: 0 }
 
   try {
-    values = parseEnv(readFileSync(found, 'utf8'))
+    // A byte-order mark, which an editor on the host may have written at the front of the file, would
+    // otherwise become part of the *first* key: `NUXT_BLIZZARD_CLIENT_ID` would not be recognised, and the
+    // rest of the file would arrive on its own - a credential pair with a missing half, which is exactly how
+    // a 401 from Battle.net where everything else looks configured is produced.
+    values = parseEnv(readFileSync(found, 'utf8').replace(/^\uFEFF/, ''))
   } catch {
     // A file that cannot be read is a host without configuration, not a reason to refuse to start.
     return { file: null, taken: 0 }
@@ -77,6 +81,28 @@ export function loadRuntimeEnv(file?: string): { file: string | null; taken: num
   }
 
   return { file: found, taken }
+}
+
+/**
+ * The settings the site cannot work without, and which of them are still missing once the file was read.
+ *
+ * Asked of the process afterwards, so it covers both ways a host can be configured, and reported at startup by
+ * `server/plugins/env` - by name only, never by value. This is the question worth answering on the host,
+ * because the two ways of being unconfigured look the same from outside: a file in the wrong directory and a
+ * file with one key mistyped both end as a 401 from Battle.net, or as a 500 from the first handler that needs
+ * a session.
+ */
+export const requiredSettings = [
+  'NUXT_BLIZZARD_CLIENT_ID',
+  'NUXT_BLIZZARD_CLIENT_SECRET',
+  'NUXT_SESSION_PASSWORD'
+] as const
+
+export function missingSettings(): string[] {
+  return requiredSettings.filter((name) => {
+    const value = process.env[name]
+    return value === undefined || value === ''
+  })
 }
 
 /**

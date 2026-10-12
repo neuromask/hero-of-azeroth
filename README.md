@@ -646,6 +646,25 @@ server overwrites `X-Forwarded-For`. The file is read out of that directory when
 The variables are read per request (`useRuntimeConfig()`), so changing them needs a restart, not a
 rebuild — and shipping a new version is another `npm run deploy`.
 
+### Where the site keeps its data
+
+Everything the site writes lives in one directory: the SQLite database (`server/data/hoa.db`), the character
+index the sitemap is built from (`server/data/characters.json`) and the hall of fame's table
+(`server/data/leaderboard.json`). It is resolved by `server/utils/appPaths` from the directory the app
+*runs* from, not from the working directory of the process — so a panel or a process manager that starts
+`node /somewhere/app/server/index.mjs` with a working directory of its own reads and writes exactly the same
+files as `cd /somewhere/app && node server/index.mjs`. A data directory that follows the working directory
+is how a site's own front page comes up empty while its data sits untouched in the directory the previous
+process used. `NUXT_DATA_DIR` overrides the location outright, and the process prints the directory it
+settled on while it starts (`[data] ...`, beside the `[env]` line).
+
+Every `npm run deploy` reads that directory back into `backups/<date>/server-data/` before it uploads
+anything (`--no-backup` skips it). None of it is part of `.output` and nothing in the deploy deletes it —
+which is why a copy is worth taking: it is the only thing in this repository's world that a build cannot
+produce again. To put a copy back, **stop the site first**: the table is held in memory for as long as the
+process runs (`server/utils/leaderboardStorage`), so the file has to be copied over while nothing is
+running, and the site started again afterwards to read it.
+
 ### Deploy options
 
 ```bash
@@ -658,6 +677,7 @@ npm run deploy -- --prune          # also delete remote files this build no long
 npm run deploy -- --verify         # read every directory back and report missing files
 npm run deploy -- --no-env         # leave the remote `.env` alone
 npm run deploy -- --env-all        # send that `.env` verbatim, `FTP_*` settings included
+npm run deploy -- --no-backup      # do not read the site's data directory back first
 npm run deploy -- -m "Fix the card"
 ```
 

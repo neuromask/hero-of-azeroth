@@ -13,11 +13,18 @@
  * Node 23.4 without one; the host runs Node 24.
  */
 import { mkdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { dataDirectory } from './appPaths'
 
-/** Where the database lives: the folder the JSON stores use, resolved against the run directory. */
-const DB_FILE = resolve(process.cwd(), 'server/data', 'hoa.db')
+/**
+ * Where the database lives: the app's own data directory (`./appPaths`), which is the folder the JSON
+ * stores use.
+ *
+ * It is deliberately not `process.cwd()`: on the host the app may be started from anywhere, and a data
+ * directory that follows the working directory is a second, empty database the moment that changes.
+ */
+const DB_FILE = join(dataDirectory(), 'hoa.db')
 
 /** The open database, or `null` until the first call opens it. */
 let db: DatabaseSync | null = null

@@ -16,6 +16,13 @@
  *      that travels - they are the credentials of the transfer itself - and the
  *      `.env` that was there is kept as `.env.previous`, so a bad configuration
  *      can be put back. `--no-env` sends none of it, `--env-all` sends it verbatim.
+ *   5. Before any of that, the data the site has written on the host is read back
+ *      into `backups/<date>/server-data/`: the SQLite database, the character
+ *      index the sitemap is built from and the hall of fame's table (the one
+ *      directory `server/utils/appPaths` names). None of them is part of
+ *      `.output` and nothing here deletes them - which is exactly why a copy is
+ *      worth having, because they are the only thing in this repository's world
+ *      that a build cannot produce again. `--no-backup` skips it.
  *
  * The upload runs through `curl` (shipped with Windows 10+ and present on every
  * Linux server), so the deploy needs no npm package of its own. Credentials come
@@ -33,6 +40,7 @@
  *                        the size it was built with (one request per file)
  *   --no-env             do not upload the `.env` beside this checkout
  *   --env-all            upload that `.env` verbatim, `FTP_*` settings included
+ *   --no-backup          do not read the site's data directory back before uploading
  *   --dry-run            report what would happen; nothing is built or uploaded
  *   -m, --message <text> commit message (default: `Deploy <date> <time>`)
  *
@@ -60,6 +68,12 @@ import { findSecrets, readDotenv, secretValues } from './lib/secrets.mjs'
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
 const OUTPUT = path.join(ROOT, '.output')
 const DOTENV = path.join(ROOT, '.env')
+
+/** Where a copy of the host's own data directory is kept: one directory per deploy, beside the checkout. */
+const BACKUPS = path.join(ROOT, 'backups')
+
+/** The remote directory that holds what the site writes: nothing in `.output` replaces it. */
+const DATA_DIR = 'server/data'
 
 /** A credential helper may want to open a dialog, so pushes never hang forever. */
 const PUSH_TIMEOUT_MS = 5 * 60 * 1000
@@ -91,6 +105,8 @@ const DRY_RUN = hasFlag('--dry-run')
 /** The `.env` beside the server is uploaded with the build unless `--no-env`; `--env-all` sends it verbatim. */
 const SKIP_ENV = hasFlag('--no-env')
 const ENV_ALL = hasFlag('--env-all')
+/** The site's own data is read back before the upload unless `--no-backup`. */
+const SKIP_BACKUP = hasFlag('--no-backup')
 const DEFAULT_MESSAGE = `Deploy ${new Date().toISOString().replace('T', ' ').slice(0, 16)}`
 const MESSAGE = flagValue('--message', flagValue('-m', DEFAULT_MESSAGE))
 
@@ -452,6 +468,44 @@ function remoteNames(target, netrc, dir) {
 }
 
 /**
+ * Reads the site's own data directory back into `backups/<date>/server-data/` on this machine.
+ *
+ * It is the one thing this deploy does not own and could not rebuild: the SQLite database (accounts, their
+ * characters and the snapshots), the character index the sitemap is built from, and the hall of fame's
+ * table - all three written by the running site into the directory `server/utils/appPaths` names. Nothing
+ * here deletes or replaces them; the copy is for the day something else does, when the alternative is a
+ * front page that has to be filled again from scratch. A host that has never run the site has no directory
+ * there, which is not a problem worth reporting.
+ */
+function backupRemoteData(target, netrc) {
+  const names = (remoteNames(target, netrc, DATA_DIR) || []).filter((name) => name !== '.' && name !== '..')
+  if (!names.length) return null
+
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  const directory = path.join(BACKUPS, stamp, 'server-data')
+  fs.mkdirSync(directory, { recursive: true })
+
+  const kept = []
+  const failed = []
+
+  for (const name of names) {
+    const local = path.join(directory, name)
+    const result = curl([...ftpArgs(target, netrc), '--output', local, ftpUrl(target, `${DATA_DIR}/${name}`)], {
+      allowFailure: true
+    })
+
+    if (result.status === 0 && fs.existsSync(local) && fs.statSync(local).size > 0) {
+      kept.push(name)
+    } else {
+      failed.push(name)
+      fs.rmSync(local, { force: true })
+    }
+  }
+
+  return { relative: path.relative(ROOT, directory).split(path.sep).join('/'), kept, failed }
+}
+
+/**
  * The build's directories, each mapped to the file names directly inside it. A
  * directory that only holds other directories is in here too, which is what lets
  * pruning tell a directory from a file and keeps verification from skipping it.
@@ -728,6 +782,7 @@ if (SKIP_FTP) {
     }
   if (PRUNE) log('   --prune: stale files below public/ and server/chunks/ would be deleted')
   if (VERIFY) log('   --verify: every directory would be read back afterwards')
+  if (!SKIP_BACKUP) log(`   would read ${DATA_DIR} back into backups/ first, so the site's own data can be put back`)
 } else {
   step('Uploading .output to the FTP target')
 
@@ -758,6 +813,17 @@ if (SKIP_FTP) {
   const netrc = writeNetrc(target)
 
   try {
+    // The site's own data first, before a single file is uploaded: it is the only thing here a build cannot
+    // produce again, and the copy taken now is the whole recovery plan for the day something replaces it.
+    if (!SKIP_BACKUP) {
+      const kept = backupRemoteData(target, netrc)
+
+      if (kept) {
+        log(`   ${DATA_DIR} <- ${kept.kept.length} file(s) kept in ${kept.relative}`)
+        for (const name of kept.failed) log(`   !! could not read ${DATA_DIR}/${name} back`)
+      }
+    }
+
     const { uploaded, failures } = upload(target, netrc, files)
     const sentEnv = envFile ? sendEnvFile(target, netrc, envFile) : null
 

@@ -8,10 +8,13 @@
  * the address a record names and bounded, so a character searched a hundred times is one
  * line and the stalest page falls off the end.
  *
- * It lives in the Nitro storage mounted as `characters` (see `nuxt.config.ts`), an `fsLite`
- * mount that writes `server/data/characters.json` beside the source, so the list survives a
- * restart and a redeploy keeps what the next one can serve.
+ * It is one JSON document in the app's own data directory (`./appPaths`), written through a temporary file
+ * so a process that dies mid-write leaves the previous list whole, and read back whenever the sitemap is
+ * built - which is what keeps the pages a crawler has been told about across a restart and a redeploy.
  */
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { dataDirectory } from './appPaths'
 import type { BlizzardRegion } from './params'
 
 export interface IndexedCharacter {
@@ -55,8 +58,14 @@ export interface IndexedCharacter {
   achievements?: number
 }
 
-/** The key the whole list is stored under, which is also the file's name on disk. */
-const INDEX_KEY = 'characters.json'
+/**
+ * The file the whole list is kept in, beside the database and the hall of fame's table.
+ *
+ * Read and written directly rather than through a Nitro storage mount: a mount's `base` is resolved against
+ * the working directory of the process, which would put the list somewhere else the moment the app is
+ * started from a directory that is not its own - and `./appPaths` is the one answer to where the data is.
+ */
+const INDEX_FILE = join(dataDirectory(), 'characters.json')
 
 /**
  * How many characters the list holds. Each one is two URLs in the sitemap and a sitemap may
@@ -75,10 +84,29 @@ function identity(record: Pick<IndexedCharacter, 'region' | 'realm' | 'name'>): 
   return `${record.region}:${record.realm}:${record.name}`.toLowerCase()
 }
 
-/** The list as it is stored; a value that is not a list reads as an empty one. */
+/** The list as it is stored; a file that is missing, unreadable or not a list reads as an empty one. */
 export async function readCharacterIndex(): Promise<IndexedCharacter[]> {
-  const stored = await useStorage('characters').getItem<IndexedCharacter[]>(INDEX_KEY)
-  return Array.isArray(stored) ? stored : []
+  try {
+    const stored: unknown = JSON.parse(await readFile(INDEX_FILE, 'utf8'))
+    return Array.isArray(stored) ? (stored as IndexedCharacter[]) : []
+  } catch {
+    // No list yet, or one nothing can read: nobody has been looked up, which is where a site starts.
+    return []
+  }
+}
+
+/**
+ * Writes the list through a temporary file.
+ *
+ * The rename is what makes the write atomic, and the list is the only record of the pages the site can
+ * serve: a process that dies while writing leaves the previous list whole rather than half of a new one.
+ */
+async function writeIndex(list: IndexedCharacter[]): Promise<void> {
+  await mkdir(dirname(INDEX_FILE), { recursive: true })
+  const temporary = `${INDEX_FILE}.tmp`
+
+  await writeFile(temporary, JSON.stringify(list), 'utf8')
+  await rename(temporary, INDEX_FILE)
 }
 
 /**
@@ -145,7 +173,7 @@ export function rememberCharacter(character: {
 
       const rest = index.filter((entry) => identity(entry) !== key)
       // The character just seen goes to the front, so the cap above drops the stalest page.
-      await useStorage('characters').setItem(INDEX_KEY, [record, ...rest].slice(0, INDEX_LIMIT))
+      await writeIndex([record, ...rest].slice(0, INDEX_LIMIT))
     } catch {
       // Storage that cannot be written is not worth failing a search over: the sitemap simply
       // lists this character one visit later.

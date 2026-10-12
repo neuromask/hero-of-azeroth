@@ -9,6 +9,9 @@ dist
 # Runtime data written by the server (the characters the sitemap is built from)
 server/data
 
+# Copies of the host's own data directory, taken by every deploy
+backups
+
 # Node dependencies
 node_modules
 

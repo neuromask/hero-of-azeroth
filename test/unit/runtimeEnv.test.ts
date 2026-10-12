@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { loadRuntimeEnv, privateSetting } from '../../server/utils/runtimeEnv'
+import { loadRuntimeEnv, missingSettings, privateSetting } from '../../server/utils/runtimeEnv'
 
 let dir = ''
 const touched = new Set<string>()
@@ -60,6 +60,20 @@ describe('the .env beside the running server', () => {
 
   it('is quiet about something it cannot read as a file at all', () => {
     expect(loadRuntimeEnv(dir)).toEqual({ file: null, taken: 0 })
+  })
+
+  it('reads a file an editor saved with a byte-order mark', () => {
+    // Notepad and its like write one. Left in place it becomes part of the *first* key, so that key quietly
+    // never arrives - a credential pair with a missing half, which is answered with a 401 for reasons that
+    // look like the credentials themselves.
+    const file = join(dir, '.env')
+    writeFileSync(file, '\uFEFFNUXT_BLIZZARD_CLIENT_ID=file-client\nNUXT_BLIZZARD_CLIENT_SECRET=file-secret\n')
+    setEnv('NUXT_BLIZZARD_CLIENT_ID', undefined)
+    setEnv('NUXT_BLIZZARD_CLIENT_SECRET', undefined)
+
+    expect(loadRuntimeEnv(file)).toEqual({ file, taken: 2 })
+    expect(process.env.NUXT_BLIZZARD_CLIENT_ID).toBe('file-client')
+    expect(process.env.NUXT_BLIZZARD_CLIENT_SECRET).toBe('file-secret')
   })
 
   it('does not overrule what it already took, so reading it twice changes nothing', () => {
@@ -137,5 +151,23 @@ describe('a setting read without a request', () => {
   it('treats an empty variable as one that was never set', () => {
     setEnv('NUXT_SESSION_PASSWORD', '')
     expect(privateSetting('NUXT_SESSION_PASSWORD', 'baked')).toBe('baked')
+  })
+})
+
+describe('the settings the site cannot work without', () => {
+  it('names the ones still missing once the file has been read', () => {
+    setEnv('NUXT_BLIZZARD_CLIENT_ID', 'set')
+    setEnv('NUXT_BLIZZARD_CLIENT_SECRET', undefined)
+    setEnv('NUXT_SESSION_PASSWORD', '')
+
+    expect(missingSettings()).toEqual(['NUXT_BLIZZARD_CLIENT_SECRET', 'NUXT_SESSION_PASSWORD'])
+  })
+
+  it('names none of them when everything is in place', () => {
+    setEnv('NUXT_BLIZZARD_CLIENT_ID', 'set')
+    setEnv('NUXT_BLIZZARD_CLIENT_SECRET', 'set')
+    setEnv('NUXT_SESSION_PASSWORD', 'set')
+
+    expect(missingSettings()).toEqual([])
   })
 })

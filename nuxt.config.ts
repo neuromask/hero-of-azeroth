@@ -232,11 +232,14 @@ export default defineNuxtConfig({
   nitro: {
     serverAssets: [{ baseName: 'icons', dir: '../app/assets/icons' }],
     /**
-     * Where the characters the site has rendered are kept, which is what the sitemap is
-     * built from (see `server/utils/characterIndex.ts`). An `fsLite` mount writes each key
-     * as a file under `base`, and the list is written under the key `characters.json`, so
-     * it lands in `server/data/characters.json` beside the source: one document, read by
-     * the sitemap and rewritten whenever a character is seen for the first time.
+     * Where a cached endpoint's answers are kept, and the only thing a mount is used for here: the
+     * characters the site has rendered are one JSON document in the app's own data directory, written
+     * directly by `server/utils/characterIndex`.
+     *
+     * It is deliberately not a mount any more. A mount's `base` is resolved against the working directory
+     * of the process, and on a host the app may be started from anywhere at all - which is how a site's
+     * own data directory is quietly exchanged for a second, empty one, taking its front page with it
+     * (`server/utils/appPaths`).
      */
     storage: {
       /**
@@ -246,8 +249,7 @@ export default defineNuxtConfig({
        * costs one recompute from the in-process snapshot (`server/utils/leaderboardStorage.ts`)
        * rather than a read of Blizzard or of a file.
        */
-      cache: { driver: 'memory' },
-      characters: { driver: 'fsLite', base: './server/data' }
+      cache: { driver: 'memory' }
     },
     /**
      * The same for `nuxt dev`, which otherwise keeps its cache on disk (`.nuxt/cache`) whatever
