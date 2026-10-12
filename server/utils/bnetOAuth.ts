@@ -6,6 +6,9 @@
  * token that belongs to them - the only token `/profile/user/wow` answers a character list to.
  */
 import type { H3Event } from 'h3'
+// A plain import rather than Nitro's auto-import: the environment in front of the frozen runtime config is a
+// rule of `server/utils/runtimeEnv`, and importing it keeps these modules working under the unit tests.
+import { privateSetting } from './runtimeEnv'
 import type { BlizzardRegion } from './params'
 
 /** What the token endpoint answers. `refresh_token` is optional: Battle.net does not always send one. */
@@ -75,15 +78,32 @@ function redirectUri(event: H3Event, siteUrl: string, override: string): string 
   return `${siteUrl}/api/auth/callback`
 }
 
-/** The client and the callback, read off the runtime config and the request. */
+/**
+ * The Battle.net client's own credentials.
+ *
+ * Read here rather than inside `oauth` because the renewal path has no request to hand over
+ * (`refreshAccessToken`): the client is the site's, while the redirect URI belongs to a sign-in a reader
+ * started - so the pair is read on its own, and the callback is built only where there is a request. The
+ * environment comes first, because the `.env` beside the server is read into it as the process starts, which
+ * is later than the copy of the config these functions are handed (`server/utils/runtimeEnv`).
+ */
+function clientCredentials(): { clientId: string; clientSecret: string } {
+  const config = useRuntimeConfig()
+
+  return {
+    clientId: privateSetting('NUXT_BLIZZARD_CLIENT_ID', config.blizzardClientId),
+    clientSecret: privateSetting('NUXT_BLIZZARD_CLIENT_SECRET', config.blizzardClientSecret)
+  }
+}
+
+/** The client and the callback, read off the runtime config, the environment and the request. */
 function oauth(event: H3Event): { clientId: string; clientSecret: string; redirectUri: string } {
   const config = useRuntimeConfig()
   const siteUrl = String(config.public.siteUrl || '').replace(/\/+$/, '')
 
   return {
-    clientId: String(config.blizzardClientId || ''),
-    clientSecret: String(config.blizzardClientSecret || ''),
-    redirectUri: redirectUri(event, siteUrl, String(config.oauthRedirectUri || ''))
+    ...clientCredentials(),
+    redirectUri: redirectUri(event, siteUrl, privateSetting('NUXT_OAUTH_REDIRECT_URI', config.oauthRedirectUri))
   }
 }
 
@@ -126,7 +146,7 @@ export async function exchangeCode(event: H3Event, region: BlizzardRegion, code:
  * answers without asking for a password again.
  */
 export async function refreshAccessToken(region: BlizzardRegion, refreshToken: string): Promise<BnetTokens> {
-  const { clientId, clientSecret } = oauth()
+  const { clientId, clientSecret } = clientCredentials()
 
   return await $fetch<BnetTokens>(`https://${region}.battle.net/oauth/token`, {
     method: 'POST',

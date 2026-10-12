@@ -10,6 +10,9 @@
  * reads to refresh a page visit) and on the session (the copy that dies with the sign-out).
  */
 import type { H3Event } from 'h3'
+// A plain import rather than Nitro's auto-import: the environment in front of the frozen runtime config is a
+// rule of `server/utils/runtimeEnv`, and importing it keeps this module working under the unit tests.
+import { privateSetting } from './runtimeEnv'
 import type { BlizzardRegion } from './params'
 import { nowSec } from './db'
 
@@ -56,7 +59,10 @@ export function sessionConfig() {
   const config = useRuntimeConfig()
   return {
     name: 'hoa_session',
-    password: String(config.sessionPassword || ''),
+    // The environment first: the `.env` beside the server is read into it as the process starts, after Nitro
+    // froze the copy this function is handed (`server/utils/runtimeEnv`). An empty key here is not a smaller
+    // session, it is a sign-in that throws.
+    password: privateSetting('NUXT_SESSION_PASSWORD', config.sessionPassword),
     maxAge: 60 * 60 * 24 * 30,
     cookie: { httpOnly: true, secure: true, sameSite: 'lax' as const, path: '/' }
   }

@@ -1,5 +1,9 @@
 import { readMountJournal, refreshMountJournal, resolveArmoryBackground } from './armory'
 import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
+// Imported rather than auto-imported: the environment in front of the frozen runtime config is a rule of this
+// module's own (`server/utils/runtimeEnv`), and a plain import keeps it working under the unit tests, which
+// have no Nitro globals to install.
+import { privateSetting } from './runtimeEnv'
 import { isReputationMaxed, reputationTotal } from './reputations'
 import { mountTotal } from './mounts'
 
@@ -92,13 +96,19 @@ function upstreamFailure(err: unknown, what = 'character'): never {
 
 export async function getBlizzardToken(region = 'eu') {
   const config = useRuntimeConfig()
+  // Ask the environment first, then the config Nitro froze while loading: the `.env` beside the server is
+  // read into the environment as the process starts (`server/utils/runtimeEnv`), which is after that copy was
+  // made - and this function has no request to hand `useRuntimeConfig`, so it would otherwise see the empty
+  // defaults of the build.
+  const clientId = privateSetting('NUXT_BLIZZARD_CLIENT_ID', config.blizzardClientId)
+  const clientSecret = privateSetting('NUXT_BLIZZARD_CLIENT_SECRET', config.blizzardClientSecret)
   const now = Math.floor(Date.now() / 1000)
 
   if (cachedToken && cachedToken.expires_at > now + 60) {
     return cachedToken.access_token
   }
 
-  const credentials = Buffer.from(`${config.blizzardClientId}:${config.blizzardClientSecret}`).toString('base64')
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
 
   const response = await callBlizzard<{ access_token: string; expires_in: number }>(`https://${region}.battle.net/oauth/token`, {
     method: 'POST',

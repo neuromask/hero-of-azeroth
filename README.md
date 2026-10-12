@@ -590,7 +590,9 @@ npm run deploy
 2. The sources are committed and pushed to the current branch, `main`. GitHub holds the project only —
    `.output` is ignored by git and never committed.
 3. The contents of `.output` are uploaded over FTP to `FTP_PATH`, together with a `deploy.json` that
-   records which source commit they were built from.
+   records which source commit they were built from - and with the `.env` beside it, which is how the host
+   is configured: the app reads that file out of its own directory when it starts
+   (`server/utils/runtimeEnv`), so nothing has to be put into the process's environment.
 
 The build output of a Nuxt server app cannot be served by GitHub Pages: the pages are server-rendered,
 and `/api/card`, `/api/character` and `/api/realms` are real endpoints that call the Blizzard API with
@@ -614,7 +616,14 @@ FTP_INSECURE=true    # waive the certificate check when the host's certificate
 ```
 
 `FTP_PATH` is the directory the server runs from, and it receives the *contents* of `.output`:
-`server/`, `public/` and `nitro.json` land directly inside it. The transfers are plain `curl` calls
+`server/`, `public/` and `nitro.json` land directly inside it.
+
+The `.env` travels beside them as a separate file: the local one, with its `FTP_*` settings left out - those
+are the credentials of the transfer itself, and the directory they would land in is the one the site is
+served from. The copy that was there before is kept as `.env.previous`, so a bad configuration can be put
+back; `--env-all` sends the file verbatim, `--no-env` sends none of it.
+
+The transfers are plain `curl` calls
 (Windows 10+ ships curl, and it speaks FTP and FTPS); the password travels in a throwaway netrc file, so
 it never appears on a command line or in the process list.
 
@@ -626,10 +635,13 @@ The uploaded directory is the application — no `npm install`, no build tools. 
 ```bash
 cd /data02/virt32423/domeenid/www.example.com/heroofazeroth
 
-NUXT_BLIZZARD_CLIENT_ID=... \
-NUXT_BLIZZARD_CLIENT_SECRET=... \
 node server/index.mjs
 ```
+
+The `.env` the deploy leaves in that directory is what configures the site: `NUXT_BLIZZARD_CLIENT_ID`,
+`NUXT_BLIZZARD_CLIENT_SECRET`, `NUXT_SESSION_PASSWORD` - and `NUXT_TRUST_PROXY` when the host's own web
+server overwrites `X-Forwarded-For`. The file is read out of that directory when the process starts
+(`server/utils/runtimeEnv`), so a variable set in the process's own environment still wins over it.
 
 The variables are read per request (`useRuntimeConfig()`), so changing them needs a restart, not a
 rebuild — and shipping a new version is another `npm run deploy`.
@@ -644,6 +656,8 @@ npm run deploy -- --no-github      # sources stay local
 npm run deploy -- --no-ftp         # sources only
 npm run deploy -- --prune          # also delete remote files this build no longer has
 npm run deploy -- --verify         # read every directory back and report missing files
+npm run deploy -- --no-env         # leave the remote `.env` alone
+npm run deploy -- --env-all        # send that `.env` verbatim, `FTP_*` settings included
 npm run deploy -- -m "Fix the card"
 ```
 
@@ -678,6 +692,7 @@ all rights are reserved by default — ask first if you want to reuse the code.
 <sub>Made for collectors, by a collector · <a href="https://heroofazeroth.com">heroofazeroth.com</a></sub>
 
 </div>
+
 
 
 

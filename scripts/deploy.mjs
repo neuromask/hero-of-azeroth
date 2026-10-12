@@ -9,6 +9,13 @@
  *   3. The contents of `.output` are uploaded to `FTP_PATH`, which is the
  *      directory the server runs from (`node server/index.mjs`). Transfers are
  *      binary, missing directories are created, existing files are overwritten.
+ *   4. The `.env` beside this checkout is uploaded next to them, as `.env` in
+ *      that same directory: the app reads that file out of its own folder when it
+ *      starts (`server/utils/runtimeEnv`), so the host needs nothing put into the
+ *      environment of its process. The `FTP_*` settings are left out of the copy
+ *      that travels - they are the credentials of the transfer itself - and the
+ *      `.env` that was there is kept as `.env.previous`, so a bad configuration
+ *      can be put back. `--no-env` sends none of it, `--env-all` sends it verbatim.
  *
  * The upload runs through `curl` (shipped with Windows 10+ and present on every
  * Linux server), so the deploy needs no npm package of its own. Credentials come
@@ -24,6 +31,8 @@
  *                        and `server/chunks/` that this build no longer contains
  *   --verify             read the upload back afterwards: every file present, at
  *                        the size it was built with (one request per file)
+ *   --no-env             do not upload the `.env` beside this checkout
+ *   --env-all            upload that `.env` verbatim, `FTP_*` settings included
  *   --dry-run            report what would happen; nothing is built or uploaded
  *   -m, --message <text> commit message (default: `Deploy <date> <time>`)
  *
@@ -79,6 +88,9 @@ const SKIP_FTP = hasFlag('--no-ftp')
 const PRUNE = hasFlag('--prune')
 const VERIFY = hasFlag('--verify')
 const DRY_RUN = hasFlag('--dry-run')
+/** The `.env` beside the server is uploaded with the build unless `--no-env`; `--env-all` sends it verbatim. */
+const SKIP_ENV = hasFlag('--no-env')
+const ENV_ALL = hasFlag('--env-all')
 const DEFAULT_MESSAGE = `Deploy ${new Date().toISOString().replace('T', ' ').slice(0, 16)}`
 const MESSAGE = flagValue('--message', flagValue('-m', DEFAULT_MESSAGE))
 
@@ -311,6 +323,72 @@ function writeNetrc(target) {
   fs.writeFileSync(file, contents, { mode: 0o600 })
 
   return file
+}
+
+/**
+ * The `.env` the deploy sends, with the transfer's own credentials left out.
+ *
+ * The app reads the `.env` in its own directory when it starts (`server/utils/runtimeEnv`), so the host needs
+ * no environment of its own - which is what a shared host with a plain `node server/index.mjs` gives anyway.
+ * The file is deliberately *not* part of `.output`: the artefact stays free of secrets (the check above
+ * enforces that), and the configuration travels as the separate file the site is meant to read.
+ *
+ * `FTP_*` is left out of it: those are the credentials of this very transfer, and publishing them in the
+ * directory the site is served from would hand them to anybody who can read that directory. `--env-all` sends
+ * the file verbatim, `--no-env` sends none of it.
+ */
+function preparedEnv() {
+  const lines = fs.readFileSync(DOTENV, 'utf8').split('\n')
+  const kept = ENV_ALL ? lines : lines.filter((line) => !/^\s*(export\s+)?FTP_/.test(line))
+
+  return { contents: kept.join('\n'), dropped: lines.length - kept.length }
+}
+
+/** A temporary file, readable by its owner alone, that the caller removes when the transfer is over. */
+function tempFile(name, contents) {
+  const file = path.join(os.tmpdir(), `${name}-${process.pid}`)
+  fs.writeFileSync(file, contents, { mode: 0o600 })
+  return file
+}
+
+/** The `.env` already on the host, or null when there is none to read. */
+function remoteEnv(target, netrc) {
+  const result = curl([...ftpArgs(target, netrc), '--silent', ftpUrl(target, '.env')], { allowFailure: true })
+  return result.status === 0 && result.stdout.trim() ? result.stdout : null
+}
+
+/** Uploads one file that is not part of the artefact: `<root><remote>`, from a path on this machine. */
+function putFile(target, netrc, local, remote) {
+  return curlWithRetry([...ftpArgs(target, netrc), '--upload-file', local, ftpUrl(target, remote)])
+}
+
+/**
+ * Sends the configuration the host reads when it starts: the `.env` itself, and - when there was one - the
+ * `.env` it replaces, kept as `.env.previous` so a bad configuration is one upload away from being put back.
+ */
+function sendEnvFile(target, netrc, prepared) {
+  const result = { sent: 0, kept: 0, problems: [] }
+  const previous = remoteEnv(target, netrc)
+
+  if (previous) {
+    const kept = tempFile('hoa-env-previous', previous)
+    try {
+      if (putFile(target, netrc, kept, '.env.previous').status === 0) result.kept = 1
+    } finally {
+      fs.rmSync(kept, { force: true })
+    }
+  }
+
+  const file = tempFile('hoa-env', prepared.contents)
+  try {
+    const uploaded = putFile(target, netrc, file, '.env')
+    if (uploaded.status === 0) result.sent = 1
+    else result.problems.push(`the upload of .env failed: ${(uploaded.stderr || '').trim().split('\n')[0]}`)
+  } finally {
+    fs.rmSync(file, { force: true })
+  }
+
+  return result
 }
 
 /**
@@ -643,6 +721,11 @@ if (SKIP_FTP) {
   plannedFiles = walkFiles(OUTPUT)
   plannedStats = measure(OUTPUT)
   log(`   would upload ${plannedFiles.length} files, ${human(plannedStats.bytes)} into ${target.root}`)
+    if (!SKIP_ENV && fs.existsSync(DOTENV)) {
+      const prepared = preparedEnv()
+      const left = prepared.dropped ? `${prepared.dropped} FTP_* line(s) left out of it` : 'every line, no FTP_* ones'
+      log(`   would upload .env beside them, for the site to read when it starts (${left})`)
+    }
   if (PRUNE) log('   --prune: stale files below public/ and server/chunks/ would be deleted')
   if (VERIFY) log('   --verify: every directory would be read back afterwards')
 } else {
@@ -670,16 +753,35 @@ if (SKIP_FTP) {
 
   const files = walkFiles(OUTPUT)
   const stats = measure(OUTPUT)
-  const directories = localTree(files)
+  // The configuration the site reads when it starts: it travels beside the artefact, never inside it.
+  const envFile = SKIP_ENV || !fs.existsSync(DOTENV) ? null : preparedEnv()
   const netrc = writeNetrc(target)
 
   try {
     const { uploaded, failures } = upload(target, netrc, files)
+    const sentEnv = envFile ? sendEnvFile(target, netrc, envFile) : null
 
-    uploadedFiles = uploaded
+    uploadedFiles = uploaded + (sentEnv?.sent ?? 0) + (sentEnv?.kept ?? 0)
     uploadedBytes = stats.bytes
     log(`   uploaded ${uploaded}/${files.length} files, ${human(stats.bytes)}`)
     for (const failure of failures) problems.push(`the upload of ${failure}`)
+
+    if (sentEnv) {
+      for (const problem of sentEnv.problems) problems.push(problem)
+
+      if (sentEnv.sent) {
+        const left = envFile.dropped ? `${envFile.dropped} FTP_* line(s) left out` : 'no FTP_* lines in it'
+        log(`   .env <- the configuration the site reads when it starts (${left})`)
+        if (sentEnv.kept) log('   .env.previous <- the one it replaced, kept so a bad one can be put back')
+        log('           restart the process on the host for it to take effect')
+      }
+    }
+
+    // What `--verify` reads back, and what `--prune` leaves alone at the root: what was really sent, so an
+    // `.env.previous` that was never written is not reported missing.
+    const directories = localTree(
+      sentEnv?.sent ? [...files, '.env', ...(sentEnv.kept ? ['.env.previous'] : [])] : files
+    )
 
     if (PRUNE) {
       const { removed, skipped } = prune(target, netrc, directories)
@@ -724,6 +826,15 @@ if (SKIP_FTP) {
   log(`   ftp    : ${plannedFiles.length} files, ${human(plannedStats.bytes)} would go to ${target.server}${target.root}`)
 } else {
   log(`   ftp    : ${uploadedFiles} files, ${human(uploadedBytes)} uploaded to ${target.server}${target.root}`)
+    log(
+      `   env    : ${
+        SKIP_ENV
+          ? '.env untouched (--no-env)'
+          : ENV_ALL
+            ? '.env uploaded verbatim'
+            : '.env uploaded, FTP_* left out of it'
+      }`
+    )
   log(`   server : cd into that directory and run  node server/index.mjs`)
   log('            with NUXT_BLIZZARD_CLIENT_ID and NUXT_BLIZZARD_CLIENT_SECRET in its')
   log('            environment; it listens on 3100 unless the environment sets PORT or NITRO_PORT')

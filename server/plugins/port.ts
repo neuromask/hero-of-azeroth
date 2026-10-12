@@ -11,6 +11,8 @@
  * The number itself comes from `runtimeConfig.port` (`nuxt.config.ts`).
  */
 
+import { loadRuntimeEnv } from '../utils/runtimeEnv'
+
 /**
  * A usable port, or an empty string when there is none. `nuxt preview` hands an
  * unset port through as the literal string `undefined` - in `NITRO_PORT` and in
@@ -23,6 +25,11 @@ function portValue(value: unknown): string {
 }
 
 export default defineNitroPlugin(() => {
+  // The `.env` beside the server, before anything looks at a port - for a host that names its port in that
+  // file rather than in the environment it started the process with. Reading it twice costs a file read, and
+  // only values that are missing are taken (`server/utils/runtimeEnv`).
+  loadRuntimeEnv()
+
   for (const key of ['NITRO_PORT', 'PORT'] as const) {
     if (!portValue(process.env[key])) delete process.env[key]
   }

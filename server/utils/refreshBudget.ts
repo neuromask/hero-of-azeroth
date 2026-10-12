@@ -31,6 +31,9 @@
  * one more reason the site runs as a single one (`README.md`).
  */
 import type { H3Event } from 'h3'
+// A plain import rather than Nitro's auto-import: the environment in front of the frozen runtime config is a
+// rule of `server/utils/runtimeEnv`, and importing it keeps this module working under the unit tests.
+import { privateSetting } from './runtimeEnv'
 
 /** One press, however many requests it sends, is one event for this long. */
 const EVENT_WINDOW_MS = 20_000
@@ -101,7 +104,9 @@ function sweep(now: number): void {
  */
 function callerKey(event: H3Event): string {
   const config = useRuntimeConfig() as { trustProxy?: string }
-  const trusted = String(config.trustProxy ?? '').trim() !== ''
+  // The environment first: the `.env` beside the server is read into it as the process starts, after Nitro
+  // froze the copy this function is handed (`server/utils/runtimeEnv`).
+  const trusted = privateSetting('NUXT_TRUST_PROXY', config.trustProxy).trim() !== ''
   const address = trusted ? getRequestIP(event, { xForwardedFor: true }) : getRequestIP(event)
 
   return address || 'unknown'
