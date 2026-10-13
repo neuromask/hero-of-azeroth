@@ -317,15 +317,18 @@ of glass - so it scrolls sideways under a bar of the site's own (`.hoa-scroll-x`
 right-hand columns are a drag away has to say so rather than look complete.
 
 Its columns are measured the same way in every row (`app/components/leaderboard/LeaderboardTable.vue`): the
-rank and the rating are as wide as their own figures, the name column is as wide as a name's own line
-(`NAME_WIDTH_MIN`), and a figure column is given no width at all, which in a fixed layout is how a column takes
-an equal share of what the measured columns leave. So the figures are the columns that spread across the panel
-and the name stays where a reader looks for it - at the left, whatever number of figures is switched on. A name
-is **never cut**: no mark of a row may squeeze it out of the cell, which is what a name lost to its own badges
-looked like, and on a narrow panel it is the figures that give way rather than the line the name stands on. A
-row wearing more marks than a name's line holds - the reader's own row that is also the row being read, on a
-narrow panel - moves a mark down to the next line rather than painting it over the figures beside it, and that
-row is the only one taller for it.
+rank and the rating are as wide as their own figures, the name column is as wide as a name's own line with the
+star and *both* of the marks a row can wear on it (`NAME_WIDTH_MIN`), and a figure column is given no width at
+all, which in a fixed layout is how a column takes an equal share of what the measured columns leave. So the
+figures are the columns that spread across the panel and the name stays where a reader looks for it - at the
+left, whatever number of figures is switched on. A name is **never cut**: no mark of a row may squeeze it out of
+the cell, which is what a name lost to its own badges looked like. Nor does a mark drop to a line of its own: the
+column was measured for the row wearing both marks - the reader's own row that is also the row being read - so
+every row reads on one line, and the table's own minimum width grew by what the name column grew by, which is how
+the wider name took no room from the figures. The side a row is on is not one of those marks: it is the colour of
+the row's own edge, the same two pixels the selected row wears in the brand gold - the gold wins on the row being
+read, because an edge carries one colour - so the table says it once per row rather than in a pill beside every
+name.
 
 A reader who is signed in has that same list kept for their account (`/api/saved`), so it is the list they had on
 their other device. The browser's copy is what a field still draws first - it is written before anything is asked

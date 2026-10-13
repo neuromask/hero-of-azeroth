@@ -157,6 +157,23 @@ function isOnline(player: LeaderboardPlayer): boolean {
 }
 
 /**
+ * The colour of a row's own edge: the side the character is on, drawn as the two pixels the selected row wears in
+ * the brand gold.
+ *
+ * The side used to be spelled out in a pill beside the name, and a pill is a mark that says the same thing on
+ * every row of the table - one column of the same two words, taking a line's room from the names. A colour down the
+ * edge says it in the width the table already had, and a reader comparing rows reads it the way a bar is read.
+ *
+ * The selected row keeps the gold: an edge carries one colour, and which row is being read is the more urgent of
+ * the two facts. A side the table does not know leaves the edge uncoloured, and the side is still written into the
+ * row for a reader who cannot see that colour (the mark in the name cell).
+ */
+function rowEdge(player: LeaderboardPlayer): string | undefined {
+  if (isSelected(player)) return undefined
+  return factionById(player.faction)?.hex
+}
+
+/**
  * The avatars that did not load, so their rows draw a monogram instead. A portrait is decoration:
  * a realm the render host does not have a picture for must cost the row nothing.
  */
@@ -237,14 +254,14 @@ const showsScore = computed(() => props.columns.includes('total'))
 const RANK_WIDTH = 3.5
 const SCORE_WIDTH = 6
 /**
- * What the name column is measured at, in rem: a name's own line - the room a name, the star beside it and one
- * of the marks a row wears need, with the portrait and the cell's own padding beside them. A name of nine
- * characters or so therefore reads with its mark on the line at every width the table has, and the longest names
- * a character can have move that one mark down a line at the table's narrowest rather than being cut. A row
- * wearing more marks than the line holds is what the name cell wraps for: no column can hold a name and every
- * mark there is at once.
+ * What the name column is measured at, in rem: the room a name's own line needs - the longest name a character can
+ * have, the star beside it and *both* of the marks a row can wear - with the portrait and the cell's own padding
+ * beside them. Both marks rather than the usual one, because the row that wears two is the reader's own row that is
+ * also the row being read, which is the row a reader of this table is most likely to be looking at: a column
+ * measured for one mark would move the second down a line exactly there. The table's own minimum width grew by what
+ * this column grew by (`min-w-[63.5rem]` below), so the room the marks needed was not taken from the figures.
  */
-const NAME_WIDTH_MIN = 16
+const NAME_WIDTH_MIN = 19.5
 
 /**
  * What a column's header says.
@@ -310,7 +327,10 @@ function open(player: LeaderboardPlayer) {
     </div>
 
     <div v-else class="hoa-scroll-x overflow-x-auto rounded-xl">
-      <table class="w-full min-w-[60rem] table-fixed border-collapse text-sm">
+      <!-- The table's own floor - the width under which it scrolls rather than squeezing a column of numbers - and
+           it grew by exactly what the name column grew by, so the room the marks of a row needed was not taken
+           from the figures: at this width a figure column is still the width it was. -->
+      <table class="w-full min-w-[63.5rem] table-fixed border-collapse text-sm">
         <!-- The width of every column, decided once here rather than by what each row happens to
              hold, so the figures are spread across the panel while the rows still line up down the
              table. The rank, the name and the rating are measured - as wide as what they hold is long
@@ -393,11 +413,14 @@ function open(player: LeaderboardPlayer) {
             :class="isSelected(player) ? 'bg-wow-gold/[0.08] hover:bg-wow-gold/15' : 'hover:bg-white/[0.05]'"
             @click="open(player)"
           >
-            <!-- The rank: the first three of the whole table wear a medal and its glow, and the
-                 selected row wears the gold bar that marks it from across the table. -->
+            <!-- The rank: the first three of the whole table wear a medal and its glow, and the row's own edge
+                 carries the side it is on, in the faction's own colour - the same two pixels the selected row
+                 wears in the brand gold, because an edge carries one colour and which row is being read is the
+                 louder of the two facts (`rowEdge`). -->
             <td
-              class="px-3 py-2.5 align-middle"
-              :class="isSelected(player) ? 'border-l-2 border-wow-gold' : ''"
+              class="border-l-2 px-3 py-2.5 align-middle"
+              :class="isSelected(player) ? 'border-wow-gold' : ''"
+              :style="{ borderLeftColor: rowEdge(player) }"
             >
               <span
                 class="inline-grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold tabular-nums whitespace-nowrap"
@@ -474,17 +497,19 @@ function open(player: LeaderboardPlayer) {
                        The name is never cut: it is not truncated, so no mark of a row can squeeze it out of
                        the cell (a name lost to its own badges is what that looked like). The room it reads in
                        comes from the column instead of from the name giving way - the width of the name column
-                       is measured to hold a name with the star beside it and a mark to the right of it
-                       (`NAME_WIDTH_MIN`), so a row of one name and one mark is one line at
-                       every width the table has, and the longest names a character can have keep their mark
-                       beside them everywhere except at the table's narrowest.
+                       is measured to hold the longest name a character can have with the star beside it and
+                       both of the marks a row can wear (`NAME_WIDTH_MIN`) - so every row reads on one line,
+                       whatever it wears, at every width the table has.
 
-                       The line wraps as the last resort, and only for a row wearing more marks than a name's
-                       line has room for on the narrowest table: a mark moves down to the next line rather than
-                       paint over the figures of the column beside this one, and the row it moves in is the
-                       only row that is taller. The widest and least personal of the marks is the one that
-                       moves, because the marks keep their order - the reader's own, the row being read, the
-                       faction - and it is the last of them that finds no room. -->
+                       The line still wraps as the last resort, for a name wider than the column was measured
+                       for - the widest letters at full length, which no measurement holds and no row of this
+                       table has worn yet: a mark moves down to the next line rather than paint over the figures
+                       of the column beside this one, and the row it moves in is the only row that is taller.
+                       The marks keep their order - the reader's own, then the row being read - so it is the
+                       last of them that finds no room.
+
+                       The side the row is on is not one of these marks and is not measured here: it is the
+                       colour of the row's own edge (`rowEdge`). -->
                   <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <span class="flex items-center gap-1">
                       <NuxtLink
@@ -515,19 +540,11 @@ function open(player: LeaderboardPlayer) {
                       class="inline-flex shrink-0 items-center rounded border border-wow-gold/60 bg-wow-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-wow-goldLight"
                     >{{ t('lbSelectedBadge') }}</span>
 
-                    <span
-                      v-if="factionById(player.faction)"
-                      class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none"
-                      :style="{
-                        borderColor: `${factionById(player.faction)?.hex}55`,
-                        color: factionById(player.faction)?.hex
-                      }"
-                    >
-                      <span
-                        class="h-1.5 w-1.5 rounded-full"
-                        :style="{ backgroundColor: factionById(player.faction)?.hex }"
-                        aria-hidden="true"
-                      ></span>
+                    <!-- The side, which is no longer a mark of this line: it is the colour of the row's own edge
+                         (`rowEdge`). The colour is the one thing about a row that a reader who cannot see it
+                         would lose, so the word is still here - in a span that takes no room on the line, read
+                         where the pill used to be read. -->
+                    <span v-if="factionById(player.faction)" class="sr-only">
                       {{ t(factionById(player.faction)?.labelKey || '') }}
                     </span>
                   </div>
