@@ -495,6 +495,14 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
       </NuxtLink>
     </div>
 
+    <!-- The search a page hands the row, standing in the place the character's own entries take. It is the way to
+         the next character rather than a way of reading this one, and while the row knows no character that place
+         has nothing else to hold - so a page with somebody to offer hands the fields here rather than finding a
+         spot of its own for them (`app/pages/index.vue`). It stands outside the site's own group, which is the
+         row's far end and is left as it is: the hairline, the hall of fame and the button that opens the same
+         fields as a sheet (`CharacterSearchDialog`). -->
+    <slot name="search" />
+
     <!-- The other group, held at the far end of the row: the hairline is what says that what follows it is the
          site's own rather than this character's, and the gap around it is what makes the two read as a second
          group rather than as two more tabs. On a phone the hairline is not drawn - the panel names its own two

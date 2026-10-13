@@ -40,11 +40,11 @@ const props = withDefaults(
      * Whether the two fields and the button stand in one row rather than stacked.
      *
      * The form is offered in two shapes and both are the same act: the card a page sets room aside for, and the
-     * bar of a page that has no room to set aside - the front door, where a reader who has never been here meets
-     * the search in the header and everything the search finds stands under it (`app/pages/index.vue`). Only the
-     * room each control takes changes. The shells a field drops, the remembered characters, the progress on the
-     * button and the address a search opens are the same ones, because a second implementation of any of them is
-     * the very thing this component exists to prevent.
+     * row of a page that has no room to set aside - the front door, where the fields stand in the navigation, in
+     * the place the character's own entries take while this browser knows nobody, and everything the search finds
+     * stands under them (`app/pages/index.vue`). Only the room each control takes changes. The shells a field
+     * drops, the remembered characters, the progress on the button and the address a search opens are the same
+     * ones, because a second implementation of any of them is the very thing this component exists to prevent.
      */
     compact?: boolean
     /**

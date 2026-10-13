@@ -68,7 +68,7 @@ the size a social network wants, with the character's own render and class artwo
 
 | Address | What it shows |
 | --- | --- |
-| `/` | Front door *and* hall of fame: the ranking of every character the site has looked up — sorted, filtered and searched — with the search itself in the header bar (region, realm autocomplete, character name, recent searches) while this browser knows no character and nobody is signed in |
+| `/` | Front door *and* hall of fame: the ranking of every character the site has looked up — sorted, filtered and searched — with the search itself standing in the navigation row, in the place a character's own entries take, while this browser knows no character and nobody is signed in |
 | `/region-eu/<realm>/<name>` | Overview: the stat tiles, the render, download / share / refresh |
 | `/region-eu/<realm>/<name>/collections` | Collections summary: a tile per shelf and the running total |
 | `/region-eu/<realm>/<name>/collections/mounts` | A shelf: sections with bars, sources side by side, the three switches, the note |
@@ -209,7 +209,7 @@ a second implementation is a second answer.
 
 | Where | What lives there |
 | --- | --- |
-| `app/pages/index.vue` | The front door, which is the hall of fame: the search block above the table |
+| `app/pages/index.vue` | The front door, which is the hall of fame: the search in the navigation row, the reader's own plate above the table |
 | `app/pages/privacy.vue` | The privacy policy: what is collected, what a sign-in stores, and what the counters are |
 | `app/pages/about.vue` | About the site: what it is, the four things it does, and the fact that it is free |
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
@@ -234,7 +234,7 @@ a second implementation is a second answer.
 ## 🏆 The hall of fame
 
 The site's front door *is* its hall of fame: `/` is a public ranking of every character the site has ever
-rendered — the same population the sitemap is built from — with the search on top of it and the community's own
+rendered — the same population the sitemap is built from — with the search in the row above it and the community's own
 totals between the two. It is built so that opening it costs the rest of the site nothing:
 
 - **Nothing is aggregated per request.** One file, `server/data/leaderboard.json`, holds a record per
@@ -291,7 +291,7 @@ gold while it holds the cursor, and the button the search is pressed through cut
 character's own download button wears: the material's frosted pane over the deep amber fill, its rim warmed from
 amber by the one variable every rim of the site reads, and its glow widening under the pointer. The geometry is
 the layout's, so the button is exactly the size it always was - what its three shapes share is the material, not
-the shape: in the header bar, as one row, while this browser knows no character and nobody is
+the shape: in the navigation row, as one row, in the place a character's own entries take while this browser knows
 signed in (`compact` - the shape the front door wears on a first visit); the sheet the row drops
 (`app/components/CharacterSearchDialog.vue`, on `Ctrl`/`⌘`+`K` as well); and the button under an empty table -
 because a name the table does not hold is not a name the site does not know, it is one nobody has looked up yet,

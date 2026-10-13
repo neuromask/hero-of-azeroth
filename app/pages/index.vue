@@ -6,16 +6,18 @@
  * For a while the site had two doors - a form to walk through and a ranking to arrive at - and a reader had to
  * choose between them before knowing which one they wanted. The form was the only page that could speak to
  * somebody who had never heard of the site and had no character in the table; the ranking was the only page that
- * showed what the site is worth looking at. They are one page now: a reader lands on the table, and the search
- * stands over the summary plates - the two fields and the button, in one row, in the place the plate of the
- * character this browser opened last takes as soon as there is one (`app/components/CharacterSearchForm.vue`) -
- * rather than as a page of its own.
+ * showed what the site is worth looking at. They are one page now: a reader lands on the table, and the plate of
+ * the character this browser opened last stands over the summary plates as soon as there is one
+ * (`app/components/LeaderboardYou.vue`) - rather than as a page of its own.
  *
- * A first visit is the only one that needs the fields there. A reader who has looked somebody up has the search in
- * the row under the header (the `Search` tab, and `Ctrl`/`⌘`+`K` from anywhere), and a reader who is signed in is
- * shown their own main instead (`accountMain` below); so the two fields stand over the plates exactly while this
- * browser knows no character *and* nobody is signed in, and the plate the moment either is true. The row under the
- * header keeps the search for everybody, and the header itself keeps the language and the account.
+ * A first visit is the only one that needs the two fields, and they stand in the row under the header, in the place
+ * the character's own entries take - the place that is empty exactly because this browser knows no character -
+ * while the button that opens the same fields as a sheet stands at the far end of that row
+ * (`app/components/CharacterSearchDialog`, and `Ctrl`/`⌘`+`K` from anywhere). A reader who has looked somebody
+ * up has that button, and a reader who is signed in is shown their own main on the plate instead (`accountMain`
+ * below); so the two fields are drawn exactly while this browser knows no character *and* nobody is signed in, and
+ * the plate the moment either is true. The row keeps the search for everybody, and the header itself keeps the
+ * language and the account.
  *
  * That is what the address says as well. This page is `/` in English and `/ru` in Russian, exactly as it was,
  * so every link and every ranking of the site's own front door is unchanged; the hall of fame's old address,
@@ -465,11 +467,13 @@ onMounted(loadHistory)
          the reader's own corner on the right, and, under it, the very row those pages carry - the character's six
          views, the site's own two entries, and the search (`app/components/SiteNav.vue`). -->
     <SiteHeader :title="t('lbTitle')" :meta="meta">
-      <!-- Nothing stands on the right of this bar: the plate of the character this reader came from, and the
-           search a first visit needs, are drawn over the summary plates in the content below - where a reader
-           looking for their own place among everybody else looks anyway - and the corner of the bar is the
-           reader's own group, the language and the account (`app/components/HeaderTools.vue`), which every page
-           of the site wears. The comment over the plate below says why it stands there rather than here. -->
+      <!-- Nothing stands on the right of this bar: the plate of the character this reader came from is drawn
+           over the summary plates in the content below - where a reader looking for their own place among
+           everybody else looks anyway - and the corner of the bar is the reader's own group, the language and
+           the account (`app/components/HeaderTools.vue`), which every page of the site wears. The comment over
+           the plate below says why it stands there rather than here, and the fields a first visit is offered go
+           to the row below this bar rather than to its corner - they are the search, and the search has a place
+           of its own in that row. -->
 
       <!-- The whole row, and it is the same component a character page wears: the six views of whichever
            character this browser is reading, the site's own two entries held apart from them by the hairline,
@@ -481,32 +485,38 @@ onMounted(loadHistory)
            and the front door is now this page, where an entry pointing at the page it stands on is not a link.
            The hall of fame is one of the row's own entries and *is* the page being read, so the row is simply
            told which entry is lit and warms it with the gold without a special case. -->
-      <SiteNav :character="reading" :label="t('lbTitle')" active="leaderboard" />
+      <SiteNav :character="reading" :label="t('lbTitle')" active="leaderboard">
+        <!-- The search a first visit is offered, handed to the row and standing in the place the character's own
+             entries take - which is empty exactly while this page has no character to lead them with. The fields
+             are the same two, and the same button, as the sheet behind the button at the row's far end
+             (`app/components/CharacterSearchForm.vue`, `compact`). They are drawn exactly while this browser
+             knows no character and nobody is signed in: a reader who has looked somebody up has the button, and
+             a reader who is signed in has their own main on the plate below. Below `lg` the row has room for the
+             search's button alone, which opens the same fields, so the fields are left out there. -->
+        <template #search>
+          <span v-if="!you && !account?.user" class="hidden lg:block">
+            <CharacterSearchForm compact />
+          </span>
+        </template>
+      </SiteNav>
     </SiteHeader>
 
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
-      <!-- The reader's own place in the table, drawn over the summary plates rather than in the bar - and the
-           search a reader this browser knows nothing about is offered instead, in the same spot, for the same
-           reason. The place is the first thing a reader who came to see where they stand is looking for: it is
-           the page's own answer about them, of the same kind as the five plates under it, and it belongs where
-           those are read rather than in a bar that every page of the site draws the same way. It is also the
-           only block of this page that is about one character, so it is the one block that moves: a reader who
-           looked somebody else up and came here finds their place above the population, and a reader who has
-           looked nobody up is asked to rather than shown a pair of dashes (`app/components/LeaderboardYou.vue`).
-
-           The search a first visit is given stands in the plate's place, with the fields the bar used to carry
-           (`app/components/CharacterSearchForm.vue`, `compact`): the reader this waits for is one who has never
-           looked anybody up on this browser and has no account, so the front door still opens with the way to
-           look somebody up rather than with a table they cannot be found in. A reader who is signed in is left
-           out of it, because the plate above is already about their main - which is the better answer to "who
-           am I looking at" than a pair of empty fields. -->
+      <!-- The reader's own place in the table, drawn over the summary plates rather than in the bar. The place
+           is the first thing a reader who came to see where they stand is looking for: it is the page's own
+           answer about them, of the same kind as the five plates under it, and it belongs where those are read
+           rather than in a bar that every page of the site draws the same way. It is also the only block of this
+           page that is about one character, so it is the one block that moves: a reader who looked somebody else
+           up and came here finds their place above the population. A reader this browser knows nobody for is
+           shown no plate at all, and nothing stands in its place either: the way to look somebody up is not a
+           plate of the population's, and the row under the header is where the search of the site stands - the
+           fields a first visit is offered are handed to that row (`app/components/LeaderboardYou.vue`). -->
       <LeaderboardYou v-if="you" class="mb-3" :character="you" @reveal="revealRow" />
-
-      <CharacterSearchForm v-else-if="!account?.user" compact class="mb-3" />
 
       <!-- The page opens with what the table holds rather than with a block about the site: the widgets are the
            answer a reader who came for the ranking is looking for, and the search is one press away in the row
-           above - either in the plate's place or in the row itself (`app/components/CharacterSearchDialog`). -->
+           above - the fields themselves for a reader this browser knows nobody for, and the sheet behind the
+           button in that row for everybody else (`app/components/CharacterSearchDialog`). -->
       <LeaderboardStats :stats="stats" :pending="pending" :online="onlineCount" />
 
       <LeaderboardFilters
