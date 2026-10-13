@@ -250,10 +250,55 @@ function hexOf(character: CharacterData | null): string {
   return classById(character?.classId ?? 0)?.hex || DEFAULT_CLASS_HEX
 }
 
-/** The line under a name: what the character plays, and where they play it. */
-function descriptorOf(character: CharacterData | null): string {
-  return [character?.spec, character?.class, character?.realm].filter(Boolean).join(' · ')
+/** One pill of an identity row: a scrap of what a character is, and the plate it is read in. */
+interface MetaPill {
+  text: string
+  /** The plate the pill wears - the header's amber, or the slate the class part stands on. */
+  badge: string
+  /** The spec-and-class part, printed in the class's own colour (see `<CharacterName>`). */
+  isClass?: boolean
 }
+
+/**
+ * The plate of the pills that stand beside a portrait: the amber the meta line of a character's own header
+ * is read in (`app/pages/[region]/[realm]/[name].vue`), a step smaller - a column of the board is narrower
+ * than a bar across a page, and these stand beside a fifty-six pixel portrait rather than in a bar of their
+ * own. They carry no blur of their own: both cards are read on the site's glass, where a `backdrop-filter`
+ * could only sample that glass (`app/assets/css/main.css`).
+ */
+const META_BADGE = 'inline-flex max-w-full items-center rounded-md border border-amber-500/50 bg-amber-950/20 px-2 py-0.5 text-[11px] font-semibold leading-none text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
+
+/** The same plate for the class part, which stands on slate and is written in the colour of the class. */
+const META_CLASS_BADGE = 'inline-flex max-w-full items-center rounded-md border border-amber-500/50 bg-slate-950/40 px-2 py-0.5 text-[11px] font-semibold leading-none'
+
+/**
+ * What a character is, as the pills a card reads beside their portrait: the level, the race and the
+ * spec-and-class over the guild and the realm. It is the meta line of the character's own page (`metaParts`,
+ * `app/pages/[region]/[realm]/[name].vue`) kept as two rows rather than as one wrapping line, because five
+ * pills in a row do not fit a column of the board while the pair of rows does - and two rows of them stay
+ * inside the height of the portrait they stand beside, which is what keeps the two cards' rows level. A part
+ * with nothing to print is left out rather than drawn empty.
+ */
+function metaRowsOf(character: CharacterData | null): MetaPill[][] {
+  if (!character) return []
+
+  return [
+    [
+      { text: character.level ? String(character.level) : '', badge: META_BADGE },
+      { text: character.race, badge: META_BADGE },
+      // The spec and the class, printed in the class's signature colour (see <CharacterName>).
+      { text: `${character.spec} ${character.class}`.trim(), badge: META_CLASS_BADGE, isClass: true }
+    ],
+    [
+      { text: character.guild ? `<${character.guild}>` : '', badge: META_BADGE },
+      { text: character.realm, badge: META_BADGE }
+    ]
+  ].map((row) => row.filter((part) => part.text))
+}
+
+/** The pills of each card's portrait, in their two rows. */
+const currentMeta = computed(() => metaRowsOf(character.value))
+const targetMeta = computed(() => metaRowsOf(targetCharacter.value))
 
 /** Where a card's name leads: the character's own page, in the language being read. */
 function characterUrl(forRegion: string, forRealm: string, forName: string): string {
@@ -419,46 +464,77 @@ onBeforeUnmount(() => {
           {{ $t('navCharacterGroup') }}
         </p>
 
-        <div v-if="character" class="flex items-center gap-3">
-          <span
-            class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border"
-            :style="{ borderColor: `${hexOf(character)}66`, backgroundColor: `${hexOf(character)}1f` }"
-          >
-            <span class="text-lg font-extrabold" :style="{ color: hexOf(character) }">
-              {{ character.name.charAt(0).toUpperCase() }}
-            </span>
-            <img
-              v-if="character.avatarUrl && !brokenPortraits[name]"
-              :src="character.avatarUrl"
-              :alt="character.name"
-              loading="lazy"
-              decoding="async"
-              class="absolute inset-0 h-full w-full object-cover"
-              @error="brokenPortraits = { ...brokenPortraits, [name]: true }"
-            />
-          </span>
-
-          <div class="min-w-0 flex-1">
+        <div v-if="character">
+          <!-- The identity of the card, read the way the header of a character's own page reads it
+               (`app/pages/[region]/[realm]/[name].vue`): the name, and the title they carry beside it in the
+               brand gold and in italics, because that is what a title is. The hairline under the pair is the
+               brand colour running out into the page - the same line the activity feed draws down its own
+               timeline (`app/components/ActivityFeed.vue`) - which is what parts the name from what the card
+               goes on to say about them. -->
+          <div class="flex items-center gap-2">
             <NuxtLink
               :to="characterUrl(region, realm, name)"
-              class="block truncate text-lg font-extrabold transition-opacity hover:opacity-80"
+              class="min-w-0 truncate text-lg font-extrabold transition-opacity hover:opacity-80"
               :style="{ color: hexOf(character) }"
             >{{ character.name }}</NuxtLink>
-            <p class="truncate text-xs text-gray-400">{{ descriptorOf(character) }}</p>
-            <p v-if="character.guild" class="truncate text-xs text-gray-500">{{ character.guild }}</p>
+            <span
+              v-if="character.title"
+              class="min-w-0 truncate text-sm font-normal italic text-wow-goldLight"
+            >{{ character.title }}</span>
           </div>
 
-          <!-- The same pair of buttons the second card carries, on the character being read: either side of a
-               comparison can be saved for the next one, and either side can be read again from Blizzard. -->
-          <CharacterCardActions
-            :saved="currentSaved"
-            :refreshable="canRefreshProfile"
-            :refreshing="profileRefreshing"
-            :refresh-hint="currentRefreshHint"
-            :updated-at="character.fetchedAt"
-            @toggle="toggleCurrentFavorite()"
-            @refresh="refreshProfile()"
-          />
+          <div class="mt-2.5 h-px bg-gradient-to-r from-wow-gold/50 via-white/15 to-transparent" aria-hidden="true" />
+
+          <div class="mt-3 flex items-center gap-3">
+            <span
+              class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border"
+              :style="{ borderColor: `${hexOf(character)}66`, backgroundColor: `${hexOf(character)}1f` }"
+            >
+              <span class="text-lg font-extrabold" :style="{ color: hexOf(character) }">
+                {{ character.name.charAt(0).toUpperCase() }}
+              </span>
+              <img
+                v-if="character.avatarUrl && !brokenPortraits[name]"
+                :src="character.avatarUrl"
+                :alt="character.name"
+                loading="lazy"
+                decoding="async"
+                class="absolute inset-0 h-full w-full object-cover"
+                @error="brokenPortraits = { ...brokenPortraits, [name]: true }"
+              />
+            </span>
+
+            <!-- What the character is, beside their face: the pills the character's own header reads its meta
+                 line in (`metaRowsOf` above), in the two rows that fit a column of the board. The class's plate
+                 is the site's own - `<CharacterName>` is what holds the colour a class is drawn in - and only
+                 its frame is the smaller one a card wears. -->
+            <div v-if="currentMeta.length" class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div
+                v-for="(row, rowIndex) in currentMeta"
+                :key="rowIndex"
+                class="flex min-w-0 flex-wrap items-center gap-1.5"
+              >
+                <template v-for="part in row" :key="part.text">
+                  <span v-if="!part.isClass" :class="part.badge">{{ part.text }}</span>
+                  <span v-else :class="part.badge">
+                    <CharacterName :class-id="character.classId" :class-name="character.class">{{ part.text }}</CharacterName>
+                  </span>
+                </template>
+              </div>
+            </div>
+
+            <!-- The same pair of buttons the second card carries, on the character being read: either side of a
+                 comparison can be saved for the next one, and either side can be read again from Blizzard. -->
+            <CharacterCardActions
+              :saved="currentSaved"
+              :refreshable="canRefreshProfile"
+              :refreshing="profileRefreshing"
+              :refresh-hint="currentRefreshHint"
+              :updated-at="character.fetchedAt"
+              @toggle="toggleCurrentFavorite()"
+              @refresh="refreshProfile()"
+            />
+          </div>
         </div>
 
         <!-- The shell's read has not landed yet - a shared link still being answered. The room is kept so the
@@ -506,9 +582,42 @@ onBeforeUnmount(() => {
            rather than a character's own page (`target="versus"`), followed by the characters this browser has
            saved for a quick compare. -->
       <section class="hoa-panel rounded-2xl p-4 sm:p-5">
-        <p class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-          {{ $t('vsSecondTitle') }}
-        </p>
+        <!-- The heading of the column, with the way off the comparison in its corner. The cross is taken out
+             of the flow (`absolute`): a control of thirty-six pixels would otherwise stand taller than the
+             11px label beside it and push the whole column down, and the two cards of the board have to begin
+             their rows at the same height. Its corner is `top-0 right-0` of this heading, which is the inner
+             edge the card's own padding draws (`p-4 sm:p-5`), so the square stands as far from the top of the
+             card as it does from its side - the same measure on both, at every width - and it reads as set
+             into the corner rather than dropped onto the label. It is the board with nobody in this column -
+             the address the search below picks another character on - and its square and its glass are the
+             pair of buttons each character's card carries (`app/components/CharacterCardActions.vue`). It is
+             here in every state the column has, so a read still on its way or one that failed can be left by
+             the same corner as a finished one. -->
+        <div class="relative mb-3">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+            {{ $t('vsSecondTitle') }}
+          </p>
+
+          <NuxtLink
+            v-if="target"
+            :to="vsBase"
+            class="absolute right-0 top-0 grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 text-gray-300 transition-colors hover:border-white/30 hover:bg-white/15 hover:text-white"
+            :aria-label="$t('vsRemove')"
+            :title="$t('vsRemove')"
+          >
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </NuxtLink>
+        </div>
 
         <!-- Nobody picked yet: the search, and the saved characters as one press each. -->
         <template v-if="!target">
@@ -547,14 +656,29 @@ onBeforeUnmount(() => {
           <p class="text-sm font-semibold text-red-400">{{ $t('vsError') }}</p>
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <button type="button" class="hoa-tab hoa-tab-active" @click="reloadTarget()">{{ $t('vsRetry') }}</button>
-            <NuxtLink :to="vsBase" class="hoa-tab hoa-liquid-glass">{{ $t('vsRemove') }}</NuxtLink>
           </div>
           <CharacterSearchForm class="mt-5" target="versus" :vs-base="vsBase" />
         </template>
 
         <!-- Both characters on screen: the second card, the star that saves them, and their figures. -->
         <template v-else>
-          <div class="flex items-center gap-3">
+          <!-- The identity line the first card carries, read the same way here: the name of the character
+               compared, and the title they carry beside it in the brand gold and in italics. -->
+          <div class="flex items-center gap-2">
+            <NuxtLink
+              :to="targetAddress"
+              class="min-w-0 truncate text-lg font-extrabold transition-opacity hover:opacity-80"
+              :style="{ color: hexOf(targetCharacter) }"
+            >{{ targetCharacter.name }}</NuxtLink>
+            <span
+              v-if="targetCharacter.title"
+              class="min-w-0 truncate text-sm font-normal italic text-wow-goldLight"
+            >{{ targetCharacter.title }}</span>
+          </div>
+
+          <div class="mt-2.5 h-px bg-gradient-to-r from-wow-gold/50 via-white/15 to-transparent" aria-hidden="true" />
+
+          <div class="mt-3 flex items-center gap-3">
             <span
               class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border"
               :style="{ borderColor: `${hexOf(targetCharacter)}66`, backgroundColor: `${hexOf(targetCharacter)}1f` }"
@@ -573,14 +697,21 @@ onBeforeUnmount(() => {
               />
             </span>
 
-            <div class="min-w-0 flex-1">
-              <NuxtLink
-                :to="targetAddress"
-                class="block truncate text-lg font-extrabold transition-opacity hover:opacity-80"
-                :style="{ color: hexOf(targetCharacter) }"
-              >{{ targetCharacter.name }}</NuxtLink>
-              <p class="truncate text-xs text-gray-400">{{ descriptorOf(targetCharacter) }}</p>
-              <p v-if="targetCharacter.guild" class="truncate text-xs text-gray-500">{{ targetCharacter.guild }}</p>
+            <!-- The same pills the first card carries, read the same way: what the character compared is over
+                 who they run with and where they play. -->
+            <div v-if="targetMeta.length" class="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div
+                v-for="(row, rowIndex) in targetMeta"
+                :key="rowIndex"
+                class="flex min-w-0 flex-wrap items-center gap-1.5"
+              >
+                <template v-for="part in row" :key="part.text">
+                  <span v-if="!part.isClass" :class="part.badge">{{ part.text }}</span>
+                  <span v-else :class="part.badge">
+                    <CharacterName :class-id="targetCharacter.classId" :class-name="targetCharacter.class">{{ part.text }}</CharacterName>
+                  </span>
+                </template>
+              </div>
             </div>
 
             <!-- The same pair of buttons the first card carries: the star that saves this character for a
@@ -630,12 +761,6 @@ onBeforeUnmount(() => {
               </span>
             </li>
           </ul>
-
-          <!-- The way to the other side of the same page: the board with nobody in this column, which is where
-               the search that picks another character stands. -->
-          <div class="mt-4 flex flex-wrap items-center gap-2">
-            <NuxtLink :to="vsBase" class="hoa-tab hoa-liquid-glass">{{ $t('vsRemove') }}</NuxtLink>
-          </div>
         </template>
       </section>
     </div>
