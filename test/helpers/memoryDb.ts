@@ -59,6 +59,22 @@ CREATE TABLE account_pool (
   item_id INTEGER NOT NULL,
   PRIMARY KEY (user_id, kind, item_id)
 );
+
+CREATE TABLE saved_characters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  region TEXT NOT NULL,
+  realm_slug TEXT NOT NULL,
+  name_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  realm_name TEXT,
+  class_id INTEGER,
+  class_slug TEXT,
+  avatar TEXT,
+  seen_at INTEGER,
+  starred_at INTEGER,
+  UNIQUE (user_id, region, realm_slug, name_key)
+);
 `
 
 export interface NewCharacter {

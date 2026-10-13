@@ -23,8 +23,8 @@
  * the way the plates above it do. A character the table does not know draws no plate at all, because
  * there is no place to print.
  */
-import { searchHistoryKey } from '~/composables/searchHistory'
-import type { SearchHistoryEntry } from '~/composables/searchHistory'
+import { searchHistoryKey } from '#shared/utils/savedCharacters'
+import type { SearchHistoryEntry } from '#shared/utils/savedCharacters'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { formatNumber } from '#shared/utils/formatNumber'
 import { factionById } from '#shared/utils/wow-faction'

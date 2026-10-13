@@ -14,7 +14,7 @@ import {
   searchHistoryKey,
   toSearchHistoryEntry,
   type SearchHistoryEntry
-} from '../../app/composables/searchHistory'
+} from '../../shared/utils/savedCharacters'
 
 /** A remembered character, with only the parts a row is drawn from. */
 function entry(name: string, realm = 'gordunni', region: 'eu' | 'us' = 'eu'): SearchHistoryEntry {

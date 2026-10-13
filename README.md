@@ -195,6 +195,9 @@ a second implementation is a second answer.
 | `/api/achievements/<region>/<realm>/<name>` | The achievements summary, laid over the character's log (omit `?category=` for the summary, add it for one category's shelf) |
 | `/api/reputations/<region>/<realm>/<name>` | The character's own reputation journal, laid over the shipped faction tree — this character only, never the account's union (see below) |
 | `/api/user/heartbeat` (POST) | The presence beat of a signed-in reader: one a minute from an open, visible tab, which is what puts that account's main on the hall of fame's online dots |
+| `/api/saved` | The characters a signed-in reader looked up and saved with a star, newest first — answered for a visitor too, with two empty lists rather than a 401 |
+| `/api/saved` (POST), `/api/saved/star`, `/api/saved/forget` | The three writes behind those lists: a lookup that succeeded, the star either way, and the cross that drops a character from both halves |
+| `/api/saved/import` (POST) | The one hand-over: the lists a browser had been keeping for itself, given to the account that has just signed in on it |
 | `/api/leaderboard/presence` | Who is on the site right now, as the keys of the mains whose account has beaten inside five minutes |
 | `/api/activity/<region>/<realm>/<name>` | The recent-achievement feed |
 | `/api/card/<region>/<realm>/<name>?locale=ru_RU` | The shareable JPEG, 1200×630 |
@@ -212,17 +215,18 @@ a second implementation is a second answer.
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity`, `vs/*` (the comparison - `/vs` with nobody to compare against yet, and `/vs/:vsRegion/:vsRealm/:vsName` with a second character) |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's six views under the character's own name, the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with those left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row), `CharacterVersus` (the comparison board: two characters and their fifteen figures side by side, each row's winner lit), `CharacterCardActions` (the pair of buttons a comparison card carries - save the character, read them again - and the moment their figures were read, under them) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's six views under the character's own name, the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with those left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row), `CharacterVersus` (the comparison board: two characters and their fifteen figures side by side, each row's winner lit), `FavoriteStar` (the star that saves a character for the favorites: every row of the hall of fame and a character's own name wear it), `CharacterCardActions` (the pair of buttons a comparison card carries - save the character, read them again - and the moment their figures were read, under them) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable`, `LeaderboardYou` (the reader's own place in the table) |
-| `app/composables/` | `characterView` (what the shell hands its views: the profile, the feed, and its own Refresh with its cooldown), `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView` (what the table is asked for, and the two questions a link into it spells out: which columns it lights, and which character's row it asks for), `realmNames`, `lang`, `seo`, `searchHistory` (the characters looked up, and the merge that draws them beside the saved ones), `versusFavorites` (the characters saved with a star, which the board and every search field offer), `urls`, `relativeTime`, `wowheadPower` |
+| `app/composables/` | `characterView` (what the shell hands its views: the profile, the feed, and its own Refresh with its cooldown), `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView` (what the table is asked for, and the two questions a link into it spells out: which columns it lights, and which character's row it asks for), `realmNames`, `lang`, `seo`, `searchHistory` (the characters looked up, and the merge that draws them beside the saved ones), `versusFavorites` (the characters saved with a star, which the board and every search field offer), `savedCharacters` (the bridge to the account's own copies: one read of `/api/saved` per page, the browser's lists handed over once, and the three writes that follow a lookup, a star and a cross), `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
-| `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` |
+| `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage`, `savedCharacters` (the two lists an account remembers) |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
 | `shared/data/collectionsSchema.ts` | The collection types, the section shape, and the Russian label map |
 | `shared/data/reputationsSchema.ts` | The reputation journal's types, the stage message keys, and the synthetic group's name |
 | `shared/data/leaderboardSchema.ts` | The hall of fame's record, query and payload types, shared by the server and the components |
 | `shared/utils/leaderboardScore.ts` | `calculatePlayerScore` and the weights it is made of |
 | `shared/utils/consent.ts` | The cookie key, the Consent Mode defaults and what an answer changes — read by both `nuxt.config.ts` and the banner |
+| `shared/utils/savedCharacters.ts` | The remembered character itself: its shape, the key the two lists are deduplicated on, the two limits, and the `localStorage` arms — read by the browser, by an account's own copy and by the endpoints that accept one |
 | `shared/utils/wow-{class,faction,professions}.ts` | The names the game's own UI uses, in both languages: the classes, the factions, and the professions (taken from Blizzard's profession index, so a pill reads as the game's profession pane spells it) |
 
 ---
@@ -283,7 +287,11 @@ nothing among characters still climbing.
 
 The page carries the site's one search in three places, and every one of them is the same two fields
 (`app/components/CharacterSearchForm.vue`) - the site's own glass, with the rim of a field warming to the brand
-gold while it holds the cursor: in the header bar, as one row, while this browser knows no character and nobody is
+gold while it holds the cursor, and the button the search is pressed through cut from the amber glass a
+character's own download button wears: the material's frosted pane over the deep amber fill, its rim warmed from
+amber by the one variable every rim of the site reads, and its glow widening under the pointer. The geometry is
+the layout's, so the button is exactly the size it always was - what its three shapes share is the material, not
+the shape: in the header bar, as one row, while this browser knows no character and nobody is
 signed in (`compact` - the shape the front door wears on a first visit); the sheet the row drops
 (`app/components/CharacterSearchDialog.vue`, on `Ctrl`/`⌘`+`K` as well); and the button under an empty table -
 because a name the table does not hold is not a name the site does not know, it is one nobody has looked up yet,
@@ -295,7 +303,38 @@ The list that opens under the name field is one list holding two kinds of rememb
 browser looked up, and the ones it saved with a star for a comparison (`mergeSearchEntries`,
 `app/composables/searchHistory.ts`). They are drawn together because a reader looking for a character does not
 care which of the two remembered it, and each row carries the star, so the list a reader can see is the list a
-reader can change.
+reader can change. Those same stars are how the list is filled from the rest of the site: every row of the hall
+of fame wears one, a character's own page carries one as a
+button in its header, beside Refresh (`app/components/FavoriteStar.vue`, `app/pages/[region]/[realm]/[name].vue`),
+and the account page keeps the whole list in one tile, where a pill is a way to the character and the cross
+beside it a way out of the list. The saved ones stand first, and the pane draws at most twenty of the pair: a field's list is a
+way back to a character rather than an archive to browse, and what is typed still narrows the whole list before
+that cut is made.
+
+The table itself is wider than a phone on purpose - a rank, a name and up to nine figures do not fit a column
+of glass - so it scrolls sideways under a bar of the site's own (`.hoa-scroll-x`,
+`app/assets/css/main.css`): the one scroller of the site that *draws* its bar, because a table whose
+right-hand columns are a drag away has to say so rather than look complete.
+
+Its columns are measured the same way in every row (`app/components/leaderboard/LeaderboardTable.vue`): the
+rank and the rating are as wide as their own figures, the name column is as wide as a name's own line
+(`NAME_WIDTH_MIN`), and a figure column is given no width at all, which in a fixed layout is how a column takes
+an equal share of what the measured columns leave. So the figures are the columns that spread across the panel
+and the name stays where a reader looks for it - at the left, whatever number of figures is switched on. A name
+is **never cut**: no mark of a row may squeeze it out of the cell, which is what a name lost to its own badges
+looked like, and on a narrow panel it is the figures that give way rather than the line the name stands on. A
+row wearing more marks than a name's line holds - the reader's own row that is also the row being read, on a
+narrow panel - moves a mark down to the next line rather than painting it over the figures beside it, and that
+row is the only one taller for it.
+
+A reader who is signed in has that same list kept for their account (`/api/saved`), so it is the list they had on
+their other device. The browser's copy is what a field still draws first - it is written before anything is asked
+of the server, so a field never waits for a request to have a list - and it is brought into step with the
+account's once per page: `/api/saved` is read, the browser's own two lists are handed over the first time on that
+browser (`hoa_saved_account` records it, so only the first account to sign in on it gets them), and the account's
+lists are then adopted as the browser's copy, which is what leaves a reader who signs out holding what they were
+just looking at. A visitor notices none of it - their lists are the browser's own, exactly as they were before
+the account existed - and a request that fails changes nothing at all.
 
 The character the page is *about* is the one this browser opened last, or - for a reader who is signed in and has
 looked nobody up on this device - the main of their account: `/api/profile` is read for the row's own badge in any
@@ -458,10 +497,24 @@ Under the buttons stands when that character's figures were last read, which is 
 them (`fetchedAt`) rather than the moment the page was opened: a profile is answered from a two-hour cache, so
 that moment is the only honest answer, and a reader who has just pressed the refresh sees it read "just now".
 
-A saved character is one press from the board, and the star is not the only place the list appears: the search
-field's own list holds the saved characters beside the ones this browser looked up, as one list
-(`mergeSearchEntries`). The list itself is the browser's own (`app/composables/versusFavorites.ts`), like the
-search history.
+A saved character is one press from the board, and the star is not the only place the list appears. The list
+is called **Favorites** in the interface, and the star that fills it stands beside the names the site draws:
+every row of the hall of fame wears one, a character's own page
+carries one as a button in its header, to the left of Refresh, the rows under a search field each carry one,
+and so do the two cards of the board itself (`app/components/FavoriteStar.vue` for the first three,
+`app/components/CharacterCardActions.vue` for the cards). The search field's own list holds the saved
+characters beside the ones this browser looked up, as one list
+(`mergeSearchEntries`), and the account page carries the list itself as one tile of pills
+(`app/pages/profile.vue`): a pill opens the character, the cross beside it drops them - a list a reader can
+only fill would not be a list they own. The list is the browser's own
+(`app/composables/versusFavorites.ts`), like the
+search history - and for a reader who is signed in it is the account's as well, so the same twelve characters
+are waiting on any device that reader signs in on (`/api/saved`). The second character of a comparison is read
+by the board rather than by a page of their own
+(`/api/character`), so the board is also what remembers the read: a character found by the search under a name
+field goes into the search history exactly as a character's own page writes it
+(`app/pages/[region]/[realm]/[name].vue`), and a read that found nobody writes nothing — which is what puts the
+character a comparison looked up back into the list that field offers.
 
 ## 🔄 Keeping the data current
 
@@ -627,8 +680,10 @@ character up still costs nothing and needs no account.
 - **One main per account.** A character the reader names as their main (`/api/profile/main`) is the
   only one the public leaderboard shows; every other character of the account stays a personal stat
   (`server/utils/leaderboardExclusions.ts`). The profile draws it twice: as the large card the page
-  leads with, and in the roster grid among the others - where its star is the filled one, while every
-  other tile carries the same star left hollow, and pressing that is the promotion. An account may
+  leads with, and in the roster grid among the others - where its crown is the filled one, while every
+  other tile carries the same crown left hollow, and pressing that is the promotion. A crown rather than
+  a star on purpose: the star is what the site saves a *favorite* with, and a grid of stars would read as
+  a list of saved characters rather than as the three or four candidates for the main. An account may
   also leave the table altogether: the profile's **Hall of Fame** switch (`/api/profile/fame`,
   `users.hide_from_fame`) keeps its main out of it, both from what the endpoint serves and from what
   a later lookup writes.

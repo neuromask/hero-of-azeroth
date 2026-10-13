@@ -20,7 +20,7 @@
  * plate in the bar turns the table to the reader's place, and a tile on a character page turns it to that
  * character's row.
  */
-import { searchHistoryKey } from '~/composables/searchHistory'
+import { searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCharacters'
 import { formatNumber } from '#shared/utils/formatNumber'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
@@ -101,6 +101,27 @@ function classHex(classId: number): string {
 /** The address of a player's own page, in the language being read. */
 function profileUrl(player: LeaderboardPlayer): string {
   return localeUrl(`/${regionPath(player.region)}/${player.realm}/${player.name}`)
+}
+
+/**
+ * A row as the remembered lists keep a character, which is what the star on that row saves
+ * (`app/components/FavoriteStar.vue`).
+ *
+ * `displayName` rather than `name`, because the record keeps both and only the lowercased one is an
+ * address: a list that remembered the address spelling would print `neromask` where the site prints
+ * `Neromask` everywhere else. The class and the portrait travel with the entry, so a chip drawn from it
+ * anywhere else on the site - the list under a search field, the comparison board - reads exactly as this
+ * row does.
+ */
+function favoriteEntry(player: LeaderboardPlayer): SearchHistoryEntry {
+  return {
+    name: player.displayName || player.name,
+    realm: player.realm,
+    region: player.region === 'us' ? 'us' : 'eu',
+    realmName: player.realmName,
+    classId: player.classId,
+    avatar: player.avatar
+  }
 }
 
 /**
@@ -195,25 +216,45 @@ const showsScore = computed(() => props.columns.includes('total'))
  * The table is laid out fixed rather than by content, because the content would decide it otherwise:
  * the widest thing in a row is the name column - a name, a realm, a class and a level - so a table
  * left to size itself hands it every spare pixel and pushes the figures aside, each one no wider than
- * its own heading, with the reader who came to compare them reading across a wall of empty table. So
- * every figure is given a share of the panel instead, capped where a column of three or four digits
- * stops needing to be wider, and the name column takes whatever is left over - which is what makes a
- * row of nine readable as nine columns and still leaves the name room beside them.
+ * its own heading, with the reader who came to compare them reading across a wall of empty table.
  *
- * The rank and the overall rating are measured rather than shared, since neither a rank nor a rating
- * grows. The figures can never claim more than nine shares, so the columns add up to less than the
- * panel at any width above the table's own minimum and the name column absorbs the difference.
+ * So the three columns that are not a figure are *measured*: the rank and the overall rating because
+ * neither a rank nor a rating grows (`RANK_WIDTH`, `SCORE_WIDTH`), and the name because a name on this
+ * site is never cut to fit a column the figures have already claimed (`NAME_WIDTH_MIN`). Every figure
+ * is left to the browser instead, which is the one arrangement that puts the leftover of the panel
+ * where it belongs: a column left without a width of its own in a fixed layout takes an equal share of
+ * what the measured columns leave (`<colgroup>`), so the figures are the columns that spread across the
+ * panel and the name stays at the left, whatever number of them is switched on.
+ *
+ * Measuring the figures too - a percentage each - is what the table did first, and it is what made the
+ * name drift right, the further the fewer figures were on: a percentage resolves against the panel
+ * rather than against what is left of it, so the measured columns came to less than the panel and the
+ * browser handed the difference to *every* column in proportion to its width, the rank included.
+ * Nothing about the figures needs a cap either: they are the only columns sharing, so what they take is
+ * the room the measured columns do not use, and on a panel too narrow for all of it what gives way is
+ * the width of a figure column, never the line the name stands on.
  */
 const RANK_WIDTH = 3.5
 const SCORE_WIDTH = 6
-/** The most of the panel a figure column takes, and the least the name column may be left with. */
-const FIGURE_SHARE_MAX = 15
-const NAME_SHARE_FLOOR = 33
+/**
+ * What the name column is measured at, in rem: a name's own line - the room a name, the star beside it and one
+ * of the marks a row wears need, with the portrait and the cell's own padding beside them. A name of nine
+ * characters or so therefore reads with its mark on the line at every width the table has, and the longest names
+ * a character can have move that one mark down a line at the table's narrowest rather than being cut. A row
+ * wearing more marks than the line holds is what the name cell wraps for: no column can hold a name and every
+ * mark there is at once.
+ */
+const NAME_WIDTH_MIN = 16
 
-const figureWidth = computed(() => {
-  const share = Math.min(FIGURE_SHARE_MAX, (100 - NAME_SHARE_FLOOR) / Math.max(1, visible.value.length))
-  return `${share}%`
-})
+/**
+ * What a column's header says.
+ *
+ * Two columns are named by the figure itself - `M+` and `ilvl` are read that way in every locale - and the
+ * `literal` flag on `COLUMNS` is what marks them. The rest are words the locale supplies.
+ */
+function columnLabel(column: { label: string; literal?: boolean }): string {
+  return column.literal ? column.label : t(column.label)
+}
 
 /**
  * The figure a column prints for a player.
@@ -268,16 +309,20 @@ function open(player: LeaderboardPlayer) {
       </button>
     </div>
 
-    <div v-else class="overflow-x-auto rounded-xl">
+    <div v-else class="hoa-scroll-x overflow-x-auto rounded-xl">
       <table class="w-full min-w-[60rem] table-fixed border-collapse text-sm">
         <!-- The width of every column, decided once here rather than by what each row happens to
              hold, so the figures are spread across the panel while the rows still line up down the
-             table. The name column is the one left without a width, and in a fixed layout that is
-             the column that takes whatever the measured and shared ones do not. -->
+             table. The rank, the name and the rating are measured - as wide as what they hold is long
+             (`RANK_WIDTH`, `NAME_WIDTH_MIN`, `SCORE_WIDTH`) - and a figure column carries no width at
+             all: a column without one takes an equal share of what the measured columns leave, so the
+             figures are the columns that spread and the name is never the one cut by the columns
+             beside it. The figures are always at least one, because a set of columns is one of two
+             states rather than a free set (`app/composables/leaderboardView.ts`). -->
         <colgroup>
           <col :style="{ width: `${RANK_WIDTH}rem` }" />
-          <col />
-          <col v-for="column in visible" :key="column.key" :style="{ width: figureWidth }" />
+          <col :style="{ width: `${NAME_WIDTH_MIN}rem` }" />
+          <col v-for="column in visible" :key="column.key" />
           <col v-if="showsScore" :style="{ width: `${SCORE_WIDTH}rem` }" />
         </colgroup>
 
@@ -288,17 +333,17 @@ function open(player: LeaderboardPlayer) {
             <th
               v-for="column in visible"
               :key="column.key"
-              class="px-2 py-2.5 text-right"
+              class="overflow-hidden px-2 py-2.5 text-right"
               scope="col"
             >
               <button
                 type="button"
-                class="inline-flex items-center gap-1 transition-colors"
+                class="inline-flex max-w-full min-w-0 items-center gap-1 transition-colors"
                 :class="sort === column.key ? 'text-wow-goldLight' : 'hover:text-white'"
-                :title="t('lbSortBy')"
+                :title="`${columnLabel(column)} · ${t('lbSortBy')}`"
                 @click="emit('update:sort', column.key)"
               >
-                <span>{{ column.literal ? column.label : t(column.label) }}</span>
+                <span class="truncate">{{ columnLabel(column) }}</span>
                 <svg
                   v-if="sort === column.key"
                   class="h-2.5 w-2.5"
@@ -308,15 +353,15 @@ function open(player: LeaderboardPlayer) {
                 ><path d="M5 8L1 3h8z" /></svg>
               </button>
             </th>
-            <th v-if="showsScore" class="px-3 py-2.5 text-right" scope="col">
+            <th v-if="showsScore" class="overflow-hidden px-3 py-2.5 text-right" scope="col">
               <button
                 type="button"
-                class="inline-flex items-center gap-1 transition-colors"
+                class="inline-flex max-w-full min-w-0 items-center gap-1 transition-colors"
                 :class="sort === 'total' ? 'text-wow-goldLight' : 'hover:text-white'"
-                :title="t('lbSortBy')"
+                :title="`${t('lbColScore')} · ${t('lbSortBy')}`"
                 @click="emit('update:sort', 'total')"
               >
-                <span>{{ t('lbColScore') }}</span>
+                <span class="truncate">{{ t('lbColScore') }}</span>
                 <svg
                   v-if="sort === 'total'"
                   class="h-2.5 w-2.5"
@@ -344,7 +389,7 @@ function open(player: LeaderboardPlayer) {
             v-for="(player, index) in players"
             :key="searchHistoryKey(player)"
             :data-key="searchHistoryKey(player)"
-            class="cursor-pointer border-b border-white/5 transition-colors last:border-b-0"
+            class="group/name cursor-pointer border-b border-white/5 transition-colors last:border-b-0"
             :class="isSelected(player) ? 'bg-wow-gold/[0.08] hover:bg-wow-gold/15' : 'hover:bg-white/[0.05]'"
             @click="open(player)"
           >
@@ -421,13 +466,39 @@ function open(player: LeaderboardPlayer) {
                 </span>
 
                 <div class="min-w-0">
-                  <div class="flex items-center gap-2">
-                    <NuxtLink
-                      :to="profileUrl(player)"
-                      class="truncate font-bold hover:underline"
-                      :style="{ color: classHex(player.classId) }"
-                      @click.stop
-                    >{{ player.displayName }}</NuxtLink>
+                  <!-- The name, the star beside it and the marks on this row, on the one line - and the row
+                       itself is the hover group (`group/name` on the `<tr>`): a pointer anywhere on the row -
+                       the name, the marks, the figures - is a pointer on this row, so the star brightens for
+                       all of them rather than for the name alone.
+
+                       The name is never cut: it is not truncated, so no mark of a row can squeeze it out of
+                       the cell (a name lost to its own badges is what that looked like). The room it reads in
+                       comes from the column instead of from the name giving way - the width of the name column
+                       is measured to hold a name with the star beside it and a mark to the right of it
+                       (`NAME_WIDTH_MIN`), so a row of one name and one mark is one line at
+                       every width the table has, and the longest names a character can have keep their mark
+                       beside them everywhere except at the table's narrowest.
+
+                       The line wraps as the last resort, and only for a row wearing more marks than a name's
+                       line has room for on the narrowest table: a mark moves down to the next line rather than
+                       paint over the figures of the column beside this one, and the row it moves in is the
+                       only row that is taller. The widest and least personal of the marks is the one that
+                       moves, because the marks keep their order - the reader's own, the row being read, the
+                       faction - and it is the last of them that finds no room. -->
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span class="flex items-center gap-1">
+                      <NuxtLink
+                        :to="profileUrl(player)"
+                        class="break-words font-bold hover:underline"
+                        :style="{ color: classHex(player.classId) }"
+                        @click.stop
+                      >{{ player.displayName }}</NuxtLink>
+
+                      <!-- The star is on every row rather than under the pointer (`always`): the hall of
+                           fame is a table a reader scans for the character they saved, and a mark that only
+                           appears where the pointer happens to rest is a mark they have to hunt for. -->
+                      <FavoriteStar :entry="favoriteEntry(player)" always />
+                    </span>
 
                     <!-- The reader's own character, right after the name: the main their account leads
                          with. It is filled gold where the "selected" mark beside it is outlined, because

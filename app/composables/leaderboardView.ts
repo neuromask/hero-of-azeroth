@@ -27,7 +27,7 @@ import type {
 } from '#shared/data/leaderboardSchema'
 // The key a row is compared by, and the region an address segment names: the pair below turns a character into
 // an address and an address back into a character, in the one spelling the table and the link both write.
-import { searchHistoryKey } from '~/composables/searchHistory'
+import { searchHistoryKey } from '#shared/utils/savedCharacters'
 import { regionFromPath } from '~/composables/urls'
 
 /** How long the search box waits after the last keystroke before it asks the server. */

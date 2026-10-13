@@ -18,7 +18,8 @@
  * `server/api/character/[region]/[realm]/[name].get.ts`), so the progress the button shows while the
  * realm is being read is the progress of a character being added to the ranking.
  */
-import { useSearchHistory, searchHistoryKey, mergeSearchEntries, type SearchHistoryEntry } from '~/composables/searchHistory'
+import { mergeSearchEntries, searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCharacters'
+import { useSearchHistory } from '~/composables/searchHistory'
 
 const props = withDefaults(
   defineProps<{
@@ -356,8 +357,10 @@ const onEnter = () => {
 
 /**
  * The realm a search is about to run on is remembered for the visit, so a return to this form
- * comes back with it filled in. The character itself is kept by the page that finds it (see
- * `useSearchHistory`), which is what makes the list a record of successes rather than of tries.
+ * comes back with it filled in. The character itself is kept by whatever finds it - a character's own
+ * page once it has rendered one, or the comparison board once it has read the character in its second
+ * column (`app/components/CharacterVersus.vue`) - which is what makes the list a record of successes
+ * rather than of tries (see `useSearchHistory`).
  */
 const rememberRealm = (realm: RealmOption) => {
   writeSession(SESSION_REALM, realm.slug)
@@ -373,22 +376,34 @@ const historyRealmName = (entry: SearchHistoryEntry) => {
 }
 
 /**
+ * How many characters the list under the field draws.
+ *
+ * The two lists it merges are bounded on their own (`SEARCH_HISTORY_LIMIT`, `VERSUS_FAVORITES_LIMIT`), but a
+ * field's pane is a way back to a character rather than an archive to browse: what is drawn of the pair is cut
+ * at twenty, the saved ones first, as the merge leaves them (`mergeSearchEntries`). The cut stands after the
+ * narrowing below, so a character that was searched for is still found however long the list behind it is.
+ */
+const LIST_LIMIT = 20
+
+/**
  * The list under the name field: what this browser looked up and what it saved for a quick compare, merged
  * into one list (`mergeSearchEntries`), then narrowed by what is being typed - matched on the character, the
- * realm name and the slug alike, the same way the realm list narrows. An empty field shows everything, which is
- * what makes focusing the field the way back to it.
+ * realm name and the slug alike, the same way the realm list narrows. An empty field shows the twenty newest,
+ * which is what makes focusing the field the way back to it.
  */
 const historyMatches = computed<SearchHistoryEntry[]>(() => {
   const list = mergeSearchEntries(favorites.value, history.value)
 
   const query = name.value.trim().toLowerCase()
-  if (!query) return list
+  if (!query) return list.slice(0, LIST_LIMIT)
 
-  return list.filter((entry) =>
-    entry.name.toLowerCase().includes(query) ||
-    historyRealmName(entry).toLowerCase().includes(query) ||
-    entry.realm.includes(query)
-  )
+  return list
+    .filter((entry) =>
+      entry.name.toLowerCase().includes(query) ||
+      historyRealmName(entry).toLowerCase().includes(query) ||
+      entry.realm.includes(query)
+    )
+    .slice(0, LIST_LIMIT)
 })
 
 /**
@@ -797,16 +812,22 @@ onBeforeUnmount(() => {
       <p v-if="realmError" class="mt-1 text-xs text-red-400">{{ $t('pickRealm') }}</p>
     </div>
 
+    <!-- The button the whole form is pressed through, cut from the same amber glass as the download
+         button of a character card: the site's own liquid glass (`hoa-liquid-glass` - the frosted pane
+         every control here is made of) over the deep amber fill, a rim warmed from amber by the one
+         variable the material reads, and a glow that widens under the pointer. The geometry is the
+         layout's (`layout.submit`), so it is the same size it always was: what changed is the colour of
+         the glass, from the brand gold poured down the button to the amber its own cards are outlined in. -->
     <button
       type="submit"
-      class="bg-gradient-to-r from-amber-600 to-wow-gold text-black font-extrabold rounded-lg hover:brightness-110 transition-all shadow-lg uppercase tracking-wider disabled:cursor-wait disabled:brightness-95"
+      class="hoa-liquid-glass rounded-lg bg-amber-950/30 font-extrabold uppercase tracking-wider text-white [--hoa-ring:rgba(245,158,11,0.55)] shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-shadow hover:[--hoa-ring:rgba(251,191,36,0.85)] hover:shadow-[0_0_28px_rgba(245,158,11,0.5)] disabled:cursor-wait disabled:opacity-60"
       :class="layout.submit"
       :disabled="searching"
     >
       <!-- While the character page is fetching from Blizzard, the button becomes the wait:
            a spinner and a status that takes turns, so a slow realm reads as progress. -->
       <span v-if="searching" class="inline-flex items-center justify-center gap-2.5">
-        <span class="h-4 w-4 animate-spin rounded-full border-2 border-black/70 border-t-transparent" aria-hidden="true"></span>
+        <span class="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" aria-hidden="true"></span>
         <span class="animate-pulse">{{ searchStatus }}</span>
       </span>
       <span v-else>{{ $t('find') }}</span>

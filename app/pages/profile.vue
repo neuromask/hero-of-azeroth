@@ -19,6 +19,10 @@ import { professionByName, professionLabel } from '#shared/utils/wow-professions
 import { formatNumber } from '#shared/utils/formatNumber'
 // The Mythic+ ladder the character page colours the rating by, so a figure keeps its colour here.
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
+// The remembered characters: the shape both lists of them are kept in, the key two entries are the same
+// character on, and the list the favorites tile below is drawn from and changes.
+import { searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCharacters'
+import { useVersusFavorites } from '~/composables/versusFavorites'
 
 definePageMeta({ alias: '/ru/profile' })
 
@@ -457,6 +461,10 @@ const hexOf = (character: ProfileCharacter) => classById(character.classId)?.hex
 const characterUrl = (character: ProfileCharacter) =>
   localeUrl(`/${regionPath(character.region)}/${character.realmSlug}/${character.name}`)
 
+/** The same for a remembered character, which is what the favorites below are kept as. */
+const favoriteUrl = (entry: SearchHistoryEntry) =>
+  localeUrl(`/${regionPath(entry.region)}/${entry.realm}/${entry.name}`)
+
 /** A figure as the endpoint left it, with a dash where nothing has been read yet. */
 const figure = (value: number | null | undefined) => (typeof value === 'number' ? formatNumber(value) : '—')
 
@@ -862,6 +870,25 @@ onMounted(() => {
   if (!characters.value.length) void refreshRoster()
   $fetch('/api/profile/sync', { method: 'POST', query: { locale: apiLocale.value } }).catch(() => {})
 })
+
+/**
+ * The favorites: the characters this reader saved with a star, and the only place on the site they can be
+ * managed as a list.
+ *
+ * The star itself is offered everywhere a name is read - a row of the hall of fame, under the hover of the
+ * whole row (`app/components/FavoriteStar.vue`), a character's own header, as the button beside Refresh
+ * (`app/pages/[region]/[realm]/[name].vue`), the list under a search field and the comparison board's cards
+ * (`app/components/CharacterCardActions.vue`) - because saving somebody to come back to is an act that
+ * belongs with the name, not with a page about the reader.
+ * This tile is the other half of it: all of them at once, each one a pill that opens the character and a
+ * cross that drops them, so a list the reader can only fill would not be a list they own.
+ *
+ * It is a remembered list like the search history, so it is read on mount: the browser's copy first, and
+ * the account's when there is one (`app/composables/versusFavorites.ts`).
+ */
+const { favorites, load: loadFavorites, remove: removeFavorite } = useVersusFavorites()
+
+onMounted(loadFavorites)
 </script>
 
 <template>
@@ -1071,6 +1098,71 @@ onMounted(() => {
                (`app/components/ProfileStatsNote.vue`). It stands inside the main's own card, because that is
                the panel a reader is looking at when the questions arrive. -->
           <ProfileStatsNote class="mt-5" />
+        </section>
+
+        <!-- The favorites: every character this reader saved with a star, wherever they pressed it - a row of
+             the table, the button in a character's own header, the search field's own list
+             (`app/components/FavoriteStar.vue`).
+             The tile is drawn even while it is empty, because one that appeared only after somebody had used
+             it would be a feature nobody could find; the empty line says what to press instead. The pills are
+             the shape the comparison board offers the same characters in, with the cross the list under a
+             search field wears - there they are a way into a comparison, here they are the list itself, so a
+             pill is both a way to the character and, on the cross, a way out of the list. -->
+        <section class="mt-3">
+          <div class="hoa-panel rounded-2xl p-5">
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 class="flex items-center gap-2 text-lg font-bold text-white">
+                <svg
+                  class="h-4 w-4 shrink-0 text-wow-goldLight"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                </svg>
+                {{ t('profileFavorites') }}
+                <span
+                  v-if="favorites.length"
+                  class="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-xs font-semibold tabular-nums text-gray-300"
+                >{{ favorites.length }}</span>
+              </h2>
+              <p class="text-xs text-gray-500">{{ t('profileFavoritesHint') }}</p>
+            </div>
+
+            <p v-if="!favorites.length" class="mt-3 text-sm text-gray-400">{{ t('profileFavoritesEmpty') }}</p>
+
+            <div v-else class="mt-3 flex flex-wrap gap-2">
+              <span
+                v-for="favorite in favorites"
+                :key="searchHistoryKey(favorite)"
+                class="hoa-tag flex items-center gap-2 pr-1.5"
+              >
+                <NuxtLink
+                  :to="favoriteUrl(favorite)"
+                  class="flex items-baseline gap-1.5 transition-colors hover:text-white"
+                >
+                  <CharacterName :class-id="favorite.classId" :class-name="favorite.class">{{ favorite.name }}</CharacterName>
+                  <span class="text-gray-400">· {{ favorite.realmName }}</span>
+                </NuxtLink>
+
+                <!-- The cross, drawn rather than hidden behind the pointer: this tile *is* the list, and a
+                     list whose rows can only be taken out by sweeping the pointer over them hides what it
+                     is for. It stays quieter than the name beside it - the site's own marks are quiet until
+                     they are pointed at - and it answers the pointer in the red the site drops things with. -->
+                <button
+                  type="button"
+                  class="grid h-5 w-5 shrink-0 place-items-center rounded text-xs leading-none text-gray-500 transition-colors hover:bg-white/10 hover:text-red-300"
+                  :aria-label="t('vsFavoriteRemove')"
+                  :title="t('vsFavoriteRemove')"
+                  @click="removeFavorite(favorite)"
+                >&#10005;</button>
+              </span>
+            </div>
+          </div>
         </section>
 
         <!-- The roster: everybody the filters kept, the main among them, so the grid carries the
@@ -1520,11 +1612,14 @@ onMounted(() => {
                 </p>
               </div>
 
-              <!-- The tile's own read, the card drawn from it, and the star that marks the account's
-                   main. None of them wears a word: the marks are the ones the public page uses, at a
-                   tile's size. On the main's own tile the star is filled and golden and there is no
-                   way to press it - it already stands where the button would send it - while every
-                   other tile carries the same star left hollow, and pressing that is the promotion. -->
+              <!-- The tile's own read, the card drawn from it, and the crown that marks the account's main.
+                   None of them wears a word: the marks are the ones the public page uses, at a tile's size.
+                   A crown rather than the star the site saves things with, because that star means
+                   "favorite" now: a cell of this grid wearing it would say the character had been saved for
+                   a comparison when it is only one the reader could promote. On the main's own tile the
+                   crown is filled and golden and there is no way to press it - it already stands where the
+                   button would send it - while every other tile carries the same crown left hollow, and
+                   pressing that is the promotion. -->
               <div class="ml-auto flex shrink-0 items-center gap-1.5">
                 <button
                   type="button"
@@ -1555,8 +1650,18 @@ onMounted(() => {
                   :title="t('profileMainBadge')"
                   :aria-label="t('profileMainBadge')"
                 >
-                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                  <svg
+                    class="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 8.4l3.7 2.8L12 4.6l4.3 6.6L20 8.4l-1.5 9.2a1 1 0 0 1-1 .8H6.5a1 1 0 0 1-1-.8L4 8.4Z" />
+                    <path d="M6.6 20.5h10.8" />
                   </svg>
                 </span>
 
@@ -1579,7 +1684,8 @@ onMounted(() => {
                     stroke-linejoin="round"
                     aria-hidden="true"
                   >
-                    <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                    <path d="M4 8.4l3.7 2.8L12 4.6l4.3 6.6L20 8.4l-1.5 9.2a1 1 0 0 1-1 .8H6.5a1 1 0 0 1-1-.8L4 8.4Z" />
+                    <path d="M6.6 20.5h10.8" />
                   </svg>
                 </button>
               </div>

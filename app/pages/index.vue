@@ -45,7 +45,8 @@ definePageMeta({ alias: '/ru' })
 // The characters this browser has looked up, which is where the row's character views and the plate in the bar
 // find the character they belong to (see the composable for the shape and the limit). The key it keeps them
 // under is also what marks the reader's own row in the table below.
-import { useSearchHistory, searchHistoryKey, type SearchHistoryEntry } from '~/composables/searchHistory'
+import { searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCharacters'
+import { useSearchHistory } from '~/composables/searchHistory'
 // The way into the search from outside it: the empty table asks for it on the name that matched nothing
 // (see the composable for why the ask is shared state rather than a prop).
 import { useCharacterLookup } from '~/composables/characterLookup'

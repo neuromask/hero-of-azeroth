@@ -28,7 +28,8 @@
 import { formatNumber } from '#shared/utils/formatNumber'
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 import { useCharacterView } from '~/composables/characterView'
-import { searchHistoryKey, type SearchHistoryEntry } from '~/composables/searchHistory'
+import { searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCharacters'
+import { useSearchHistory } from '~/composables/searchHistory'
 import { useVersusFavorites } from '~/composables/versusFavorites'
 import type { CharacterData } from '~~/server/utils/blizzard'
 
@@ -330,6 +331,24 @@ const targetEntry = computed<SearchHistoryEntry | null>(() => {
   }
 })
 
+/**
+ * A comparison that found its second character is a success, and the successes are what the list under a search
+ * field is made of (`app/composables/searchHistory.ts`). A character's own page records its own read
+ * (`app/pages/[region]/[realm]/[name].vue`), but the second character of a comparison is read here and is never
+ * opened as a page of its own - so without this line the list would never hold them, and a character found by
+ * the very field that offers the list would be missing from it. What is written is the entry the star saves
+ * (`targetEntry`), which is the shape the list is kept in. A read that found nobody leaves the list alone, so a
+ * mistyped name never reaches it, and a character read again by the Refresh button is simply put back at the
+ * front of it.
+ */
+const { remember: rememberCharacter } = useSearchHistory()
+
+watch(targetEntry, (entry) => {
+  // `localStorage` exists in the browser alone, and the server has no history to write to.
+  if (!import.meta.client || !entry) return
+  rememberCharacter(entry)
+}, { immediate: true })
+
 /** Where the second card's name leads: their own page, or this board while nobody has been picked. */
 const targetAddress = computed(() => {
   const target = props.target
@@ -548,7 +567,7 @@ onBeforeUnmount(() => {
             class="flex items-center gap-3 rounded-xl border px-3 py-2 transition-colors"
             :class="winnerOf(row) === 'current' ? 'border-emerald-400/30 bg-emerald-400/[0.07]' : 'border-white/10 bg-white/[0.03]'"
           >
-            <AppIcon :name="row.icon" class="h-4 w-4 shrink-0 text-gray-400" />
+            <AppIcon :name="row.icon" class="h-6 w-6 shrink-0 text-gray-400" />
 
             <span class="min-w-0 flex-1">
               <span class="block truncate text-xs font-semibold uppercase tracking-wider text-gray-300">
@@ -626,8 +645,10 @@ onBeforeUnmount(() => {
 
           <CharacterSearchForm class="mt-4" target="versus" :vs-base="vsBase" autofocus />
 
-          <!-- The quick compares. They are in `localStorage`, so they are drawn only once the browser has read
-               them - a page rendered on the server shows none and gains them a moment later. -->
+          <!-- The favorites: the shape the search field's own list offers them in, under the heading the site
+               now calls them by ("Favorites", `i18n/locales`). They are in `localStorage`, so they are drawn
+               only once the browser has read them - a page rendered on the server shows none and gains them a
+               moment later. -->
           <div v-if="favorites.length" class="mt-5 border-t border-white/10 pt-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ $t('vsFavorites') }}</p>
             <div class="mt-2 flex flex-wrap gap-2">
@@ -734,7 +755,7 @@ onBeforeUnmount(() => {
               class="flex items-center gap-3 rounded-xl border px-3 py-2 transition-colors"
               :class="winnerOf(row) === 'target' ? 'border-emerald-400/30 bg-emerald-400/[0.07]' : 'border-white/10 bg-white/[0.03]'"
             >
-              <AppIcon :name="row.icon" class="h-4 w-4 shrink-0 text-gray-400" />
+              <AppIcon :name="row.icon" class="h-6 w-6 shrink-0 text-gray-400" />
 
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-xs font-semibold uppercase tracking-wider text-gray-300">

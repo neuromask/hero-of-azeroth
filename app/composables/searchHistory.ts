@@ -4,168 +4,90 @@
  * A search that found its character is worth keeping: the front page can then offer the name
  * to type and the realm to search it on. The list is a convenience rather than a log, so it is
  * bounded, deduplicated and kept in `localStorage` - it outlives the tab, which is what makes
- * it useful next visit, and it never leaves the browser.
+ * it useful next visit.
  *
- * The character page is where a search proves successful (it rendered a character), so that is
- * where `remember` is called; the front page reads the same list under the name field.
- */
-
-/** One searched character: the three parts of its address, plus the realm's name for a row. */
-export interface SearchHistoryEntry {
-  /** The character's name as Blizzard spells it, which is what the field is filled with. */
-  name: string
-  /** The realm's slug, which is the part a page address carries. */
-  realm: string
-  /** The region the realm is in, which decides whether EU or US is searched. */
-  region: 'eu' | 'us'
-  /**
-   * The realm's name as it read when the entry was written, so a row can name the realm before
-   * the realm list has loaded; the list's own name wins once it is there.
-   */
-  realmName: string
-  /**
-   * The class the character was when the entry was written, so the front page can tint the
-   * remembered name with its signature colour (see `#shared/utils/wow-class`). Blizzard's id
-   * is the durable half and the Armoury slug is the readable one; both are optional, because a
-   * row written before either was kept resolves to the brand gold instead of to no colour.
-   */
-  classId?: number
-  class?: string
-  /**
-   * Blizzard's square portrait of the character, kept so the site can show who this browser is
-   * "signed in" as without asking Blizzard for it again (`app/components/MyProfile.vue`). Optional,
-   * because a row written before it was kept - and a character the media call had no picture for -
-   * falls back to a monogram in the class colour.
-   */
-  avatar?: string
-}
-
-/** Where the list is kept, and how many characters it holds. */
-export const SEARCH_HISTORY_KEY = 'hoa_search_history'
-export const SEARCH_HISTORY_LIMIT = 10
-
-/**
- * The identity a character is unique on, as one string: its three address segments, lowercased.
+ * A reader who is signed in has the same list kept for their account as well, and it is the account's copy
+ * that decides what is on screen once it has been read: every page brings the browser's copy into step with it
+ * (`app/composables/savedCharacters.ts`, which reads `/api/saved` and hands the browser's own list over the
+ * first time). Nothing about that changes a visitor's list - it is the browser's own, exactly as it was before
+ * there was an account - and nothing about it changes what a *successful* search means here.
  *
- * The list below is deduplicated by it, and the hall of fame marks the reader's own row with it. The
- * two are answers about one character written by two different layers - an entry is written from the
- * profile the browser read, a row is written by the table's own storage - so the case a name happens
- * to be spelled in can differ between them, and lowercasing here is what lets the two be compared at
- * all rather than only matching when they were written the same way.
+ * `remember` is called wherever a search proves successful, which is wherever a character was actually
+ * found: a character's own page, once it has rendered one (`app/pages/[region]/[realm]/[name].vue`), and
+ * the comparison board, once it has read the character it compares against - a second character is looked
+ * up without a page of its own ever being opened (`app/components/CharacterVersus.vue`). A miss remembers
+ * nothing, so a mistyped name never reaches the list. Every search field on the site reads the same list
+ * under its name field (`app/components/CharacterSearchForm.vue`).
  */
-export function searchHistoryKey(entry: { region: string; realm: string; name: string }): string {
-  return `${entry.region}:${entry.realm}:${entry.name.toLowerCase()}`
-}
+import {
+  SAVED_RECENT_LIMIT,
+  SEARCH_HISTORY_KEY,
+  readSavedEntries,
+  searchHistoryKey,
+  writeSavedEntries,
+  type SearchHistoryEntry
+} from '#shared/utils/savedCharacters'
+import { accountSavedLists, pushForgottenCharacter, pushLookedUpCharacter } from './savedCharacters'
+
+/** How many characters the list holds, in the browser and on an account alike (`#shared/utils/savedCharacters`). */
+export const SEARCH_HISTORY_LIMIT = SAVED_RECENT_LIMIT
 
 /**
- * A value from storage as an entry, or `null` when it is not the shape this wrote.
- *
- * Exported because a second `localStorage` list keeps the same shape - the characters saved for a quick
- * comparison (`app/composables/versusFavorites.ts`) - and a second parser for one type is how two lists come
- * to disagree about what a character is. The reader stays here, where the shape is written.
- */
-export function toSearchHistoryEntry(value: unknown): SearchHistoryEntry | null {
-  const entry = value as Partial<SearchHistoryEntry>
-  if (!entry || typeof entry.name !== 'string' || typeof entry.realm !== 'string' || !entry.name || !entry.realm) {
-    return null
-  }
-  const region = entry.region === 'us' ? 'us' : entry.region === 'eu' ? 'eu' : null
-  if (!region) return null
-
-  const classId = typeof entry.classId === 'number' && entry.classId > 0 ? entry.classId : undefined
-  const classSlug = typeof entry.class === 'string' && entry.class ? entry.class : undefined
-  const avatar = typeof entry.avatar === 'string' && entry.avatar ? entry.avatar : undefined
-
-  return {
-    name: entry.name,
-    realm: entry.realm,
-    region,
-    realmName: typeof entry.realmName === 'string' && entry.realmName ? entry.realmName : entry.realm,
-    classId,
-    class: classSlug,
-    avatar
-  }
-}
-
-/**
- * A browser can refuse storage outright - a private window, site data blocked - so every read
- * and write is wrapped: without it the field simply offers nothing and remembers nothing,
- * and the form keeps working.
- */
-function readStorage(): SearchHistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(SEARCH_HISTORY_KEY)
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.map(toSearchHistoryEntry).filter((entry): entry is SearchHistoryEntry => entry !== null)
-  } catch {
-    return []
-  }
-}
-
-function writeStorage(entries: SearchHistoryEntry[]) {
-  try {
-    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(entries))
-  } catch {
-    // Nothing to do: losing the list breaks nothing.
-  }
-}
-
-/**
- * The list a search field offers: the characters this browser saved for a quick compare, and the ones it
- * looked up, as one list.
- *
- * The two are the same thing remembered for two reasons - a character somebody searched for, and a character
- * somebody starred (`app/composables/versusFavorites.ts`) - and a reader looking for one of them does not care
- * which list it went into, so a field offers them together rather than as two sections that would each have to
- * be searched. The saved ones come first (they were chosen on purpose), and the pair is deduplicated by the key
- * a character is unique on (`searchHistoryKey`) - so a saved character is never also drawn as a lookup of
- * itself, however the two happen to spell its case.
- */
-export function mergeSearchEntries(
-  saved: SearchHistoryEntry[],
-  lookedUp: SearchHistoryEntry[]
-): SearchHistoryEntry[] {
-  const seen = new Set(saved.map((entry) => searchHistoryKey(entry)))
-  return [...saved, ...lookedUp.filter((entry) => !seen.has(searchHistoryKey(entry)))]
-}
-
-/**
- * The list of searched characters and the ways it changes. Every instance reads `localStorage`
- * for itself, because a page fills its own copy on mount (the server has none) and the writes
- * keep that copy in step.
+ * The list of searched characters and the ways it changes. Every instance keeps its own copy, because a page
+ * fills its own on mount and reads it in one place (`app/components/MyProfile.vue`,
+ * `app/pages/index.vue`) - and every copy reads the same two sources, so no two of them can disagree about
+ * what the reader has looked at.
  */
 export function useSearchHistory() {
   const history = ref<SearchHistoryEntry[]>([])
 
-  /** Reads what an earlier visit left behind. Call it from `onMounted`, when there is storage. */
-  const load = () => {
-    history.value = readStorage()
+  /**
+   * Reads what an earlier visit left behind, and then what the reader's account holds.
+   *
+   * The browser's own list is read first, so a field that has one never waits for a request to draw it; then
+   * the same list is read again once the account has answered, because the account's two lists are handed to
+   * the browser's copy on the way (`accountSavedLists`). For a visitor both reads return the same list, and
+   * for a reader whose account has none the second read returns an empty one, which is the honest answer.
+   *
+   * Call it from `onMounted`: there is no storage and no account on the server.
+   */
+  const load = async () => {
+    history.value = readSavedEntries(SEARCH_HISTORY_KEY)
+    await accountSavedLists()
+    history.value = readSavedEntries(SEARCH_HISTORY_KEY)
   }
 
   /**
    * Puts a character at the front of the list: the pair it is unique on is dropped from
    * wherever it sat, and the oldest past the limit falls off the end. Reads the stored list
    * rather than the in-memory copy, so a page that never called `load` - the character page,
-   * which only writes - cannot overwrite the rest of the history with one entry.
+   * which only writes - cannot overwrite the rest of the history with one entry. The same fact
+   * then goes to the reader's account, if they have one.
    */
   const remember = (entry: SearchHistoryEntry) => {
     const key = searchHistoryKey(entry)
-    const rest = readStorage().filter((existing) => searchHistoryKey(existing) !== key)
+    const rest = readSavedEntries(SEARCH_HISTORY_KEY).filter((existing) => searchHistoryKey(existing) !== key)
     const next = [entry, ...rest].slice(0, SEARCH_HISTORY_LIMIT)
 
-    writeStorage(next)
+    writeSavedEntries(SEARCH_HISTORY_KEY, next)
     history.value = next
+    pushLookedUpCharacter(entry)
   }
 
-  /** Drops one character, by the pair the list is unique on. */
+  /**
+   * Drops one character, by the pair the list is unique on.
+   *
+   * On the account the row goes entirely rather than only its lookup, because that is what the cross means to
+   * the reader who pressed it: not this one any more, in either list (`app/components/CharacterSearchForm.vue`
+   * takes the star off the same row).
+   */
   const forget = (entry: SearchHistoryEntry) => {
     const key = searchHistoryKey(entry)
-    const next = readStorage().filter((existing) => searchHistoryKey(existing) !== key)
+    const next = readSavedEntries(SEARCH_HISTORY_KEY).filter((existing) => searchHistoryKey(existing) !== key)
 
-    writeStorage(next)
+    writeSavedEntries(SEARCH_HISTORY_KEY, next)
     history.value = next
+    pushForgottenCharacter(entry)
   }
 
   return { history, load, remember, forget }

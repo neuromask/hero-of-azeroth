@@ -196,6 +196,38 @@ CREATE TABLE IF NOT EXISTS account_pool (
   PRIMARY KEY (user_id, kind, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_account_pool_kind ON account_pool(user_id, kind);
+
+/**
+ * The characters an account remembers: the ones it looked up and the ones it saved with a star for a
+ * comparison, which are one record carrying two moments.
+ *
+ * One row per character rather than two lists, because a character can be both - looked up and starred -
+ * and the pair is what the field under a search box draws as one list (see shared/utils/savedCharacters,
+ * which owns the shape, the key and the limits this table is cut at). seen_at is when the account last
+ * looked the character up and starred_at when it was starred, either of them null: a row with neither is
+ * a character nothing remembers any more, and the write that leaves it that way deletes it (see
+ * server/utils/savedCharacters).
+ *
+ * The reader's own browser keeps the same two lists in its own storage; this table is what makes them
+ * follow the account rather than the browser, so they are read back on any device the reader signs in on.
+ * A foreign key on purpose, unlike main_character_id: nothing writes a saved row before the account exists.
+ */
+CREATE TABLE IF NOT EXISTS saved_characters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  region TEXT NOT NULL,
+  realm_slug TEXT NOT NULL,
+  name_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  realm_name TEXT,
+  class_id INTEGER,
+  class_slug TEXT,
+  avatar TEXT,
+  seen_at INTEGER,
+  starred_at INTEGER,
+  UNIQUE (user_id, region, realm_slug, name_key)
+);
+CREATE INDEX IF NOT EXISTS idx_saved_characters_user ON saved_characters(user_id, seen_at, starred_at);
 `
 
 /**

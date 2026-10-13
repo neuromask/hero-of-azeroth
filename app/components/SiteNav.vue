@@ -7,7 +7,7 @@ import { ACHIEVEMENT_CATEGORIES, ACHIEVEMENT_LABEL_KEYS } from '#shared/data/ach
 // The class a name is printed in, which is what tints the tab that carries the character's own name.
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 // The shape a character is remembered in, which is what the row's links and the tab's face are built from.
-import type { SearchHistoryEntry } from '~/composables/searchHistory'
+import type { SearchHistoryEntry } from '#shared/utils/savedCharacters'
 
 /**
  * The navigation of the site: one row of entries in two groups, and the panel a phone opens them in.

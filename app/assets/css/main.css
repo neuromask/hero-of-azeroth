@@ -561,6 +561,37 @@
   .hoa-anchors ::-webkit-scrollbar {
     display: none;
   }
+
+  /* The horizontal bar under the hall of fame's table: the site's own, because this is the one scroller
+     whose bar carries information. Every other box of the site that scrolls hides its bar - a pane is
+     dragged, wheeled and tapped, and a strip down its inside edge takes room from the glass it draws
+     (`.hoa-pop`, `.hoa-anchors`) - while a table wider than the page has to *say* that it is: a reader on a
+     narrow screen reads the first figures, and without a bar the rest look like the whole answer rather
+     than a drag away. So it is drawn thin, in the brand gold on the faintest track, and both engines are
+     told the same thing: `scrollbar-width` and `scrollbar-color` for Firefox, the `::-webkit-scrollbar`
+     half for everything Chromium. */
+  .hoa-scroll-x {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(248, 183, 0, 0.4) rgba(255, 255, 255, 0.05);
+  }
+
+  .hoa-scroll-x::-webkit-scrollbar {
+    height: 10px;
+  }
+
+  .hoa-scroll-x::-webkit-scrollbar-track {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 9999px;
+  }
+
+  .hoa-scroll-x::-webkit-scrollbar-thumb {
+    background-color: rgba(248, 183, 0, 0.4);
+    border-radius: 9999px;
+  }
+
+  .hoa-scroll-x::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(248, 183, 0, 0.6);
+  }
 }
 
 /* A group of a collections shelf is scrolled to by the chip bar above it, and the whole page reads

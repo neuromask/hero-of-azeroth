@@ -11,7 +11,10 @@ import type { CharacterData } from '~~/server/utils/blizzard'
 import type { ActivityFeed } from '#shared/utils/activity'
 // The search history the front page offers: a character that rendered here is a search that
 // worked, and that is what is worth keeping (see the composable for the shape and the limit).
-import { useSearchHistory, type SearchHistoryEntry } from '~/composables/searchHistory'
+import type { SearchHistoryEntry } from '#shared/utils/savedCharacters'
+import { useSearchHistory } from '~/composables/searchHistory'
+// The favorites this page's header star saves: the same list the comparison board and the search field offer.
+import { useVersusFavorites } from '~/composables/versusFavorites'
 // What the shell hands to the views it renders (see the composable for the shape).
 import { provideCharacterView } from '~/composables/characterView'
 // The Russian copy of this subtree is the same component under `/ru`; the middleware reads the
@@ -368,6 +371,49 @@ const metaParts = computed<MetaPart[]>(() => {
  */
 const portraitHex = computed(() => classColorHex(character.value || {}))
 const portraitInitial = computed(() => (character.value?.name || name).charAt(0).toUpperCase())
+
+/**
+ * The character as the remembered lists keep one, which is what the star in the header saves
+ * (`useVersusFavorites` below).
+ *
+ * The name, the realm and the region come from the address rather than from the profile the page read, so
+ * the entry is the character this page *is* - the same three segments the browser wrote down when it
+ * remembered the page as a successful search. The class and the portrait come from the profile itself,
+ * because they are the two things a chip is drawn with and the address has never carried either.
+ */
+const characterEntry = computed<SearchHistoryEntry | null>(() => {
+  const c = character.value
+  if (!c) return null
+
+  return {
+    name: c.name,
+    realm,
+    region,
+    realmName: c.realm || realm,
+    classId: c.classId,
+    class: c.class,
+    avatar: c.avatarUrl
+  }
+})
+
+/**
+ * The star the header carries for this character: the same act the comparison board offers on a card
+ * (`app/components/CharacterCardActions.vue`), so a reader who has just found somebody can keep them
+ * without opening anything else. It reads the list `useVersusFavorites` keeps - written by the search
+ * field, the table's rows and the profile's own tile alike - which is why it is loaded on mount rather
+ * than left to whichever component happens to read it first.
+ */
+const { load: loadFavorites, has: isFavorite, toggle: toggleFavorite } = useVersusFavorites()
+
+onMounted(loadFavorites)
+
+/** Whether this character is already saved, which is what the header's star is filled for. */
+const saved = computed(() => (characterEntry.value ? isFavorite(characterEntry.value) : false))
+
+/** What the header's star does: saves this character, or drops the one already saved. */
+function toggleCharacterFavorite() {
+  if (characterEntry.value) toggleFavorite(characterEntry.value)
+}
 
 /** A portrait that failed to load, which the monogram then stands in for. */
 const portraitBroken = ref(false)
@@ -784,6 +830,39 @@ onBeforeUnmount(() => {
                bottom edge of a frosted bar. The pane and the reason it can be one pane everywhere are written
                in `app/assets/css/main.css`, beside the class. -->
           <div class="flex w-full items-stretch gap-3 lg:w-auto">
+            <!-- The star: this character saved for the list the search field, the hall of fame's rows and
+                 the profile's own tile all write to, in the face the comparison board gives the same act
+                 (`app/components/CharacterCardActions.vue`) and at the height of the group beside it - a
+                 control of forty-four pixels, which is what the row is. It is drawn to the left of Refresh,
+                 because the two are the header's own acts on this character: keep them, or read them again.
+                 A hollow star is a press away from being saved, a filled one is already saved, and it wears
+                 the brand gold - the colour the site saves a choice with. -->
+            <button
+              v-if="characterEntry"
+              type="button"
+              class="grid h-11 w-11 shrink-0 place-items-center rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-all duration-300"
+              :class="saved
+                ? 'border-wow-gold/60 bg-wow-gold/15 text-wow-goldLight hover:border-wow-gold/80 hover:bg-wow-gold/25'
+                : 'border-white/15 bg-white/10 text-gray-300 hover:border-wow-gold/40 hover:bg-white/15 hover:text-wow-goldLight'"
+              :aria-label="saved ? t('vsFavoriteRemove') : t('vsFavoriteAdd')"
+              :title="saved ? t('vsFavoriteRemove') : t('vsFavoriteAdd')"
+              :aria-pressed="saved"
+              @click="toggleCharacterFavorite"
+            >
+              <svg
+                class="h-5 w-5"
+                viewBox="0 0 24 24"
+                :fill="saved ? 'currentColor' : 'none'"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+              </svg>
+            </button>
+
             <button
               type="button"
               :disabled="!canRefresh"
