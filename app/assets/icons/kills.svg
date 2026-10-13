@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <style>
       .cls-1 {
@@ -7,25 +7,10 @@
       }
     </style>
   </defs>
-  <g id="Layer_2" data-name="Layer 2">
-    <g class="cls-1">
-      <!-- Two swords crossed in saltire, each one a solid silhouette: a broad tapering blade, a cross guard
-           with rounded ends, a grip and a round pommel. The shape is built upright and rotated about the centre
-           of the box, which is where the two blades meet; the rotation is what makes them cross, and it is
-           mirrored for the second sword. Every part is cut fat on purpose - the rest of the set is solid
-           silhouettes, and a thin one reads as a different family beside them. -->
-      <g transform="rotate(45 12 12)">
-        <path d="M12 -4 L15.2 2 L15.2 12.4 L8.8 12.4 L8.8 2 Z" />
-        <rect x="6.6" y="12.4" width="10.8" height="3.2" rx="1.6" />
-        <rect x="10.2" y="15.6" width="3.6" height="4" rx="1.2" />
-        <circle cx="12" cy="20.9" r="2.4" />
-      </g>
-      <g transform="rotate(-45 12 12)">
-        <path d="M12 -4 L15.2 2 L15.2 12.4 L8.8 12.4 L8.8 2 Z" />
-        <rect x="6.6" y="12.4" width="10.8" height="3.2" rx="1.6" />
-        <rect x="10.2" y="15.6" width="3.6" height="4" rx="1.2" />
-        <circle cx="12" cy="20.9" r="2.4" />
-      </g>
-    </g>
-  </g>
+  <path class="cls-1" d="M54.71,133.82V63.16c2.44-3.81,4.86-7.27,9.8-7.87,21.34,1.42,44.94-1.82,66-.01,4.44.38,6.17,1.99,9.41,4.72l98.15,98.14,1.09,1.88-80.31,79.74-104.14-105.94Z"/>
+  <path class="cls-1" d="M102.6,457.29h-14.13c-17.5-4.19-29.4-15.39-33.76-32.98v-14.13c2.03-7.13,5-12.45,9.8-18.07,12.32-14.44,28.94-27.24,41.59-41.65l1.61-.77,1.61.77,52.9,53.72-45.47,45.66c-4.12,3.78-9.18,5.25-14.14,7.45Z"/>
+  <path class="cls-1" d="M422.94,457.29h-14.13c-4.96-2.2-10.03-3.67-14.14-7.45l-45.47-45.66,54.51-54.49,2,1.17c20.73,25.82,69.84,49.86,44.25,89.08-6.16,9.44-16.52,14.32-27.02,17.34Z"/>
+  <path class="cls-1" d="M378.76,55.49l68.14-.2c4.87.59,9.23,4.96,9.81,9.81-1.42,21.34,1.82,44.94.01,66-.38,4.44-1.99,6.16-4.72,9.41l-194.71,194.72-1.88,1.09-79.74-80.31L371.49,59.99c2.27-1.7,4.36-3.97,7.27-4.51Z"/>
+  <path class="cls-1" d="M136.97,268.29c9.48-1.1,18.3,1.79,25.67,7.65l74.08,74.31c23.44,32.37-15.89,71-48.02,47.23l-74.2-74.2c-16.45-20.61-3.74-51.96,22.46-55Z"/>
+  <path class="cls-1" d="M366.23,268.29c31.3-3.63,49.63,32.24,29.24,56.72-20.89,25.08-50.8,47.8-72.78,72.47-32.76,24.49-73.24-16.96-46.6-48.95,24.84-21.39,47.26-51.73,72.24-72.22,5.05-4.15,11.32-7.25,17.89-8.01Z"/>
 </svg>
