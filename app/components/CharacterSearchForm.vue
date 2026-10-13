@@ -391,11 +391,38 @@ const historyMatches = computed<SearchHistoryEntry[]>(() => {
   )
 })
 
-/** Opens the list on focus or on typing, but only when there is something to show. */
+/**
+ * Whether the remembered characters are under the name field: the list is drawn while this browser has
+ * one and the field holds the cursor (`nameOpen`).
+ *
+ * It is named once because two things read the same answer. One is the pane itself. The other is the lift
+ * on the field (`z-30` in the template): a field's glass is a stacking context of its own (`isolation` in
+ * `app/assets/css/main.css`), so the pane's `z-50` counts only against what stands inside the field - the
+ * field *box* has to be lifted, or the realm field under it, later in the document and a glass of its own,
+ * is painted over the pane's first rows. It is the arrangement the hall of fame's filter bar is built on
+ * (`relative z-20` on the panel, `app/components/leaderboard/LeaderboardFilters.vue`).
+ */
+const historyOpen = computed(() => nameOpen.value && historyMatches.value.length > 0)
+
+/**
+ * Opens the list on focus or on typing, but only when there is something to show.
+ *
+ * Only one of the form's two lists can be under it: the cursor is in this field, so the realm list the
+ * field below opened is shut as the cursor arrives. A press does the same thing (`onDocumentClick`), and
+ * the two would otherwise be drawn over each other - the realm field, later in the document, over the
+ * first rows of this list.
+ */
 const openName = () => {
+  open.value = false
   // A fresh list has nothing highlighted, the way the realm list starts on every keystroke.
   nameActiveIndex.value = -1
   if (history.value.length || favorites.value.length) nameOpen.value = true
+}
+
+/** The same act for the realm field: its list opens as the cursor enters the field, and the history list shuts. */
+const openRealm = () => {
+  nameOpen.value = false
+  open.value = true
 }
 
 
@@ -577,12 +604,21 @@ onBeforeUnmount(() => {
        transparent inside: the material is painted on a layer the box owns, and an `<input>` is a replaced
        element that never gets one, so the box is the field's body and the input is its text. The rim warms to
        the brand gold while the field holds the cursor (`focus-within`), which is what the box's own
-       `focus:border-wow-gold` used to do on the input. -->
+       `focus:border-wow-gold` used to do on the input.
+
+       The list a field drops is drawn inside that glass, and a glass surface is a stacking context of its
+       own (`isolation`, in `app/assets/css/main.css`) - so the pane's own `z-50` says nothing against what
+       stands outside the field, and the field below it, later in the document and a glass of its own, would
+       be painted over the pane's first rows. The field whose list is showing is therefore lifted over the
+       rest of the form (`z-30`, which is above the hall of fame's filter bar at `z-20` as well - this form
+       stands over that bar on the front door) while the field beside it stays where it is, and the two lists
+       take turns (`openName`, `openRealm`), so no field is ever drawn over a list that is already open.
+       Nothing else about the shape moves, and while no list is open neither field is lifted at all. -->
   <form :class="layout.form" @submit.prevent="handleSearch">
     <div
       ref="nameRootEl"
       class="hoa-liquid-glass relative rounded-lg focus-within:[--hoa-ring:rgba(248,183,0,0.55)]"
-      :class="layout.cell"
+      :class="[layout.cell, historyOpen ? 'z-30' : '']"
     >
       <input
         ref="nameInput"
@@ -617,7 +653,7 @@ onBeforeUnmount(() => {
            on typing when there is something to show, a row fills the name and the realm both, and the
            cross on the right drops one character without picking it. -->
       <div
-        v-if="nameOpen && historyMatches.length"
+        v-if="historyOpen"
         class="hoa-pop absolute mt-1 w-full"
       >
         <div class="max-h-72 overflow-y-auto">
@@ -688,7 +724,7 @@ onBeforeUnmount(() => {
       <div
         ref="rootEl"
         class="hoa-liquid-glass relative rounded-lg focus-within:[--hoa-ring:rgba(248,183,0,0.55)]"
-        :class="[layout.cell, realmError ? '[--hoa-ring:rgba(239,68,68,0.75)]' : '']"
+        :class="[layout.cell, realmError ? '[--hoa-ring:rgba(239,68,68,0.75)]' : '', open ? 'z-30' : '']"
       >
         <input
           ref="realmInput"
@@ -699,7 +735,7 @@ onBeforeUnmount(() => {
           :placeholder="placeholders.realm"
           class="w-full rounded-lg bg-transparent text-white placeholder-gray-400 focus:outline-none"
           :class="[layout.input, layout.realm]"
-          @focus="open = true"
+          @focus="openRealm"
           @input="onRealmInput"
           @keydown.down.prevent="move(1)"
           @keydown.up.prevent="move(-1)"
