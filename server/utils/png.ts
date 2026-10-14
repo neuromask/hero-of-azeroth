@@ -85,10 +85,10 @@ function decodePng(input: Buffer | ArrayBuffer): DecodedPng | null {
     const prevOff = rowOff - stride
 
     for (let x = 0; x < stride; x++) {
-      const value = raw[readPos + x]
-      const a = x >= channels ? pixels[rowOff + x - channels] : 0
-      const b = y > 0 ? pixels[prevOff + x] : 0
-      const c = x >= channels && y > 0 ? pixels[prevOff + x - channels] : 0
+      const value = raw[readPos + x]!
+      const a = x >= channels ? pixels[rowOff + x - channels]! : 0
+      const b = y > 0 ? pixels[prevOff + x]! : 0
+      const c = x >= channels && y > 0 ? pixels[prevOff + x - channels]! : 0
 
       let out: number
       switch (filter) {

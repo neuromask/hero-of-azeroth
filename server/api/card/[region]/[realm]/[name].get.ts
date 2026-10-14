@@ -6,19 +6,15 @@
  * than drawn again, for two hours (see `server/utils/swrCache.ts`). A `?force=true` request,
  * which the header's Refresh button sends, waits for a freshly drawn card instead.
  */
+import { parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
+
 const cards = createSwrCache<Buffer>(2 * 60 * 60 * 1000, 256)
 
 export default defineEventHandler(async (event) => {
-  const region = parseRegion(getRouterParam(event, 'region'))
-  const realm = decodeRouteParam(getRouterParam(event, 'realm')).toLowerCase()
-  const name = decodeRouteParam(getRouterParam(event, 'name')).toLowerCase()
+  const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
   const locale = query.locale === 'ru_RU' ? 'ru_RU' : 'en_US'
-  const force = query.force === 'true' || query.force === '1'
-
-  if (!realm || !name) {
-    throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
-  }
+  const force = parseBoolFlag(query.force)
 
   // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
   // of the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.

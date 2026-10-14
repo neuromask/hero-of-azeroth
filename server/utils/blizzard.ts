@@ -25,7 +25,7 @@ const BLIZZARD_TIMEOUT_MS = 15_000
  * The host varies - the game data API, the OAuth token, the account profile - but the need for a bound does
  * not, and a call added here cannot forget it.
  */
-function callBlizzard<T>(url: string, options: Record<string, unknown> = {}): Promise<T> {
+export function callBlizzard<T>(url: string, options: Record<string, unknown> = {}): Promise<T> {
   // Typed by the caller rather than by `$fetch`'s inference off the request: every call below names the shape
   // it expects, and this hands that answer back unchanged.
   return $fetch(url, { timeout: BLIZZARD_TIMEOUT_MS, ...options }) as Promise<T>
@@ -209,7 +209,7 @@ export async function getRealms(region = 'eu', locale = 'en_US'): Promise<Realm[
   }
 
   const token = await getBlizzardToken(region)
-  const data = await $fetch<any>(
+  const data = await callBlizzard<any>(
     `https://${region}.api.blizzard.com/data/wow/realm/index?namespace=dynamic-${region}`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
@@ -795,7 +795,7 @@ export async function getMaxedReputationIds(
 ): Promise<number[]> {
   try {
     const token = await getBlizzardToken(region)
-    const data = await $fetch<any>(
+    const data = await callBlizzard<any>(
       `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/reputations`,
       {
         headers: { Authorization: `Bearer ${token}` },
@@ -830,7 +830,7 @@ export async function getCharacterMountIds(
 ): Promise<number[]> {
   try {
     const token = await getBlizzardToken(region)
-    const data = await $fetch<any>(
+    const data = await callBlizzard<any>(
       `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/collections/mounts`,
       {
         headers: { Authorization: `Bearer ${token}` },
@@ -859,7 +859,7 @@ export async function getCharacterMountIds(
 export async function getCharacterProfessions(realm: string, name: string, region: string): Promise<string[]> {
   try {
     const token = await getBlizzardToken(region)
-    const data = await $fetch<any>(
+    const data = await callBlizzard<any>(
       `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/professions`,
       {
         headers: { Authorization: `Bearer ${token}` },
@@ -977,7 +977,7 @@ export async function getCharacterTransmogs(realm: string, name: string, region:
   const reading = (async (): Promise<number | null> => {
     try {
       const token = await getBlizzardToken(region)
-      const data = await $fetch<any>(
+      const data = await callBlizzard<any>(
         `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}/collections/transmogs`,
         {
           headers: { Authorization: `Bearer ${token}` },

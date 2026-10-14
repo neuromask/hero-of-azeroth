@@ -60,7 +60,21 @@ const DEFAULT_RENDER_BOX = { x: 560, y: 190, w: 480, h: 830 }
 
 /** Class colours live in `#shared/utils/wow-class`, shared with the page and the history. */
 
-const LABELS: Record<string, Record<string, string>> = {
+/** The card's own captions: a label the card draws has no message key of its own, so it lives beside the drawing. */
+interface CardLabels {
+  achievements: string
+  itemLevel: string
+  mPlus: string
+  mounts: string
+  pets: string
+  toys: string
+  decor: string
+  reputations: string
+  score: string
+  level: string
+}
+
+const LABELS: Record<string, CardLabels> = {
   ru_RU: {
     achievements: 'Достижения',
     itemLevel: 'Уровень предметов',
@@ -805,7 +819,7 @@ function tileNumberSize(values: string[], maxWidth: number): number {
     values.every(value => measuredTextWidth(value, candidate) <= maxWidth)
   )
 
-  return size || TILE_NUMBER_SIZES[TILE_NUMBER_SIZES.length - 1]
+  return size || TILE_NUMBER_SIZES[TILE_NUMBER_SIZES.length - 1]!
 }
 
 /**
@@ -891,7 +905,7 @@ function badgeFlow(badges: Badge[]): string {
 
   badges.forEach((badge, index) => {
     const last = rows[rows.length - 1]
-    const grown = last ? last.width + BADGE_GAP + widths[index] : widths[index]
+    const grown = last ? last.width + BADGE_GAP + widths[index]! : widths[index]!
     const limit = !last || last.top < BADGE_WORDMARK_BOTTOM ? BADGE_RIGHT_UNDER_WORDMARK : BADGE_RIGHT
 
     if (last && BADGE_X + grown <= limit) {
@@ -904,14 +918,14 @@ function badgeFlow(badges: Badge[]): string {
       top: last ? last.top + BADGE_HEIGHT + BADGE_ROW_GAP : BADGE_TOP,
       from: index,
       to: index,
-      width: widths[index]
+      width: widths[index]!
     })
   })
 
   // A block that would reach into the grid is lifted just far enough to clear it: the header is
   // laid out for the one row a character usually has, and a row of plates running under a tile
   // reads as a mistake rather than as a tighter header.
-  const foot = rows.length ? rows[rows.length - 1].top + BADGE_HEIGHT : BADGE_TOP
+  const foot = rows.length ? rows[rows.length - 1]!.top + BADGE_HEIGHT : BADGE_TOP
   const lift = Math.max(0, foot + BADGE_CLEAR - TILE_TOP)
   const widest = rows.reduce((max, row) => Math.max(max, row.width), 0)
   const plates: string[] = []
@@ -921,8 +935,8 @@ function badgeFlow(badges: Badge[]): string {
     let x = round2(BADGE_X + (widest - row.width) / 2)
     for (let index = row.from; index <= row.to; index++) {
       plates.push(`<rect x="${round2(x)}" y="${top}" width="${widths[index]}" height="${BADGE_HEIGHT}" rx="${BADGE_RADIUS}" fill="#0b1220" fill-opacity="0.55" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
-  <text x="${round2(x + BADGE_PAD_X)}" y="${baseline(top)}" font-size="${BADGE_TEXT_SIZE}" font-weight="600" fill="${badges[index].color}">${esc(badges[index].text)}</text>`)
-      x = round2(x + widths[index] + BADGE_GAP)
+  <text x="${round2(x + BADGE_PAD_X)}" y="${baseline(top)}" font-size="${BADGE_TEXT_SIZE}" font-weight="600" fill="${badges[index]!.color}">${esc(badges[index]!.text)}</text>`)
+      x = round2(x + widths[index]! + BADGE_GAP)
     }
   }
 
@@ -975,7 +989,7 @@ function tileNumberY(numberSize: number): number {
  * A run the card asks for that is not listed is measured on its own, exactly as all of them were
  * before, so a call site added later costs a rasteriser pass rather than drawing anything wrong.
  */
-function measurementPlan(tiles: Tile[], data: CharacterData, L: Record<string, string>, classColor: string): MeasureRequest[] {
+function measurementPlan(tiles: Tile[], data: CharacterData, L: CardLabels, classColor: string): MeasureRequest[] {
   const plan: MeasureRequest[] = []
   const counts = tiles.map(tile => formatNumber(tile.count))
 
@@ -1068,7 +1082,7 @@ export async function renderCharacterCard(data: CharacterData, locale = 'ru_RU')
 
 async function buildCardSvg(
   data: CharacterData,
-  L: Record<string, string>,
+  L: CardLabels,
   classColor: string,
   backgroundEl: string,
   renderEl: string,
@@ -1119,14 +1133,14 @@ async function buildCardSvg(
     statWidth('item-level', formatNumber(data.ilvl), size) <= PLATE_WIDTH - 24
     && statWidth('key', formatNumber(data.mPlusScore), size) <= PLATE_WIDTH - 24
     && statWidth('trophy', formatNumber(score), size) <= PLATE_WIDTH - 24
-  ) || STATS_NUMBER_SIZES[STATS_NUMBER_SIZES.length - 1]
+  ) || STATS_NUMBER_SIZES[STATS_NUMBER_SIZES.length - 1]!
 
   /**
    * A name that does not fit at 46px is set smaller before it is cut. It is the only line of the
    * header - the character's title is not drawn on the card - so it may run to the wordmark before
    * it is set any smaller, and the plates of detail wait on the row under it.
    */
-  const nameSize = NAME_SIZES.find(size => textWidth(data.name, size) <= NAME_WIDTH) || NAME_SIZES[NAME_SIZES.length - 1]
+  const nameSize = NAME_SIZES.find(size => textWidth(data.name, size) <= NAME_WIDTH) || NAME_SIZES[NAME_SIZES.length - 1]!
 
   // The plates of detail under the name, left to right, wrapping and centring as they go.
   const badgesSvg = badgeFlow(badges)

@@ -49,23 +49,17 @@ import type {
   CollectionSummary,
   CollectionViewOptions
 } from '#shared/data/collectionsSchema'
+import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
 
 const shelves = createSwrCache<CollectionPage>(2 * 60 * 60 * 1000, 256)
 const summaries = createSwrCache<CollectionSummary>(2 * 60 * 60 * 1000, 256)
 
-/** Whether a query flag is on, accepting what a link, a fetch and a form each write. */
-function isOn(value: unknown): boolean {
-  return value === 'true' || value === '1' || value === true || value === 'on'
-}
-
 export default defineEventHandler(async (event) => {
-  const region = parseRegion(getRouterParam(event, 'region'))
-  const realm = decodeRouteParam(getRouterParam(event, 'realm')).toLowerCase()
-  const name = decodeRouteParam(getRouterParam(event, 'name')).toLowerCase()
+  const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
-  const locale = (query.locale as string) || 'en_US'
+  const locale = apiLocale(query)
   const kind = query.kind ? String(query.kind) : ''
-  const force = isOn(query.force)
+  const force = parseBoolFlag(query.force)
   /**
    * How much of the shelf this request is answered with (the rule itself is `selectCollectionView`).
    *
@@ -78,13 +72,9 @@ export default defineEventHandler(async (event) => {
   const sectionsParam = typeof query.sections === 'string' ? query.sections : ''
   const sectionParam = typeof query.section === 'string' ? query.section : ''
   const view: CollectionViewOptions = {
-    unobtainable: isOn(query.unobtainable),
-    upcoming: isOn(query.upcoming),
-    byAccount: isOn(query.byAccount)
-  }
-
-  if (!realm || !name) {
-    throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
+    unobtainable: parseBoolFlag(query.unobtainable),
+    upcoming: parseBoolFlag(query.upcoming),
+    byAccount: parseBoolFlag(query.byAccount)
   }
 
   // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
@@ -142,7 +132,7 @@ export default defineEventHandler(async (event) => {
       )
     }
 
-    const pooled = accountView !== null ? accountCollectedIds(accountView, kind) : null
+    const pooled = accountView !== null ? accountCollectedIds(accountView, kind as CollectionKind) : null
     const account = pooled !== null
 
     // The whole shelf is assembled here and kept by the store; what travels is the slice this request
@@ -159,10 +149,10 @@ export default defineEventHandler(async (event) => {
         // while the account's own shelf pays none, both its ids and its lack of a faction coming from
         // the site: the account's pool, and the fact that an account plays both sides.
         const character = account ? null : await getCharacter(realm, name, region, locale, force)
-        const collected = pooled || (await getCollectedIds(region, realm, name, kind, locale))
+        const collected = pooled || (await getCollectedIds(region, realm, name, kind as CollectionKind, locale))
 
         return {
-          ...buildCollectionPage(kind, locale, region, collected, character?.faction ?? null, view),
+          ...buildCollectionPage(kind as CollectionKind, locale, region, collected, character?.faction ?? null, view),
           account,
           accountAvailable
         }
@@ -171,11 +161,7 @@ export default defineEventHandler(async (event) => {
     )
 
     return selectCollectionView(page, { sections: sectionsParam, section: sectionParam })
-  } catch (err: any) {
-    if (err.statusCode) throw err
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'Failed to fetch character collections from Blizzard API'
-    })
+  } catch (err) {
+    mapBlizzardError(err, 'character collections')
   }
 })

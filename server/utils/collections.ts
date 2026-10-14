@@ -15,7 +15,7 @@
  * shared across every character of an account. The account's shelf is also the one drawn without the
  * faction filter: an account holds characters on both sides, so nothing it holds is out of its reach.
  */
-import { getBlizzardToken } from './blizzard'
+import { callBlizzard, getBlizzardToken } from './blizzard'
 // The account's own ids, for the one shelf a reader is allowed to see as their account's rather than as
 // this character's. The pool is keyed by its own kind names, which `POOL_KIND` below translates into this
 // module's (`decors` is the shelf; `decor` is the pool's own spelling of it).
@@ -77,7 +77,8 @@ interface AtlasGroup {
 }
 
 /** The three trees, as the builder wrote them. */
-const SHELVES = (atlas as unknown as { shelves?: Record<CollectionKind, AtlasGroup[]> }).shelves || {}
+const SHELVES: Partial<Record<CollectionKind, AtlasGroup[]>> =
+  (atlas as unknown as { shelves?: Record<CollectionKind, AtlasGroup[]> }).shelves ?? {}
 
 /** Wowhead's icon CDN, which serves a sprite by the name the atlas stores. */
 const ZAMIMG_ICONS = 'https://wow.zamimg.com/images/wow/icons'
@@ -194,7 +195,7 @@ export async function getCollectedIds(
     `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}` +
     `/collections/${path}?namespace=profile-${region}&locale=${locale}`
 
-  const data = await $fetch<Record<string, any[]>>(url, { headers: { Authorization: `Bearer ${token}` } })
+  const data = await callBlizzard<Record<string, any[]>>(url, { headers: { Authorization: `Bearer ${token}` } })
   const list = data?.[key] || []
 
   return new Set(

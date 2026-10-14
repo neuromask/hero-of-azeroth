@@ -196,7 +196,6 @@ export default defineNuxtConfig({
       { code: 'en', iso: 'en-US', name: 'English', file: 'en.json' },
       { code: 'ru', iso: 'ru-RU', name: 'Русский', file: 'ru.json' }
     ],
-    lazy: true,
     langDir: 'locales',
     // The language is the first path segment and only Russian spells one out:
     // /region-eu/gordunni/neromask is English, /ru/region-eu/gordunni/neromask is

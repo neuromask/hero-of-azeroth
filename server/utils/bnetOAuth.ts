@@ -11,6 +11,20 @@ import type { H3Event } from 'h3'
 import { privateSetting } from './runtimeEnv'
 import type { BlizzardRegion } from './params'
 
+/** How long any call to Battle.net is given before the site stops waiting for it. */
+const BNET_TIMEOUT_MS = 15_000
+
+/**
+ * The one place Battle.net is called, so that every call carries the deadline above.
+ *
+ * These are the OAuth hosts (`battle.net`), not the game-data API `callBlizzard` wraps, but a connection
+ * Battle.net never answers would hold a sign-in or a renewal open just the same - so the same fifteen-second
+ * bound is applied.
+ */
+function callBnet<T>(url: string, options: Record<string, unknown> = {}): Promise<T> {
+  return $fetch(url, { timeout: BNET_TIMEOUT_MS, ...options }) as Promise<T>
+}
+
 /** What the token endpoint answers. `refresh_token` is optional: Battle.net does not always send one. */
 export interface BnetTokens {
   access_token: string
@@ -130,7 +144,7 @@ export function authorizeUrl(event: H3Event, region: BlizzardRegion, state: stri
 export async function exchangeCode(event: H3Event, region: BlizzardRegion, code: string): Promise<BnetTokens> {
   const { clientId, clientSecret, redirectUri } = oauth(event)
 
-  return await $fetch<BnetTokens>(`https://${region}.battle.net/oauth/token`, {
+  return await callBnet<BnetTokens>(`https://${region}.battle.net/oauth/token`, {
     method: 'POST',
     headers: {
       Authorization: basicAuth(clientId, clientSecret),
@@ -148,7 +162,7 @@ export async function exchangeCode(event: H3Event, region: BlizzardRegion, code:
 export async function refreshAccessToken(region: BlizzardRegion, refreshToken: string): Promise<BnetTokens> {
   const { clientId, clientSecret } = clientCredentials()
 
-  return await $fetch<BnetTokens>(`https://${region}.battle.net/oauth/token`, {
+  return await callBnet<BnetTokens>(`https://${region}.battle.net/oauth/token`, {
     method: 'POST',
     headers: {
       Authorization: basicAuth(clientId, clientSecret),
@@ -188,7 +202,7 @@ export function isAuthRefused(error: unknown): boolean {
 
 /** Who the token belongs to: the stable `sub`, the numeric `id` and the battletag. */
 export async function getUserInfo(region: BlizzardRegion, accessToken: string): Promise<BnetUserInfo> {
-  return await $fetch<BnetUserInfo>(`https://${region}.battle.net/oauth/userinfo`, {
+  return await callBnet<BnetUserInfo>(`https://${region}.battle.net/oauth/userinfo`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   })
 }
@@ -202,7 +216,7 @@ export async function getAccountProfile(
   accessToken: string,
   locale = 'en_US'
 ): Promise<AccountProfile> {
-  return await $fetch<AccountProfile>(`https://${region}.api.blizzard.com/profile/user/wow`, {
+  return await callBnet<AccountProfile>(`https://${region}.api.blizzard.com/profile/user/wow`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     query: { namespace: `profile-${region}`, locale }
   })
@@ -226,7 +240,7 @@ export async function getAccountCollection(
   kind: AccountCollectionKind,
   locale = 'en_US'
 ): Promise<unknown> {
-  return await $fetch<unknown>(`https://${region}.api.blizzard.com/profile/user/wow/collections/${kind}`, {
+  return await callBnet<unknown>(`https://${region}.api.blizzard.com/profile/user/wow/collections/${kind}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     query: { namespace: `profile-${region}`, locale }
   })

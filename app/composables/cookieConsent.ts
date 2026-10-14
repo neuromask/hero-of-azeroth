@@ -47,7 +47,9 @@ function load(): void {
     const kept = localStorage.getItem(CONSENT_KEY)
     if (isConsentChoice(kept)) answer.value = kept
   } catch {
-    answer.value = 'denied'
+    // A browser that refuses storage cannot be asked again; treating it as having refused (`false`, which
+    // Consent Mode reads as `denied`) keeps the banner away rather than standing on every page for ever.
+    answer.value = 'false'
   }
 }
 

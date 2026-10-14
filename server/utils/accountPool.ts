@@ -20,6 +20,7 @@
  * with Blizzard's per-character numbers, which is the behaviour the site has always had.
  */
 import { nowSec } from './db'
+import { debugLog } from './logger'
 import { readCharacterReading } from './characterReading'
 // The journal a character's mount tile is measured against, which is served out of the Armoury cache alone
 // and is read here rather than taken from the profile this module is handed (`mountDenominator` below).
@@ -157,7 +158,7 @@ export async function syncAccountCollections(
     added[answer.value.kind] = addToPool(userId, answer.value.kind, idsOf(answer.value.kind, answer.value.data))
   }
 
-  console.log('[accountPool] collections added', JSON.stringify(added))
+  debugLog('[accountPool] collections added', JSON.stringify(added))
 
   // The main's public row follows the pool: the Hall of Fame should compare accounts, not the
   // faction-limited collections of one character.

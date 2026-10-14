@@ -8,6 +8,8 @@
  *
  * Read-only against Blizzard, and idempotent against SQLite: the same upsert the callback runs.
  */
+import { debugLog } from '~~/server/utils/logger'
+
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
   const region = await getSessionRegion(event)
@@ -33,6 +35,6 @@ export default defineEventHandler(async (event) => {
     console.error('[profile/refresh] collections read failed:', error?.data || error?.message || error)
   }
 
-  console.log('[profile/refresh] roster', JSON.stringify(result))
+  debugLog('[profile/refresh] roster', JSON.stringify(result))
   return { ...result, collections }
 })

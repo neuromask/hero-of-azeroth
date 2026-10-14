@@ -29,6 +29,7 @@ import type {
 // an address and an address back into a character, in the one spelling the table and the link both write.
 import { searchHistoryKey } from '#shared/utils/savedCharacters'
 import { regionFromPath } from '~/composables/urls'
+import type { Ref } from 'vue'
 
 /** How long the search box waits after the last keystroke before it asks the server. */
 const SEARCH_DEBOUNCE = 300
@@ -228,10 +229,13 @@ export function useLeaderboardView() {
      * It costs one request the server answers from memory in single-digit milliseconds, which is what the hour of
      * caching is *for*; nothing on screen waits for it (`revalidate` below is the same ask, made silently).
      */
-    headers: { 'cache-control': 'no-cache' },
-    // A failure of the table is a row of dashes, not a broken page: the shell still renders.
-    default: () => null
-  })
+    headers: { 'cache-control': 'no-cache' }
+  }) as unknown as {
+    data: Ref<LeaderboardPage | undefined>
+    pending: Ref<boolean>
+    error: Ref<Error | null>
+    refresh: () => Promise<void>
+  }
 
   /** The page being drawn, or `null` before the first answer has landed. */
   const page = computed(() => data.value || null)

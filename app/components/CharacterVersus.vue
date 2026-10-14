@@ -169,7 +169,7 @@ interface VersusRow extends VersusFigure {
  * say so themselves through their own `accountWide`. A wardrobe and an honor level belong to the account by
  * the game's own design, so both always say the account's.
  */
-function metricsFor(character: CharacterData | null, wardrobe: number | null | undefined): VersusFigure[] {
+function metricsFor(character: CharacterData | null | undefined, wardrobe: number | null | undefined): VersusFigure[] {
   const stats = character?.stats
   const count = (value?: { count?: number } | null) => (typeof value?.count === 'number' ? value.count : null)
   const figure = (value?: number | null) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
@@ -280,7 +280,7 @@ const META_CLASS_BADGE = 'inline-flex max-w-full items-center rounded-md border 
  * inside the height of the portrait they stand beside, which is what keeps the two cards' rows level. A part
  * with nothing to print is left out rather than drawn empty.
  */
-function metaRowsOf(character: CharacterData | null): MetaPill[][] {
+function metaRowsOf(character: CharacterData | null | undefined): MetaPill[][] {
   if (!character) return []
 
   return [

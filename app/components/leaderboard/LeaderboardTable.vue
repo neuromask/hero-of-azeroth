@@ -427,7 +427,7 @@ function open(player: LeaderboardPlayer) {
                 :style="medalOf(index)
                   ? {
                       color: '#0b0b0b',
-                      backgroundColor: medalOf(index),
+                      backgroundColor: medalOf(index)!,
                       boxShadow: `0 0 14px ${medalOf(index)}66`
                     }
                   : { color: '#9ca3af' }"

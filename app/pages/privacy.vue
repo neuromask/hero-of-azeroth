@@ -28,7 +28,7 @@ usePageSeo({
 })
 
 /** The policy, in the order a reader asks the questions in. A section's shape is the frame's. */
-const SECTIONS = [
+const SECTIONS: Array<{ title: string; body: string }> = [
   { title: 'privacyWhatTitle', body: 'privacyWhatBody' },
   { title: 'privacySigninTitle', body: 'privacySigninBody' },
   { title: 'privacyAnalyticsTitle', body: 'privacyAnalyticsBody' },
@@ -36,7 +36,7 @@ const SECTIONS = [
   { title: 'privacyStoreTitle', body: 'privacyStoreBody' },
   { title: 'privacyAccessTitle', body: 'privacyAccessBody' },
   { title: 'privacyUpdateTitle', body: 'privacyUpdateBody' }
-] as const
+]
 </script>
 
 <template>

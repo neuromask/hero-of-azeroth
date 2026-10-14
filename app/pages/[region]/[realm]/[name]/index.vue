@@ -51,6 +51,9 @@ interface StatTile {
   color: string
   display: string
   percent: number
+  /** The count and its total, which the bar and the ratio beside it are drawn from. */
+  count: number
+  total: number
 }
 
 /**
@@ -79,7 +82,7 @@ const tileColumns = computed<StatTile[][]>(() => {
   const noteFor = (key: string) =>
     c.pooled || !characterOwned.includes(key) ? t('accountWide') : t('perCharacter')
 
-  const tiles = [
+  const tiles: Array<{ key: LeaderboardSort; icon: string; label: string; count: number; total: number }> = [
     { key: 'mounts', icon: 'mounts', label: t('mounts'), count: c.stats.mounts.count, total: c.stats.mounts.total },
     { key: 'toys', icon: 'toys', label: t('toys'), count: c.stats.toys.count, total: c.stats.toys.total },
     { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), count: c.stats.reputations.count, total: c.stats.reputations.total },

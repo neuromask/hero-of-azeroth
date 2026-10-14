@@ -19,28 +19,18 @@
  * the profile, the card and the shelves are served from - while a `?force=true` request, which the
  * header's Refresh button sends, waits for a freshly assembled one.
  */
-import { isAchievementCategory, type AchievementPage, type AchievementSummary } from '#shared/data/achievementsSchema'
+import { isAchievementCategory, type AchievementCategory, type AchievementPage, type AchievementSummary } from '#shared/data/achievementsSchema'
+import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
 
 const summaries = createSwrCache<AchievementSummary>(2 * 60 * 60 * 1000, 256)
 const shelves = createSwrCache<AchievementPage>(2 * 60 * 60 * 1000, 512)
 
-/** Whether a query flag is on, accepting what a link, a fetch and a form each write. */
-function isOn(value: unknown): boolean {
-  return value === 'true' || value === '1' || value === true || value === 'on'
-}
-
 export default defineEventHandler(async (event) => {
-  const region = parseRegion(getRouterParam(event, 'region'))
-  const realm = decodeRouteParam(getRouterParam(event, 'realm')).toLowerCase()
-  const name = decodeRouteParam(getRouterParam(event, 'name')).toLowerCase()
+  const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
-  const locale = (query.locale as string) || 'en_US'
+  const locale = apiLocale(query)
   const category = query.category ? String(query.category) : ''
-  const force = isOn(query.force)
-
-  if (!realm || !name) {
-    throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
-  }
+  const force = parseBoolFlag(query.force)
 
   // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
   // of the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
@@ -65,7 +55,7 @@ export default defineEventHandler(async (event) => {
         `${region}:${locale}:${category}:${realm}:${name}`,
         async () => {
           const { collected, faction } = await characterLog()
-          return buildAchievementPage(category, locale, region, collected, faction)
+          return buildAchievementPage(category as AchievementCategory, locale, region, collected, faction)
         },
         force
       )
@@ -79,11 +69,7 @@ export default defineEventHandler(async (event) => {
       },
       force
     )
-  } catch (err: any) {
-    if (err.statusCode) throw err
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'Failed to fetch character achievements from Blizzard API'
-    })
+  } catch (err) {
+    mapBlizzardError(err, 'character achievements')
   }
 })

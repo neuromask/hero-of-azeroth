@@ -21,7 +21,7 @@ interface PageSeoOptions {
    * whose title already reads whole - the character page, which ends in the brand itself -
    * passes its own, so the two are never composed into a title that names the brand twice.
    */
-  titleTemplate?: (title: string) => string
+  titleTemplate?: (title?: string) => string
   /** One sentence for a search result and for a link preview. */
   description: MaybeRefOrGetter<string>
   /**
@@ -36,7 +36,7 @@ interface PageSeoOptions {
   imageAlt?: MaybeRefOrGetter<string>
   imageWidth?: number
   imageHeight?: number
-  imageType?: string
+  imageType?: 'image/jpeg' | 'image/gif' | 'image/png' | 'image/webp' | 'image/avif'
   /** Only a page about a person is a `profile`; everything else is a `website`. */
   ogType?: 'website' | 'profile'
   /** Set while the page has nothing to index: an unknown character, a failure. */
@@ -77,7 +77,7 @@ export function usePageSeo(options: PageSeoOptions) {
    * appends the brand. `og:title` is that same string, because a preview missing its brand reads
    * as a link from nowhere.
    */
-  const titleTemplate = options.titleTemplate || ((title: string) => `${title} · ${SITE_NAME}`)
+  const titleTemplate = options.titleTemplate || ((title?: string) => `${title ?? ''} · ${SITE_NAME}`)
   const fullTitle = computed(() => titleTemplate(toValue(options.title)))
 
   /** The sentence a preview carries, which is the search one unless a page says otherwise. */
@@ -135,11 +135,11 @@ export function usePageSeo(options: PageSeoOptions) {
     htmlAttrs: { lang: () => lang.value },
 
     link: () => [
-      { rel: 'canonical', href: canonical.value },
+      { rel: 'canonical' as const, href: canonical.value },
       // The same page in every language, so a crawler serves the copy that matches
       // the visitor and never treats the two as competing pages.
-      ...SUPPORTED_LOCALES.map((code) => ({ rel: 'alternate', hreflang: code, href: urlFor(code) })),
-      { rel: 'alternate', hreflang: 'x-default', href: urlFor(DEFAULT_LOCALE) }
+      ...SUPPORTED_LOCALES.map((code) => ({ rel: 'alternate' as const, hreflang: code, href: urlFor(code) })),
+      { rel: 'alternate' as const, hreflang: 'x-default', href: urlFor(DEFAULT_LOCALE) }
     ],
 
     script: () => {

@@ -27,13 +27,13 @@ export interface CharacterViewContext {
   /** The language the profile and the feed are read in, which the address's first segment names. */
   apiLocale: ComputedRef<string>
   /** The profile the shell fetched, shared so a view does not read Blizzard for it again. */
-  character: Ref<CharacterData | null>
+  character: Ref<CharacterData | undefined>
   /** The activity feed, once it has been read; `null` until a view asks for it. */
   activity: Ref<ActivityFeed | null>
   /** True while the feed is being read, so the view can show the wait. */
   activityPending: Ref<boolean>
   /** The failure a read of the feed left behind, if it failed. */
-  activityError: Ref<Error | null>
+  activityError: Ref<Error | undefined>
   /** Reads the feed, or leaves it alone when it is already on hand. */
   loadActivity: (force?: boolean) => Promise<void>
   /** The one message the shell shows, raised by the Refresh button and the share tray. */

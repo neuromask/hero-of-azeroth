@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto'
 import type { BlizzardRegion } from '~~/server/utils/params'
 import type { SessionData } from '~~/server/utils/session'
+import { debugLog } from '~~/server/utils/logger'
 
 /** How long the sign-in survives before it has to be repeated. */
 const SESSION_SECONDS = 60 * 60 * 24 * 30
@@ -75,7 +76,7 @@ export default defineEventHandler(async (event) => {
     // retries it, and the log says what came back.
     try {
       const sync = await upsertAccountCharacters(user.id, region, tokens.access_token)
-      console.log('[auth/callback] roster', JSON.stringify(sync))
+      debugLog('[auth/callback] roster', JSON.stringify(sync))
     } catch (syncError: any) {
       console.error('[auth/callback] roster read failed:', syncError?.data || syncError?.message || syncError)
     }

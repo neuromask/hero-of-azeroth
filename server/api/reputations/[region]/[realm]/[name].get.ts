@@ -29,29 +29,19 @@
  */
 import { accountOwnerId, readAccountIds } from '~~/server/utils/accountPool'
 import type { ReputationJournal } from '#shared/data/reputationsSchema'
+import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
 
 const journals = createSwrCache<ReputationJournal>(2 * 60 * 60 * 1000, 256)
 
-/** Whether a query flag is on, accepting what a link, a fetch and a form each write. */
-function isOn(value: unknown): boolean {
-  return value === 'true' || value === '1' || value === true || value === 'on'
-}
-
 export default defineEventHandler(async (event) => {
-  const region = parseRegion(getRouterParam(event, 'region'))
-  const realm = decodeRouteParam(getRouterParam(event, 'realm')).toLowerCase()
-  const name = decodeRouteParam(getRouterParam(event, 'name')).toLowerCase()
+  const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
-  const locale = (query.locale as string) || 'en_US'
-  const force = isOn(query.force)
-
-  if (!realm || !name) {
-    throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
+  const locale = apiLocale(query)
+  const force = parseBoolFlag(query.force)
 
   // A forced refresh spends Blizzard's quota on purpose, so it is charged to whoever asked for it before any
   // of the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
   if (force) requireRefreshBudget(event, region, realm, name)
-  }
 
   /**
    * The account's pool of finished factions, and whether the site holds one for this character's account.
@@ -65,7 +55,7 @@ export default defineEventHandler(async (event) => {
   const poolOwner = accountOwnerId(region, realm, name)
   const poolIds = poolOwner !== null ? readAccountIds(poolOwner, 'reputations') : null
   const accountAvailable = Boolean(poolIds && poolIds.size)
-  const accountFinished = isOn(query.byAccount) && accountAvailable ? poolIds : null
+  const accountFinished = parseBoolFlag(query.byAccount) && accountAvailable ? poolIds : null
 
   try {
     return await journals(
@@ -87,11 +77,7 @@ export default defineEventHandler(async (event) => {
       },
       force
     )
-  } catch (err: any) {
-    if (err.statusCode) throw err
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'Failed to fetch character reputations from Blizzard API'
-    })
+  } catch (err) {
+    mapBlizzardError(err, 'character reputations')
   }
 })

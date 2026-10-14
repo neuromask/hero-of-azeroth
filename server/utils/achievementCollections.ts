@@ -24,7 +24,7 @@
  * because the game makes them so - and this shelf, which is about what this character has earned, is the
  * one place that figure is not read.
  */
-import { getBlizzardToken } from './blizzard'
+import { callBlizzard, getBlizzardToken } from './blizzard'
 import {
   ACHIEVEMENT_CATEGORIES,
   ACHIEVEMENT_LABELS_RU,
@@ -129,7 +129,7 @@ export async function getEarnedAchievementIds(
     `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}` +
     `/achievements?namespace=profile-${region}&locale=${locale}`
 
-  const data = await $fetch<{ achievements?: Array<{ id?: number }> }>(url, {
+  const data = await callBlizzard<{ achievements?: Array<{ id?: number }> }>(url, {
     headers: { Authorization: `Bearer ${token}` }
   })
 

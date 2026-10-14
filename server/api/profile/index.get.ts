@@ -142,7 +142,7 @@ export default defineEventHandler(async (event) => {
         WHERE c.user_id = ?
         ORDER BY c.is_main DESC, c.level DESC, c.name ASC`
     )
-    .all(user.id) as ProfileRow[]
+    .all(user.id) as unknown as ProfileRow[]
 
   const characters: ProfileCharacter[] = rows.map((row) => ({
     id: row.id,

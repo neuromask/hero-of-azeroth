@@ -25,7 +25,7 @@
  * reading across the site: an Exalted faction, a renown ladder at its last level and a delve companion at its
  * hundredth rank all count the same, and the accounts's own figure is measured against the same atlas.
  */
-import { getBlizzardToken } from './blizzard'
+import { callBlizzard, getBlizzardToken } from './blizzard'
 import {
   REPUTATION_MAX_STEPS,
   REPUTATION_STANDING_KEYS,
@@ -86,7 +86,7 @@ const FACTION_SIDE: Record<string, string> = { ALLIANCE: 'ALLIANCE', HORDE: 'HOR
  * knows about keeps the tile from reading over 100%.
  */
 export function reputationTotal(side: string, listed: number, recorded: number): number {
-  const known = reachable[side] ?? Math.max(reachable.ALLIANCE, reachable.HORDE)
+  const known = reachable[side] ?? Math.max(reachable.ALLIANCE!, reachable.HORDE!)
 
   return Math.max(known + Math.max(0, listed - atlas.listed), recorded)
 }
@@ -166,7 +166,7 @@ export async function getReputationStandings(
     `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}` +
     `/reputations?namespace=profile-${region}&locale=${locale}`
 
-  const data = await $fetch<{ reputations?: any[] }>(url, { headers: { Authorization: `Bearer ${token}` } })
+  const data = await callBlizzard<{ reputations?: any[] }>(url, { headers: { Authorization: `Bearer ${token}` } })
   const standings = new Map<number, CharacterStanding>()
 
   for (const entry of data?.reputations || []) {

@@ -8,22 +8,17 @@
 // The reading this endpoint serves, named rather than left to the DOM's own `CharacterData`: the global is
 // what this file used to be typed against, which is a document node rather than a character.
 import type { CharacterData } from '~~/server/utils/blizzard'
+import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
 
 const profiles = createSwrCache<CharacterData>(2 * 60 * 60 * 1000)
 
 export default defineEventHandler(async (event) => {
-  const region = parseRegion(getRouterParam(event, 'region'))
-  const realm = decodeRouteParam(getRouterParam(event, 'realm')).toLowerCase()
-  const name = decodeRouteParam(getRouterParam(event, 'name')).toLowerCase()
+  const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
-  const locale = (query.locale as string) || 'en_US'
+  const locale = apiLocale(query)
   // `?force=true` is the Refresh button: it skips the two hours of cache, waits for a fresh
   // Blizzard lookup and stores it, so the plain URL is answered from the new copy afterwards.
-  const force = query.force === 'true' || query.force === '1'
-
-  if (!realm || !name) {
-    throw createError({ statusCode: 400, statusMessage: 'Realm and Name are required' })
-  }
+  const force = parseBoolFlag(query.force)
 
   // The one request that spends Blizzard's quota on purpose, charged to whoever asked for it before any of
   // the work happens (`server/utils/refreshBudget`); a refusal is a 429 with a `Retry-After`.
@@ -78,11 +73,7 @@ export default defineEventHandler(async (event) => {
     // from a two-hour cache, so it is the only honest answer to "how old are these figures", which the
     // comparison board prints under each character's Refresh button.
     return { ...overlayPool(character, region, realm, name, readAt), fetchedAt: readAt }
-  } catch (err: any) {
-    if (err.statusCode) throw err
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'Failed to fetch character from Blizzard API'
-    })
+  } catch (err) {
+    mapBlizzardError(err, 'character')
   }
 })
