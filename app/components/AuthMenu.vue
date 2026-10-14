@@ -4,15 +4,19 @@
  *
  * Signed out it is the way in and nothing else: the Battle.net mark on the brand's own blue, because the one
  * thing the control promises is that the password is typed on Blizzard's page and never on this one. Signed
- * in it becomes one control that says who the reader is and offers everything the account is for - the roster
- * of characters, the settings and the way back out - rather than the two plates (a link and a sign-out button)
- * that used to stand side by side in the row under the header: the pair belonged together, and a menu is where
- * a reader now finds the third thing the account can do.
+ * in it becomes one control that says who the reader is and offers everything the account is for - the main the
+ * account leads with, the roster of characters, the settings and the way back out - rather than the two plates
+ * (a link and a sign-out button) that used to stand side by side in the row under the header: the pair belonged
+ * together, and a menu is where a reader now finds the third thing the account can do.
  *
  * The state comes from `/api/profile`, which answers `user: null` rather than a 401 - so the same request a
  * signed-out visitor makes is the one the control is drawn from, and the server renders the right half of it
  * (the session cookie rides along with the SSR request). The key is shared with every other reader of the
  * session on the page, so a page reads one request, not several.
+ *
+ * The main the menu leads with comes off that same answer: the roster it carries names it (`isMain`), so the
+ * quickest way to a reader's own character costs no second call - and it is the row the profile page badges and
+ * the hall of fame prints, so the two corners cannot disagree about who the account leads with.
  *
  * A session whose Battle.net sign-in stopped working (`server/utils/session`) gets the way in back, saying what
  * it is for (`signInAgain`): naming an account the site can no longer read is the one thing this corner must
@@ -20,15 +24,27 @@
  *
  * Like the language switch beside it, the control draws no glass of its own - the plate it stands in is the
  * group's (`app/components/HeaderTools.vue`) - and the menu it opens is the site's own pane (`.hoa-pop`). The
- * entries are the site's addresses: the roster is the account page, and the settings are that page carrying the
- * hash the drawer answers (`app/pages/profile.vue`), since a page cannot be asked to open a drawer by a menu
- * that stands somewhere else.
+ * entries are the site's addresses: the main is its character page, the roster is the account page, and the
+ * settings are that page carrying the hash the drawer answers (`app/pages/profile.vue`), since a page cannot be
+ * asked to open a drawer by a menu that stands somewhere else.
  */
+// The class colour the main's name is drawn in, read from the one table the card, the page and the search
+// history share (see `#shared/utils/wow-class`).
+import { classColorHex } from '#shared/utils/wow-class'
+
 const { t } = useI18n()
 const route = useRoute()
 const localeUrl = useLocaleUrl()
 
-const { data } = await useFetch<{ user: { battletag: string | null; authExpired?: boolean } | null }>('/api/profile', {
+const { data } = await useFetch<{
+  user: { battletag: string | null; authExpired?: boolean } | null
+  /**
+   * The account's roster, which the same answer already carries. The menu reads one row of it - the main - so
+   * only the fields that name it and lead to its page are asked for, rather than the whole `ProfileCharacter`
+   * shape the profile page draws.
+   */
+  characters: { region: string; realmSlug: string; name: string; classId: number | null; isMain: boolean }[]
+}>('/api/profile', {
   key: 'profile-identity'
 })
 
@@ -42,6 +58,30 @@ const accountName = computed(() => (user.value?.battletag || '').split('#')[0] |
 
 /** The battletag as the game spells it, account number and all: the one place the site prints it whole. */
 const battletag = computed(() => user.value?.battletag || '')
+
+/**
+ * The character the account leads with, which is the one the menu offers a way to.
+ *
+ * It is the same row the profile page badges and the hall of fame publishes (`isMain`), and the payload arrives
+ * with it first (`server/api/profile` orders by `is_main DESC`); the search here stands in for a build that
+ * ordered the roster otherwise, exactly as the front page reads its own main. An account that has not named a
+ * main yet leads with its first character, which is what the profile page does with the same roster; `null` is
+ * left for an account the site holds no characters for, and that is what keeps the entry out rather than
+ * pointing it at nobody.
+ */
+const mainCharacter = computed(() => {
+  const characters = data.value?.characters || []
+  return characters.find((entry) => entry.isMain) || characters[0] || null
+})
+
+/** The main's own page, in the language being read, or `null` while the account leads with nobody. */
+const mainUrl = computed(() => {
+  const main = mainCharacter.value
+  return main ? localeUrl(`/${regionPath(main.region)}/${main.realmSlug}/${main.name}`) : null
+})
+
+/** The colour the main's name is drawn in, which is its class's - the way the site names a character. */
+const mainHex = computed(() => classColorHex({ classId: mainCharacter.value?.classId }))
 
 withDefaults(
   defineProps<{
@@ -114,6 +154,11 @@ const SEP = 'my-1 block h-px bg-white/10'
 const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500'
 /** The face of an entry, drawn as the panes of the site draw theirs: a small square of glass and a glyph. */
 const GLYPH = 'grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10'
+/**
+ * The face of the main's entry, in the gold the profile page badges that character with: the two corners name
+ * one character, so they wear the one mark (`app/pages/profile.vue`).
+ */
+const MAIN_GLYPH = 'grid h-6 w-6 shrink-0 place-items-center rounded-md border border-wow-gold/50 bg-wow-gold/15 text-wow-goldLight'
 /** The way in, at either width: the brand's blue and the brand's mark, which is the whole of its promise. */
 const SIGN_IN = 'inline-flex h-9 items-center gap-2 rounded-lg bg-[#0074e0]/30 px-3 text-xs font-bold text-white transition-colors hover:bg-[#0074e0]/45'
 </script>
@@ -196,6 +241,30 @@ const SIGN_IN = 'inline-flex h-9 items-center gap-2 rounded-lg bg-[#0074e0]/30 p
 
       <span :class="SEP" aria-hidden="true" />
 
+      <!-- The main the account leads with, straight to its page: a reader who has named a main is far more
+           often on their way to that character than through the roster to find it. The name is drawn in its
+           class's colour and the plate in the gold the profile badges it with, so the two corners say the same
+           thing - and the entry is left out entirely while the account leads with nobody. -->
+      <NuxtLink
+        v-if="mainUrl"
+        :to="mainUrl"
+        role="menuitem"
+        :class="ROW_OFF"
+        :title="t('profileMainBadge')"
+        @click="close"
+      >
+        <span :class="MAIN_GLYPH">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 8.4l3.7 2.8L12 4.6l4.3 6.6L20 8.4l-1.5 9.2a1 1 0 0 1-1 .8H6.5a1 1 0 0 1-1-.8L4 8.4Z" />
+            <path d="M6.6 20.5h10.8" />
+          </svg>
+        </span>
+        <span class="truncate" :style="{ color: mainHex }">{{ mainCharacter?.name }}</span>
+        <span class="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wider text-wow-goldLight">
+          {{ t('profileMain') }}
+        </span>
+      </NuxtLink>
+
       <NuxtLink :to="localeUrl('/profile')" role="menuitem" :class="ROW_OFF" @click="close">
         <span :class="GLYPH"><AppIcon name="user" class="h-3.5 w-3.5" /></span>
         {{ t('navMyCharacters') }}
@@ -224,12 +293,25 @@ const SIGN_IN = 'inline-flex h-9 items-center gap-2 rounded-lg bg-[#0074e0]/30 p
     </div>
   </div>
 
-  <!-- The account in the panel a phone opens the navigation in: the same three entries as rows of it, under
+  <!-- The account in the panel a phone opens the navigation in: the same entries as rows of it, under
        the heading of the group - and no pane under them, because the panel is the pane. They carry no way to
        shut anything: a row that has just been picked is the page being read, and the panel closes on the
        address changing (`app/components/SiteNav.vue`). -->
   <div v-else>
     <p class="mt-1 border-t border-white/10" :class="HEADING">{{ t('navAccountGroup') }}</p>
+
+    <NuxtLink v-if="mainUrl" :to="mainUrl" :class="PANEL_OFF" :title="t('profileMainBadge')">
+      <span :class="MAIN_GLYPH">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 8.4l3.7 2.8L12 4.6l4.3 6.6L20 8.4l-1.5 9.2a1 1 0 0 1-1 .8H6.5a1 1 0 0 1-1-.8L4 8.4Z" />
+          <path d="M6.6 20.5h10.8" />
+        </svg>
+      </span>
+      <span class="truncate" :style="{ color: mainHex }">{{ mainCharacter?.name }}</span>
+      <span class="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wider text-wow-goldLight">
+        {{ t('profileMain') }}
+      </span>
+    </NuxtLink>
 
     <NuxtLink :to="localeUrl('/profile')" :class="PANEL_OFF">
       <span :class="GLYPH"><AppIcon name="user" class="h-3.5 w-3.5" /></span>
