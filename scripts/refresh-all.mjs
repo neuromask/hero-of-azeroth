@@ -85,7 +85,11 @@ function headings() {
 /** Whether the Russian label map already carries a heading, quoted or bare. */
 function labelled(name) {
   const source = fs.readFileSync(LABELS, 'utf8')
-  return source.includes(`'${name}':`) || new RegExp(`\\n\\s{2,4}${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`).test(source)
+  // A name that reads the same in both languages is written as a bare key (`Labyrinths:`) or single-
+  // quoted; a name carrying an apostrophe cannot be single-quoted, so it is double-quoted
+  // (`"Reputation: Slayer's Duellum":`), which is the case this second test is here for.
+  if (source.includes(`'${name}':`) || source.includes(`"${name}":`)) return true
+  return new RegExp(`\\n\\s{2,4}${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`).test(source)
 }
 
 const line = (text = '') => console.log(text)

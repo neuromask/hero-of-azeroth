@@ -76,6 +76,15 @@ export const SIMPLEARMORY_LABELS_RU: Record<string, string> = {
   Vendor: 'Продавцы',
   Reputation: 'Репутация',
   Reputations: 'Репутация',
+  // The reputation sources a toy or a decoration is bought through, named after the quartermaster that
+  // sells it: the vocabulary is the heading's and the faction keeps the name the game gives it.
+  'Reputation: Eversong Woods': 'Репутация: Леса Вечной Песни',
+  "Reputation: Slayer's Duellum": 'Репутация: Дуэлиума палачей',
+  'Reputation: Captain Tokka': 'Репутация: Капитана Токки',
+  'Reputation: Aqir Research Enclave': 'Репутация: Анклава исследователей акиров',
+  'Army of the Light': 'Армия Света',
+  // The halls a Midnight toy or decoration is earned in, which the site files as a source of its own.
+  Labyrinths: 'Лабиринты',
   Renown: 'Известность',
   'Raid Renown': 'Рейдовая известность',
   'Paragon Reputation': 'Парагон-репутация',

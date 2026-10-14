@@ -544,6 +544,13 @@ npm run deploy                          # nothing is live until this runs
 | `points` | `server/utils/achievement-points.json` | the fallback total for achievement points |
 | `reputations` | `server/utils/reputations-data.json` | how many factions each side can work on, the tree the reputation pane is organized by, and the top and steps of every ladder |
 
+The `collections` step downloads SimpleArmory's own lists — mounts, pets, battle pets, toys and
+decorations — into a cache in the OS temp directory before it builds, so the atlas is made from what
+the site answered this run rather than from anything a previous run left; a file the site will not
+answer for falls back to that cached copy. The pets are one shelf whatever they are read from:
+`pets.json` and `battlepets.json` are merged into a single tree, because a character's journal does not
+tell the two apart either.
+
 The three walks (`meta`, `points`, `reputations`) run with `--fresh`, which drops the progress cache each
 of them keeps in the OS temp directory and re-reads every achievement and faction: minutes rather than
 seconds, which is what a patch wants.

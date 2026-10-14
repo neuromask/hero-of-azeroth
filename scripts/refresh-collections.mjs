@@ -10,6 +10,16 @@
  * of adding what a patch brought - a new Trading Post rotation, a new expansion's vendors - so
  * nothing here is keyed to an item or an id: the files are read afresh every run, and a group, a
  * source or an item that has appeared since the last one is simply in the atlas the next time round.
+ *
+ * Every file is downloaded into a cache folder before anything is parsed, so a run is two steps that
+ * can be told apart: what the site answered this time, and what was made of it (see
+ * `downloadShelves`). A file the site will not answer for falls back to the copy the last run left,
+ * which is what keeps a build going through a stumble rather than writing a shelf with half a tree.
+ * The pets are the one shelf read from two files - the pets earned somewhere and the ones caught in
+ * the world - and both are downloaded and folded into the one shelf, because a character's journal
+ * does not tell them apart either: a group both files name is one section, a source both name is one
+ * row, and a pet both list is one tile (see `buildShelf`).
+ *
  * An item carries four things, which is what a tile and a tooltip need: its id, its name in both
  * languages, the icon NAME SimpleArmory writes down for it (`inv_dwarvenmechboss_bronze`) and the
  * Wowhead address the ids it already carries name. Every mark the file makes a row with is carried
@@ -41,6 +51,8 @@
  * Usage: npm run refresh:collections [region] [--only=<kinds|collections|achievements>]  (default region: eu)
  */
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 const REGION = (process.argv.slice(2).find((a) => !a.startsWith('--') && !/^\d+$/.test(a)) || 'eu').toLowerCase()
 /**
@@ -82,6 +94,14 @@ const SIMPLEARMORY = 'https://simplearmory.com/data'
 
 const ROOT = new URL('..', import.meta.url)
 const OUT = new URL('server/utils/collections-data.json', ROOT)
+
+/**
+ * Where the SimpleArmory files are kept between the download and the build. It is the OS temp folder,
+ * the same place the achievement and reputation walks keep theirs, so the copies are thrown away by
+ * the system rather than shipped with the build. The files are the same for every region, so the
+ * folder carries no region in its name: a run for `eu` and a run for `us` read the same lists.
+ */
+const CACHE = path.join(os.tmpdir(), 'hoa-simplearmory')
 
 /** The atlas already on disk, so a `--only` run keeps the shelves it is not rebuilding. */
 const previous = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : { shelves: {} }
@@ -136,6 +156,29 @@ async function fetchText(url, attempt = 0) {
     await sleep(600 * 2 ** attempt)
     return fetchText(url, attempt + 1)
   }
+}
+
+/**
+ * Downloads one SimpleArmory file into the cache folder, so the build parses the copy on disk rather
+ * than the network - which is what makes the download a step of its own - and a file the site will not
+ * answer for is the copy the last run left rather than nothing. Returns how the copy was come by:
+ * `fresh` for this run's download, `cached` for the last run's, `missing` when neither exists.
+ */
+async function download(file) {
+  const text = await fetchText(`${SIMPLEARMORY}/${file}`)
+  const target = path.join(CACHE, file)
+
+  if (!text) return fs.existsSync(target) ? 'cached' : 'missing'
+
+  fs.mkdirSync(CACHE, { recursive: true })
+  fs.writeFileSync(target, text)
+  return 'fresh'
+}
+
+/** The copy of one SimpleArmory file the last download left, as text, or nothing when there is none. */
+function readCached(file) {
+  const target = path.join(CACHE, file)
+  return fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : ''
 }
 
 /** A stable id for a heading: its SimpleArmory name, lower-cased and narrowed to word characters. */
@@ -258,9 +301,38 @@ const SHELVES = [
   { kind: 'decors', files: ['decors.json'], indexPath: 'decor', indexKey: 'decor_items' }
 ]
 
-/** One SimpleArmory file, as the array of groups it is. */
-async function readGroups(file) {
-  const text = await fetchText(`${SIMPLEARMORY}/${file}`)
+/**
+ * Downloads every SimpleArmory file the shelves being built are read from, before anything is parsed.
+ * The pets come from two files and both are fetched here, which is what lets the build fold them into
+ * one shelf afterwards (see `buildShelf`). A file that could not be refreshed is reported and the run
+ * goes on from the cached copy; one that could not be read at all, and has no copy, stops the run
+ * rather than writing an atlas with a shelf missing from it.
+ */
+async function downloadShelves() {
+  const files = new Set()
+  for (const shelf of SHELVES) {
+    if (!builds(shelf.kind)) continue
+    for (const file of shelf.files) files.add(file)
+  }
+  if (builds('achievements')) files.add('achievements.json')
+  if (!files.size) return
+
+  const results = await Promise.all([...files].map(async (file) => ({ file, state: await download(file) })))
+  const cached = results.filter((result) => result.state === 'cached').map((result) => result.file)
+  const missing = results.filter((result) => result.state === 'missing').map((result) => result.file)
+
+  console.log(`SimpleArmory: ${results.length - cached.length - missing.length} of ${results.length} file(s) refreshed`)
+  if (cached.length) console.warn(`  ⚠ kept the cached copy of: ${cached.join(', ')}`)
+  if (missing.length) throw new Error(`SimpleArmory's ${missing.join(', ')} could not be read and nothing is cached`)
+}
+
+/**
+ * One SimpleArmory file, as the array of groups it is - read from the copy `downloadShelves` left in
+ * the cache folder, which is this run's download when the site answered and the last run's when it
+ * did not.
+ */
+function readGroups(file) {
+  const text = readCached(file)
   if (!text) throw new Error(`SimpleArmory's ${file} could not be read`)
   return JSON.parse(text)
 }
@@ -294,12 +366,15 @@ async function buildShelf({ kind, files, indexPath, indexKey }) {
   let written = 0
 
   for (const file of files) {
-    for (const group of await readGroups(file)) {
+    for (const group of readGroups(file)) {
       const section = tree.section(GENERAL_BUCKETS.has(group.name || '') ? GENERAL_GROUP : group.name)
       for (const cat of group.subcats || []) {
         const source = tree.source(section, cat.name)
         for (const item of cat.items || []) {
-          if (shared) {
+          // A pet both files list is one tile: the second mention is folded away. Only a row both
+          // files name by the same id is a repeat - a row without one is kept as it stands, because
+          // two nameless rows are not the same pet.
+          if (shared && item.ID !== undefined && item.ID !== null) {
             if (filed.has(item.ID)) continue
             filed.add(item.ID)
           }
@@ -401,7 +476,7 @@ async function achievementCategoryNames() {
  * over a category is counted as the file counts it.
  */
 async function buildAchievements() {
-  const text = await fetchText(`${SIMPLEARMORY}/achievements.json`)
+  const text = readCached('achievements.json')
   if (!text) throw new Error("SimpleArmory's achievements.json could not be read")
 
   const [enIndex, ruIndex, labels, source] = await Promise.all([
@@ -469,6 +544,11 @@ const data = {
   // shelf and nothing else.
   shelves: { ...previous.shelves }
 }
+
+// Every SimpleArmory file the shelves being built are read from is downloaded into the cache folder
+// first, so the build below parses this run's copy - and the pets' two files are downloaded together,
+// because the shelf they make is one.
+await downloadShelves()
 
 let shelvesBuilt = 0
 for (const shelf of SHELVES) {
