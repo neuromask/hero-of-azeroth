@@ -345,3 +345,86 @@ describe('what a refresh leaves the rest of the site', () => {
     )
   })
 })
+
+describe('the documents a profile read leaves for the shelves', () => {
+  it('are reused by a collections shelf instead of read again', async () => {
+    const { getCharacter } = await load()
+    const collections = await import('../../server/utils/collections')
+
+    await getCharacter('gordunni', 'neuromask', 'eu', 'en_US')
+    const readsBefore = asked.filter((url) => url.includes('/collections/mounts')).length
+
+    const ids = await collections.getCollectedIds('eu', 'gordunni', 'neuromask', 'mounts', 'en_US')
+
+    expect(ids.size).toBe(documents.mounts)
+    expect(asked.filter((url) => url.includes('/collections/mounts')).length).toBe(readsBefore)
+  })
+
+  it('are reused by the reputation journal instead of read again', async () => {
+    const { getCharacter } = await load()
+    const reputations = await import('../../server/utils/reputations')
+
+    await getCharacter('gordunni', 'neuromask', 'eu', 'en_US')
+    const readsBefore = asked.filter((url) => url.includes('/reputations?')).length
+
+    await reputations.getReputationStandings('eu', 'gordunni', 'neuromask', 'en_US')
+
+    expect(asked.filter((url) => url.includes('/reputations?')).length).toBe(readsBefore)
+  })
+})
+
+describe('the lifecycle of the shared documents', () => {
+  it('are replaced when a refresh reads the character again', async () => {
+    const { getCharacter } = await load()
+    const collections = await import('../../server/utils/collections')
+
+    await getCharacter('gordunni', 'neuromask', 'eu', 'en_US')
+    documents.mounts = 1234
+    vi.advanceTimersByTime(20_000)
+    await getCharacter('gordunni', 'neuromask', 'eu', 'en_US', true)
+
+    const ids = await collections.getCollectedIds('eu', 'gordunni', 'neuromask', 'mounts', 'en_US')
+    expect(ids.size).toBe(1234)
+  })
+
+  it('expire with the profile they were read for', async () => {
+    const { getCharacter } = await load()
+    const collections = await import('../../server/utils/collections')
+
+    await getCharacter('gordunni', 'neuromask', 'eu', 'en_US')
+    const readsBefore = asked.filter((url) => url.includes('/collections/mounts')).length
+
+    vi.advanceTimersByTime(11 * 60 * 1000)
+    await collections.getCollectedIds('eu', 'gordunni', 'neuromask', 'mounts', 'en_US')
+
+    expect(asked.filter((url) => url.includes('/collections/mounts')).length).toBe(readsBefore + 1)
+  })
+
+  it('stay with the character they were read for', async () => {
+    const { getCharacter } = await load()
+    const collections = await import('../../server/utils/collections')
+
+    await getCharacter('gordunni', 'alpha', 'eu', 'en_US')
+    documents.mounts = 5
+
+    const other = await collections.getCollectedIds('eu', 'gordunni', 'beta', 'mounts', 'en_US')
+    expect(other.size).toBe(5)
+
+    const own = await collections.getCollectedIds('eu', 'gordunni', 'alpha', 'mounts', 'en_US')
+    expect(own.size).toBe(1200)
+  })
+
+  it('do not file a document the first read could not get', async () => {
+    const { getCharacter } = await load()
+    const collections = await import('../../server/utils/collections')
+
+    failing = 'api.blizzard.com/profile/wow/character/gordunni/fresh/collections/mounts'
+    await getCharacter('gordunni', 'fresh', 'eu', 'en_US')
+    const readsBefore = asked.filter((url) => url.includes('/collections/mounts')).length
+
+    failing = ''
+    await collections.getCollectedIds('eu', 'gordunni', 'fresh', 'mounts', 'en_US')
+
+    expect(asked.filter((url) => url.includes('/collections/mounts')).length).toBe(readsBefore + 1)
+  })
+})

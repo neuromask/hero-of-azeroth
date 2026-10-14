@@ -475,6 +475,16 @@ async function fetchCharacterProfile(
   const professionsData = professions.status === 'fulfilled' ? professions.value : null
   const pvpData = pvp.status === 'fulfilled' ? pvp.value : null
 
+  // The documents the tiles were counted from are filed so a shelf or the journal that follows this page can
+  // reuse them instead of reading Blizzard again (`rememberCharacterDocs`).
+  rememberCharacterDocs(region, realm, name, locale, {
+    mounts: mountsData,
+    pets: petsData,
+    toys: toysData,
+    decor: decorData,
+    reputations: repsData
+  })
+
   const rawAssets = mediaData?.assets || []
   const mainRaw = rawAssets.find((a: any) => a.key === 'main-raw')?.value
   const mainRender = rawAssets.find((a: any) => a.key === 'main')?.value || rawAssets[0]?.value
@@ -636,6 +646,76 @@ const pendingCharacters = new Map<string, Promise<CharacterData>>()
 
 /** The entries kept before the expired ones are swept, so the map cannot grow without end. */
 const CHARACTER_CACHE_LIMIT = 500
+
+/**
+ * The raw collection and reputation documents a profile read fetched, kept so a shelf or the journal that
+ * follows the page does not read them again.
+ *
+ * `fetchCharacterProfile` reads four collections and the reputations to compute the overview tiles, and a
+ * reader who then opens a shelf or the journal is asking for the very documents those tiles were counted from.
+ * Without this the second ask is a second Blizzard read - four collections and the reputations fetched again
+ * a moment after they were fetched - so the documents are filed here as the profile is read, under the
+ * character's own address and locale, and answered for as long as the profile itself is served
+ * (`CHARACTER_CACHE_SECONDS`). A shelf still reads the document itself: what is shared is the bytes, not the
+ * view, so a shelf and a tile can never disagree about a number.
+ */
+const characterDocs = new Map<string, { at: number; data: Partial<Record<CharacterDocKind, unknown>> }>()
+
+/** The documents a profile read carries, by the endpoint path that produces each. */
+export type CharacterDocKind = 'mounts' | 'pets' | 'toys' | 'decor' | 'reputations'
+
+/** The entries kept before the expired ones are swept, so the map cannot grow without end. */
+const CHARACTER_DOCS_LIMIT = 500
+
+/** The raw document of one kind, or `undefined` when none is on file or it has expired. */
+export function recallCharacterDoc(
+  region: string,
+  realm: string,
+  name: string,
+  locale: string,
+  kind: CharacterDocKind
+): unknown {
+  const entry = characterDocs.get(`${region}:${realm}:${name}:${locale}`.toLowerCase())
+  if (!entry || entry.at + CHARACTER_CACHE_SECONDS < Math.floor(Date.now() / 1000)) return undefined
+  return entry.data[kind]
+}
+
+/** Files the documents a profile read fetched, so a shelf or the journal can reuse them. */
+export function rememberCharacterDocs(
+  region: string,
+  realm: string,
+  name: string,
+  locale: string,
+  data: Partial<Record<CharacterDocKind, unknown>>
+): void {
+  const key = `${region}:${realm}:${name}:${locale}`.toLowerCase()
+  const now = Math.floor(Date.now() / 1000)
+
+  if (characterDocs.size >= CHARACTER_DOCS_LIMIT && !characterDocs.has(key)) {
+    for (const [heldKey, entry] of characterDocs) {
+      if (entry.at + CHARACTER_CACHE_SECONDS < now) characterDocs.delete(heldKey)
+    }
+  }
+
+  const entry = characterDocs.get(key) ?? { at: now, data: {} }
+  let filed = false
+  for (const kind of ['mounts', 'pets', 'toys', 'decor', 'reputations'] as const) {
+    if (data[kind] != null) {
+      entry.data[kind] = data[kind]
+      filed = true
+    }
+  }
+
+  if (filed) {
+    entry.at = now
+    characterDocs.set(key, entry)
+  }
+}
+
+/** Drops every document, for a test that has to start from a clean map. */
+export function clearCharacterDocs(): void {
+  characterDocs.clear()
+}
 
 /**
  * The reading, with any collection figure it could not read taken from the last reading instead.

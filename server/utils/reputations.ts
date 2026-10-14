@@ -25,7 +25,7 @@
  * reading across the site: an Exalted faction, a renown ladder at its last level and a delve companion at its
  * hundredth rank all count the same, and the accounts's own figure is measured against the same atlas.
  */
-import { callBlizzard, getBlizzardToken } from './blizzard'
+import { callBlizzard, getBlizzardToken, recallCharacterDoc } from './blizzard'
 import {
   REPUTATION_MAX_STEPS,
   REPUTATION_STANDING_KEYS,
@@ -155,18 +155,7 @@ export interface CharacterStanding {
  * character has a record with, which is why a shelf reads factions against the atlas rather than against
  * this map - a faction missing from it is one the character has never touched, not one they cannot raise.
  */
-export async function getReputationStandings(
-  region: string,
-  realm: string,
-  name: string,
-  locale: string
-): Promise<Map<number, CharacterStanding>> {
-  const token = await getBlizzardToken(region)
-  const url =
-    `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}` +
-    `/reputations?namespace=profile-${region}&locale=${locale}`
-
-  const data = await callBlizzard<{ reputations?: any[] }>(url, { headers: { Authorization: `Bearer ${token}` } })
+function standingsFrom(data: { reputations?: any[] } | undefined): Map<number, CharacterStanding> {
   const standings = new Map<number, CharacterStanding>()
 
   for (const entry of data?.reputations || []) {
@@ -185,6 +174,26 @@ export async function getReputationStandings(
   }
 
   return standings
+}
+
+export async function getReputationStandings(
+  region: string,
+  realm: string,
+  name: string,
+  locale: string
+): Promise<Map<number, CharacterStanding>> {
+  // The document the profile just read (to count the maxed factions) is the one this journal is about to read
+  // (for the full standings), so it is reused rather than read again (`recallCharacterDoc`).
+  const cached = recallCharacterDoc(region, realm, name, locale, 'reputations')
+  if (cached) return standingsFrom(cached as { reputations?: any[] })
+
+  const token = await getBlizzardToken(region)
+  const url =
+    `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}` +
+    `/reputations?namespace=profile-${region}&locale=${locale}`
+
+  const data = await callBlizzard<{ reputations?: any[] }>(url, { headers: { Authorization: `Bearer ${token}` } })
+  return standingsFrom(data)
 }
 
 /** A heading or a faction's name in the page's language, English standing in for the rest. */
