@@ -23,7 +23,7 @@ import type {
 import { useCharacterView } from './characterView'
 
 export function useCollection(kind: () => CollectionKind, view: Ref<CollectionViewOptions>) {
-  const { region, realm, name, apiLocale } = useCharacterView()
+  const { region, realm, name, apiLocale, profileRevision } = useCharacterView()
 
   /**
    * Whether this shelf's account-wide list may be asked for at all: only the ones Blizzard serves
@@ -71,7 +71,7 @@ export function useCollection(kind: () => CollectionKind, view: Ref<CollectionVi
   const result = useAsyncData<CollectionPage | null>(
     () =>
       `collection:${kind()}:${region}:${realm}:${name}:${apiLocale.value}:` +
-      `${flags.value.unobtainable ? 'u' : ''}${flags.value.upcoming ? 'p' : ''}${flags.value.byAccount ? 'a' : ''}`,
+      `${flags.value.unobtainable ? 'u' : ''}${flags.value.upcoming ? 'p' : ''}${flags.value.byAccount ? 'a' : ''}@v${profileRevision.value}`,
     () => {
       const query = baseQuery()
       // Only the shelf's first section of tiles travels with the document; the rest are read as the page is
@@ -87,7 +87,8 @@ export function useCollection(kind: () => CollectionKind, view: Ref<CollectionVi
         apiLocale,
         () => flags.value.unobtainable,
         () => flags.value.upcoming,
-        () => flags.value.byAccount
+        () => flags.value.byAccount,
+        profileRevision
       ]
     }
   )
@@ -161,20 +162,20 @@ export function useCollection(kind: () => CollectionKind, view: Ref<CollectionVi
  * shelves it summarises.
  */
 export function useCollectionSummary(view: Ref<CollectionViewOptions>) {
-  const { region, realm, name, apiLocale } = useCharacterView()
+  const { region, realm, name, apiLocale, profileRevision } = useCharacterView()
 
   /** Whether the page is asking for the account's numbers, which is the one flag this read carries. */
   const byAccount = computed(() => Boolean(view.value.byAccount))
 
   return useAsyncData<CollectionSummary | null>(
-    () => `collections:summary:${region}:${realm}:${name}:${apiLocale.value}${byAccount.value ? ':a' : ''}`,
+    () => `collections:summary:${region}:${realm}:${name}:${apiLocale.value}${byAccount.value ? ':a' : ''}@v${profileRevision.value}`,
     () =>
       $fetch<CollectionSummary>(
         `/api/collections/${region}/${realm}/${name}?locale=${apiLocale.value}${byAccount.value ? '&byAccount=1' : ''}`
       ),
     {
       default: () => null,
-      watch: [apiLocale, byAccount]
+      watch: [apiLocale, byAccount, profileRevision]
     }
   )
 }

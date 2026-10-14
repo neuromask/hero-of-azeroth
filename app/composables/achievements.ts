@@ -12,31 +12,31 @@ import { useCharacterView } from './characterView'
 
 /** The root page's read: every category, summarised, under one running total. */
 export function useAchievementSummary() {
-  const { region, realm, name, apiLocale } = useCharacterView()
+  const { region, realm, name, apiLocale, profileRevision } = useCharacterView()
 
   return useAsyncData<AchievementSummary | null>(
-    () => `achievements:summary:${region}:${realm}:${name}:${apiLocale.value}`,
+    () => `achievements:summary:${region}:${realm}:${name}:${apiLocale.value}@v${profileRevision.value}`,
     () => $fetch<AchievementSummary>(`/api/achievements/${region}/${realm}/${name}?locale=${apiLocale.value}`),
     {
       default: () => null,
-      watch: [apiLocale]
+      watch: [apiLocale, profileRevision]
     }
   )
 }
 
 /** One category's shelf, read by its slug. */
 export function useAchievementPage(category: () => AchievementCategory) {
-  const { region, realm, name, apiLocale } = useCharacterView()
+  const { region, realm, name, apiLocale, profileRevision } = useCharacterView()
 
   return useAsyncData<AchievementPage | null>(
-    () => `achievements:page:${category()}:${region}:${realm}:${name}:${apiLocale.value}`,
+    () => `achievements:page:${category()}:${region}:${realm}:${name}:${apiLocale.value}@v${profileRevision.value}`,
     () => {
       const query = new URLSearchParams({ category: category(), locale: apiLocale.value })
       return $fetch<AchievementPage>(`/api/achievements/${region}/${realm}/${name}?${query}`)
     },
     {
       default: () => null,
-      watch: [() => category(), apiLocale]
+      watch: [() => category(), apiLocale, profileRevision]
     }
   )
 }

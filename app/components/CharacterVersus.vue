@@ -643,7 +643,7 @@ onBeforeUnmount(() => {
           <h2 class="text-base font-bold text-white">{{ $t('vsPickTitle') }}</h2>
           <p class="mt-0.5 text-xs leading-relaxed text-gray-400">{{ $t('vsPickHint') }}</p>
 
-          <CharacterSearchForm class="mt-4" target="versus" :vs-base="vsBase" autofocus />
+          <CharacterSearchForm class="mt-4" target="versus" :vs-base="vsBase" />
 
           <!-- The favorites: the shape the search field's own list offers them in, under the heading the site
                now calls them by ("Favorites", `i18n/locales`). They are in `localStorage`, so they are drawn

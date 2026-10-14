@@ -9,6 +9,7 @@
 // what this file used to be typed against, which is a document node rather than a character.
 import type { CharacterData } from '~~/server/utils/blizzard'
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
+import { bumpProfileRevision } from '~~/server/utils/profileRevision'
 
 const profiles = createSwrCache<CharacterData>(2 * 60 * 60 * 1000)
 
@@ -48,6 +49,11 @@ export default defineEventHandler(async (event) => {
       },
       force
     )
+
+    // A forced read is the one moment every shelf cached against the old profile stops being the answer: the
+    // stamp below is folded into each shelf's own cache key, so a reader who refreshes and then opens a shelf
+    // is served the shelf built from this fresh reading, not from the one up to two hours old.
+    if (force) bumpProfileRevision(region, realm, name)
 
     // And the same feed stands here as well, on *every* request rather than only on a fresh lookup, which
     // is the whole point of it standing outside the cache above: a profile lives there for two hours, so a

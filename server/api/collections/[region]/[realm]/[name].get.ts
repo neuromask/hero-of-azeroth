@@ -50,6 +50,7 @@ import type {
   CollectionViewOptions
 } from '#shared/data/collectionsSchema'
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
+import { profileRevision } from '~~/server/utils/profileRevision'
 
 const shelves = createSwrCache<CollectionPage>(2 * 60 * 60 * 1000, 256)
 const summaries = createSwrCache<CollectionSummary>(2 * 60 * 60 * 1000, 256)
@@ -112,7 +113,7 @@ export default defineEventHandler(async (event) => {
       const account = accountKinds.size > 0
 
       return await summaries(
-        `${region}:${locale}:${realm}:${name}${account ? `:a${accountView}` : ''}`,
+        `${region}:${locale}:${realm}:${name}${account ? `:a${accountView}` : ''}@${profileRevision(region, realm, name)}`,
         async () => {
           // The character is read for its faction and for the shelves the pool has nothing for - and the
           // shelves it *does* have are counted without a faction, which is what makes them the account's.
@@ -141,7 +142,7 @@ export default defineEventHandler(async (event) => {
     // asks for as it is scrolled to) is served from that one assembled shelf.
     const page = await shelves(
       `${region}:${locale}:${kind}:${realm}:${name}:${view.unobtainable ? 'u' : ''}${view.upcoming ? 'p' : ''}` +
-        `${account ? `:a${accountView}` : ''}`,
+        `${account ? `:a${accountView}` : ''}@${profileRevision(region, realm, name)}`,
       async () => {
         // The character is read for its faction as well as for its ids: an item only the other side
         // can hold is not on this shelf at all. It is the same profile the shell above the view

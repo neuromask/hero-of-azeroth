@@ -12,7 +12,7 @@ import type { ReputationJournal } from '#shared/data/reputationsSchema'
 import { useCharacterView } from './characterView'
 
 export function useReputationJournal(view?: Ref<{ byAccount?: boolean }>) {
-  const { region, realm, name, apiLocale } = useCharacterView()
+  const { region, realm, name, apiLocale, profileRevision } = useCharacterView()
 
   /**
    * Whether the account's reading of the journal was asked for, which is the one flag this read carries: the
@@ -22,14 +22,14 @@ export function useReputationJournal(view?: Ref<{ byAccount?: boolean }>) {
   const byAccount = computed(() => Boolean(view?.value.byAccount))
 
   return useAsyncData<ReputationJournal | null>(
-    () => `reputations:${region}:${realm}:${name}:${apiLocale.value}${byAccount.value ? ':a' : ''}`,
+    () => `reputations:${region}:${realm}:${name}:${apiLocale.value}${byAccount.value ? ':a' : ''}@v${profileRevision.value}`,
     () =>
       $fetch<ReputationJournal>(
         `/api/reputations/${region}/${realm}/${name}?locale=${apiLocale.value}${byAccount.value ? '&byAccount=1' : ''}`
       ),
     {
       default: () => null,
-      watch: [apiLocale, byAccount]
+      watch: [apiLocale, byAccount, profileRevision]
     }
   )
 }

@@ -30,6 +30,7 @@
 import { accountOwnerId, readAccountIds } from '~~/server/utils/accountPool'
 import type { ReputationJournal } from '#shared/data/reputationsSchema'
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
+import { profileRevision } from '~~/server/utils/profileRevision'
 
 const journals = createSwrCache<ReputationJournal>(2 * 60 * 60 * 1000, 256)
 
@@ -59,7 +60,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     return await journals(
-      `${region}:${locale}:${realm}:${name}${accountFinished ? `:a${poolOwner}` : ''}`,
+      `${region}:${locale}:${realm}:${name}${accountFinished ? `:a${poolOwner}` : ''}@${profileRevision(region, realm, name)}`,
       async () => {
         // The character is read for its faction as well as for its reputations: a faction only the other
         // side may raise is not on this journal at all. It is the same profile the shell above the view

@@ -474,6 +474,8 @@ const sharing = ref(false)
  */
 const refreshing = ref(false)
 const cooldown = ref(0)
+/** A stamp that moves each time a refresh lands; the shelves key their own reads by it. */
+const profileRevision = ref(0)
 let cooldownTimer: ReturnType<typeof setInterval> | undefined
 
 const canRefresh = computed(() => !refreshing.value && cooldown.value === 0)
@@ -548,6 +550,10 @@ async function refreshProfile() {
       `/api/character/${region}/${realm}/${name}?locale=${apiLocale.value}&force=true`
     )
     character.value = fresh
+    // The shelves (collections, achievements, reputations) key their own reads by this character, so the
+    // refresh has to reach them too: moving the stamp makes each shelf re-read against the fresh profile
+    // rather than against the copy up to two hours old.
+    profileRevision.value += 1
     // The card is a picture of this profile, so the copy on hand is of an older one now.
     cardBlob.value = null
     await loadCardBlob(true)
@@ -582,6 +588,7 @@ provideCharacterView({
   refreshProfile,
   refreshing,
   cooldown,
+  profileRevision,
   canRefresh
 })
 /** The rendered card, cached so the share sheet can open without waiting for it. */

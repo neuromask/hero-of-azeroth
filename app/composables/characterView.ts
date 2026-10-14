@@ -51,6 +51,8 @@ export interface CharacterViewContext {
   refreshing: Ref<boolean>
   /** Seconds left before another refresh may be taken (`0` when one may), shared for the reason above. */
   cooldown: Ref<number>
+  /** A stamp that moves each time a refresh lands, folded into a shelf's own key so it re-reads. */
+  profileRevision: Ref<number>
   /** Whether a refresh may be taken right now: not already reading, and not cooling down. */
   canRefresh: ComputedRef<boolean>
 }

@@ -21,6 +21,7 @@
  */
 import { isAchievementCategory, type AchievementCategory, type AchievementPage, type AchievementSummary } from '#shared/data/achievementsSchema'
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
+import { profileRevision } from '~~/server/utils/profileRevision'
 
 const summaries = createSwrCache<AchievementSummary>(2 * 60 * 60 * 1000, 256)
 const shelves = createSwrCache<AchievementPage>(2 * 60 * 60 * 1000, 512)
@@ -52,7 +53,7 @@ export default defineEventHandler(async (event) => {
   try {
     if (category) {
       return await shelves(
-        `${region}:${locale}:${category}:${realm}:${name}`,
+        `${region}:${locale}:${category}:${realm}:${name}@${profileRevision(region, realm, name)}`,
         async () => {
           const { collected, faction } = await characterLog()
           return buildAchievementPage(category as AchievementCategory, locale, region, collected, faction)
@@ -62,7 +63,7 @@ export default defineEventHandler(async (event) => {
     }
 
     return await summaries(
-      `${region}:${locale}:${realm}:${name}`,
+      `${region}:${locale}:${realm}:${name}@${profileRevision(region, realm, name)}`,
       async () => {
         const { collected, faction } = await characterLog()
         return buildAchievementSummary(locale, collected, faction)
