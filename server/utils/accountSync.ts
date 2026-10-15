@@ -168,6 +168,9 @@ export interface CharacterRow {
   is_main?: number
 }
 
+/** A character being read in full, shared so two passes over the same alt wait once. */
+const pendingRefreshes = new Map<number, ReturnType<typeof doRefreshCharacterStats>>()
+
 /**
  * Reads one character live and writes what it says: the row's own fields and one snapshot.
  *
@@ -179,7 +182,19 @@ export interface CharacterRow {
  * Returns the profile, so the endpoint can hand the page the same document the site's public
  * character reader would.
  */
-export async function refreshCharacterStats(row: CharacterRow, locale = 'en_US') {
+export function refreshCharacterStats(row: CharacterRow, locale = 'en_US') {
+  const running = pendingRefreshes.get(row.id)
+  if (running) return running
+
+  const read = doRefreshCharacterStats(row, locale).finally(() => {
+    pendingRefreshes.delete(row.id)
+  })
+  pendingRefreshes.set(row.id, read)
+
+  return read
+}
+
+async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
   const profile = await getCharacter(row.realm_slug, row.name_key, row.region, locale)
   // The portrait is not on the summary and the professions are a document of their own, so both are
   // read here - where a character is read in full - and kept on the row the tiles draw from.

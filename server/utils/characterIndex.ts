@@ -92,6 +92,26 @@ function identity(record: Pick<IndexedCharacter, 'region' | 'realm' | 'name'>): 
   return `${record.region}:${record.realm}:${record.name}`.toLowerCase()
 }
 
+/** Whether an index record already says everything this profile does, updatedAt aside. */
+function isSameIndexRecord(a: IndexedCharacter, b: IndexedCharacter): boolean {
+  return (
+    a.displayName === b.displayName &&
+    (a.avatar || '') === (b.avatar || '') &&
+    a.faction === b.faction &&
+    a.classId === b.classId &&
+    a.level === b.level &&
+    a.ilvl === b.ilvl &&
+    a.mPlusScore === b.mPlusScore &&
+    a.mounts === b.mounts &&
+    a.pets === b.pets &&
+    a.toys === b.toys &&
+    a.decor === b.decor &&
+    a.reputations === b.reputations &&
+    a.achievements === b.achievements &&
+    a.honorableKills === b.honorableKills
+  )
+}
+
 /** The list as it is stored; a file that is missing, unreadable or not a list reads as an empty one. */
 export async function readCharacterIndex(): Promise<IndexedCharacter[]> {
   try {
@@ -180,6 +200,9 @@ export function rememberCharacter(character: {
         achievements: character.achievements ?? previous?.achievements,
         honorableKills: character.honorableKills ?? previous?.honorableKills
       }
+
+      // A record that already says everything this profile does is left as it was.
+      if (previous && isSameIndexRecord(previous, record)) return
 
       const rest = index.filter((entry) => identity(entry) !== key)
       // The character just seen goes to the front, so the cap above drops the stalest page.
