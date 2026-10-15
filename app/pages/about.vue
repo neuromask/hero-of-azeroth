@@ -21,7 +21,7 @@
  */
 definePageMeta({ alias: '/ru/about' })
 
-import backdrop from '~/assets/img/bg-02.webp'
+import backdrop from '~/assets/img/hf-bg_01.webp'
 
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()

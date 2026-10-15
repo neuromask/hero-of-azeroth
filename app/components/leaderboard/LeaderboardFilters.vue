@@ -175,23 +175,32 @@ function clear() {
        the two panes it opens - the realm menu and the legend of the score - are not cut off from the
        page behind them and blur what they hang over. -->
   <div class="hoa-panel hoa-panel-layered relative z-20 space-y-3 p-3 sm:p-4">
-    <!-- The columns. A chip is a switch rather than a tab: several can be on at once, each one keeps its column
-         in the table and takes it away again, which is what lets a reader put two figures side by side and drop
-         the rest. The search that narrows whatever they show stands on the row below, beside the legend of the
-         score. -->
-    <div class="flex flex-wrap gap-2" role="group" :aria-label="t('lbColumns')">
-      <button
-        v-for="chip in COLUMN_CHIPS"
-        :key="chip.key"
-        type="button"
-        :aria-pressed="isShown(chip.key)"
-        class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs sm:text-sm"
-        :class="isShown(chip.key) ? 'hoa-tab-active' : ''"
-        @click="emit('toggle-column', chip.key)"
-      >
-        <AppIcon :name="chip.icon" class="h-[1.05em] w-[1.05em]" />
-        <span>{{ t(chip.label) }}</span>
-      </button>
+    <!-- The columns and the legend of the score, on one row. A chip is a switch rather than a tab: several can
+         be on at once, each one keeps its column in the table and takes it away again, which is what lets a
+         reader put two figures side by side and drop the rest. The search that narrows whatever they show stands
+         on the row below; the legend stands at the far end of this one, in the corner of the block. -->
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2" role="group" :aria-label="t('lbColumns')">
+        <button
+          v-for="chip in COLUMN_CHIPS"
+          :key="chip.key"
+          type="button"
+          :aria-pressed="isShown(chip.key)"
+          class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs sm:text-sm"
+          :class="isShown(chip.key) ? 'hoa-tab-active' : ''"
+          @click="emit('toggle-column', chip.key)"
+        >
+          <AppIcon :name="chip.icon" class="h-[1.05em] w-[1.05em]" />
+          <span>{{ t(chip.label) }}</span>
+        </button>
+      </div>
+
+      <!-- The legend of the score, in the corner of the block: a question mark that opens the multipliers the
+           score column is made of, so a reader who wonders where a figure comes from has the answer one click
+           away - and in the corner of the panel rather than on a row of its own. The control is the profile's
+           own as well: one component, one table of weights, read off the formula itself
+           (`app/components/ScoreLegend.vue`). It stands outside the group above, because it is not a column. -->
+      <ScoreLegend class="ml-auto" />
     </div>
 
     <!-- The one-click filters: which side, which realm. -->
@@ -289,18 +298,11 @@ function clear() {
         @click="clear()"
       >{{ t('lbReset') }}</button>
 
-      <!-- The legend of the score, at the far end of the row: a question mark that opens the multipliers the
-           overall column is made of, so a reader who wonders where a number comes from has the answer one
-           click away. The control is the profile's own as well - one component, one table of weights, read
-           off the formula itself (`app/components/ScoreLegend.vue`). -->
-      <ScoreLegend class="ml-auto" />
-
-      <!-- And the search for a name, to the right of it: it narrows the table rather than switching a column on,
-           so it is not one of the chips above - and the row it used to share with them was the row a reader
-           looks past to reach the figures. Beside the legend it stands at the end of the filters, where a
-           narrowing field belongs, and it keeps the whole width of a phone (`w-full`) rather than a corner of
-           it. -->
-      <label class="relative block w-full lg:w-72">
+      <!-- And the search for a name: it narrows the table rather than switching a column on, so it is not one of
+           the chips above - and the row it used to share with them was the row a reader looks past to reach the
+           figures. It stands against the right edge of the row (`lg:ml-auto`), where a narrowing field belongs,
+           and it keeps the whole width of a phone (`w-full`) rather than a corner of it. -->
+      <label class="relative block w-full lg:ml-auto lg:w-72">
         <span class="sr-only">{{ t('lbSearch') }}</span>
         <svg
           class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"

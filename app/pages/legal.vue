@@ -16,7 +16,7 @@
  */
 definePageMeta({ alias: '/ru/legal' })
 
-import backdrop from '~/assets/img/bg-05.webp'
+import backdrop from '~/assets/img/hf-bg_01.webp'
 
 const { t } = useI18n()
 

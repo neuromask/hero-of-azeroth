@@ -1082,7 +1082,7 @@ onMounted(loadFavorites)
                 >{{ stat.display }}</span>
                 <!-- And beside the gold figure itself, the question a reader is owed an answer to: the
                      multipliers the site's own score is made of, in the same popup the hall of fame carries
-                     at the end of its filter row (`app/components/ScoreLegend.vue`). It stands with the
+                     in the corner of its filter block (`app/components/ScoreLegend.vue`). It stands with the
                      score rather than with the buttons above, because it is the score it explains. Two layers
                      are what keep the pane open over what stands under it: the plate carries one (`z-30`),
                      so the drop clears the note below it inside the card, and the card itself carries the

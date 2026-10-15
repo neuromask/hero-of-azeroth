@@ -4,9 +4,13 @@
  * summed from.
  *
  * One component because the question is asked in two places and the answer must not be written twice. The hall of
- * fame asks it at the end of its filter row, where the score is the first column of the table below
+ * fame asks it in the corner of its filter block, where the score is the first column of the table below
  * (`LeaderboardFilters.vue`); the profile asks it beside the main's own gold figure, which is the same number,
  * computed by the same rule on the server (`app/pages/profile.vue`, `server/utils/playerScore.ts`).
+ *
+ * The button wears the site's own question as its tooltip (`lbLegendTitle`), while the pane it opens is titled
+ * with what it explains (`lbLegendHeading`): the pane is the one that names the score, so the two are separate
+ * messages rather than one read twice.
  *
  * The multipliers are read off `SCORE_WEIGHTS` rather than written out here, so the panel a reader opens and the
  * formula the server computes with cannot drift apart: this is the same table, drawn. It opens in the pane every
@@ -82,9 +86,9 @@ onBeforeUnmount(() => {
       class="hoa-pop absolute top-full mt-2 w-72 p-3 transition-opacity duration-150"
       :class="[align === 'right' ? 'right-0' : 'left-0', open ? 'opacity-100' : 'invisible opacity-0']"
       role="dialog"
-      :aria-label="t('lbLegendTitle')"
+      :aria-label="t('lbLegendHeading')"
     >
-      <p class="text-[11px] font-semibold uppercase tracking-wider text-wow-goldLight">{{ t('lbLegendTitle') }}</p>
+      <p class="text-[11px] font-semibold uppercase tracking-wider text-wow-goldLight">{{ t('lbLegendHeading') }}</p>
       <p class="mt-1 text-xs leading-relaxed text-gray-400">{{ t('lbLegendIntro') }}</p>
 
       <ul class="mt-3 space-y-1.5">

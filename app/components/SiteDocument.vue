@@ -22,7 +22,11 @@
  */
 withDefaults(
   defineProps<{
-    /** The artwork the page stands on, which a document takes from the site's own pictures. */
+    /**
+     * The artwork the page stands on. A document takes the hall of fame's own picture
+     * (`app/pages/index.vue`), so a reader who followed a link in the foot of that page arrives on the very
+     * backdrop they left - and the three documents stand on one picture rather than three.
+     */
     image: string
     /**
      * The page's name, as a message key: this is the heading the header prints, and the page itself sets the
