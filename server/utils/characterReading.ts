@@ -25,6 +25,8 @@ import { calculatePlayerScore } from './playerScore'
 import { binEdges, DISTRIBUTION_BINS } from './distribution'
 // Who the statistics are about, and how a memo of them is thrown away when that moves.
 import { bumpStatisticsRevision, populationRows, statisticsRevision } from './statisticsPopulation'
+// The season a stored Mythic+ rating is counted in: a score read before the season began counts as nothing.
+import { seasonRating, seasonRatingSql } from './mplus'
 // The row a guest's reading is drawn from, rewritten here the moment the reading moves.
 import { refreshGuestRow } from './leaderboardRows'
 
@@ -56,7 +58,8 @@ export function readCharacterReading(region: string, realm: string, name: string
   try {
     const row = useDb()
       .prepare(
-        `SELECT c.level AS level, c.stats_read_at AS read_at, s.ilvl AS ilvl, s.mplus_score AS mplus
+        `SELECT c.level AS level, c.stats_read_at AS read_at, c.ilvl AS ilvl,
+                s.mplus_score AS mplus, s.taken_at AS taken_at
            FROM characters c
            LEFT JOIN snapshots s ON s.id = (
              SELECT id FROM snapshots WHERE character_id = c.id ORDER BY taken_at DESC LIMIT 1
@@ -65,12 +68,15 @@ export function readCharacterReading(region: string, realm: string, name: string
           LIMIT 1`
       )
       .get(region, String(realm).toLowerCase(), String(name).toLowerCase()) as
-      | { level: number | null; read_at: number | null; ilvl: number | null; mplus: number | null }
+      | { level: number | null; read_at: number | null; ilvl: number | null; mplus: number | null; taken_at: number | null }
       | undefined
 
     if (!row) return null
 
-    return { ilvl: row.ilvl, mplus: row.mplus, level: row.level, readAt: row.read_at }
+    // The rating is read in the season Blizzard is running rather than in the one it was read in (`./mplus`): a
+    // score from a season that has passed counts as nothing, and the live profile the caller holds wins with the
+    // score of the season being played.
+    return { ilvl: row.ilvl, mplus: seasonRating(row.mplus, row.taken_at), level: row.level, readAt: row.read_at }
   } catch {
     // No database, or none with this character: the caller keeps its own reading, which is the honest
     // answer for a site that has never stored one.
@@ -88,7 +94,6 @@ export function readCharacterReading(region: string, realm: string, name: string
  */
 const METRIC_COLUMNS: Record<MetricKey, string> = {
   score: 'score',
-  ilvl: 'ilvl',
   mPlusScore: 'mplus_score',
   achievements: 'achievements',
   mounts: 'mounts',
@@ -109,7 +114,7 @@ const METRIC_COLUMNS: Record<MetricKey, string> = {
  *
  * Read here, beside `fileDailyReading`, because the point's shape is the writer's business: the snapshot's
  * snake_case column is mapped to the camelCase the wire speaks in one place (`METRIC_COLUMNS`), so a change to
- * a column cannot drift the reader and the writer apart. One metric rather than all fifteen, because a view
+ * a column cannot drift the reader and the writer apart. One metric rather than all fourteen, because a view
  * that draws one figure at a time should pay for one figure at a time. A character the site has no row for is
  * `null`.
  *
@@ -132,7 +137,10 @@ export function readCharacterHistory(
 
   if (!row) return null
 
-  const column = METRIC_COLUMNS[metric]
+  // The Mythic+ rating is counted in the season Blizzard is running rather than in the one it was read in
+  // (`./mplus`): a point read before the season began reads as nothing, which is where a new season starts.
+  const column =
+    metric === 'mPlusScore' ? seasonRatingSql(METRIC_COLUMNS[metric], 'taken_at') : METRIC_COLUMNS[metric]
 
   const points =
     row.user_id === null
@@ -167,7 +175,7 @@ const DISTRIBUTION_MEMO_LIMIT = 64
 const distributionMemo = new Map<string, { revision: number; answer: DistributionResponse }>()
 
 /**
- * One metric's distribution over the site's own readings, for every one of the fifteen figures.
+ * One metric's distribution over the site's own readings, for every one of the fourteen figures.
  *
  * The population is the one `./statisticsPopulation` describes - every guest the site has read, and the main of
  * every account that signed in, and nobody else - which is the same population a history is drawn from and the
@@ -290,6 +298,17 @@ export function readSnapshotDistribution(metric: MetricKey, playerKeys: string[]
 }
 
 /**
+ * A reading as a caller hands it in: the figures a profile carries, any of which may be missing.
+ *
+ * `CharacterData` is what a full Blizzard read answers with, and it is what the two readers of a profile hand
+ * over. A caller that has read *one* figure hands over that one - the tray fetches the wardrobe, which no profile
+ * carries (`server/api/transmog`) - and everything it does not say is carried forward from the newest point
+ * already on file, exactly as a partial profile is (`fileDailyReading` below). So the shape is the profile with
+ * every field optional, its nested stats included.
+ */
+export type ProfileReading = Partial<Omit<CharacterData, 'stats'>> & { stats?: Partial<CharacterData['stats']> }
+
+/**
  * Files a character's reading as its own point, along with the moment it was taken.
  *
  * The moment is written first and always: `stats_read_at` is what a character page weighs its own cached
@@ -307,35 +326,44 @@ export function readSnapshotDistribution(metric: MetricKey, playerKeys: string[]
  * into the database (`./statisticsMigration`) files the day that table recorded instead, because a reading taken
  * days ago must not be filed as one taken now - a history would then start with a point that never happened.
  */
-export function fileDailyReading(characterId: number, profile: CharacterData, readAt?: number): void {
+export function fileDailyReading(characterId: number, profile: ProfileReading, readAt?: number): void {
   const db = useDb()
   const moment = readAt ?? nowSec()
 
   db.prepare('UPDATE characters SET stats_read_at = ? WHERE id = ?').run(moment, characterId)
 
+  // The item level is not a figure of the reading any more: it is what the character *wears*, so it is written on
+  // the character's own row, beside its level (`./db`) - and only where this reading carries one, so a lookup that
+  // did not ask for it leaves the figure that is there alone. That is the rule the readings state for a figure
+  // they do not carry, applied to a fact that lives one level up.
+  if (typeof profile.ilvl === 'number') {
+    db.prepare('UPDATE characters SET ilvl = ? WHERE id = ?').run(profile.ilvl, characterId)
+  }
+
   const reading: Record<string, number | null> = {
-    ilvl: profile.ilvl ?? null,
     mplus_score: profile.mPlusScore ?? null,
     achievements: profile.ap ?? null,
-    mounts: profile.stats.mounts.count,
-    pets: profile.stats.pets.count,
-    toys: profile.stats.toys.count,
-    decor: profile.stats.decor.count,
-    reputations: profile.stats.reputations?.count ?? null,
+    // The collections a profile carries, each read only where it is there: a caller that has read one figure
+    // hands over one figure, and the four below are carried forward from the newest point like everything else.
+    mounts: profile.stats?.mounts?.count ?? null,
+    pets: profile.stats?.pets?.count ?? null,
+    toys: profile.stats?.toys?.count ?? null,
+    decor: profile.stats?.decor?.count ?? null,
+    reputations: profile.stats?.reputations?.count ?? null,
     // And the figures beside the collections. Each is the character's own reading where the profile carries
     // one, and `null` where it does not - the appearance sources, which a page read does not fetch - which is
     // what keeps a figure read by the account sync from being blanked by a page that never asked for it.
-    titles: profile.stats.titles?.count ?? null,
-    quests: profile.stats.quests?.count ?? null,
-    recipes: profile.stats.recipes?.count ?? null,
-    transmogs: profile.stats.transmogs?.count ?? null,
-    honorable_kills: profile.stats.honorableKills?.count ?? null,
-    honor_level: profile.stats.honorLevel?.count ?? null
+    titles: profile.stats?.titles?.count ?? null,
+    quests: profile.stats?.quests?.count ?? null,
+    recipes: profile.stats?.recipes?.count ?? null,
+    transmogs: profile.stats?.transmogs?.count ?? null,
+    honorable_kills: profile.stats?.honorableKills?.count ?? null,
+    honor_level: profile.stats?.honorLevel?.count ?? null
   }
 
   const latest = db
     .prepare(
-      `SELECT ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+      `SELECT mplus_score, achievements, mounts, pets, toys, decor, reputations,
               titles, quests, recipes, transmogs, honorable_kills, honor_level, taken_at
          FROM snapshots WHERE character_id = ? ORDER BY taken_at DESC LIMIT 1`
     )
@@ -373,11 +401,10 @@ export function fileDailyReading(characterId: number, profile: CharacterData, re
   // point already on file, so two reads inside one second cannot collide on the unique key.
   const takenAt = latest && latest.taken_at >= moment ? latest.taken_at + 1 : moment
 
-  // Seventeen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
+  // Sixteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
   const values = [
     characterId,
     takenAt,
-    next.ilvl,
     next.mplus_score,
     next.achievements,
     next.mounts,
@@ -396,9 +423,9 @@ export function fileDailyReading(characterId: number, profile: CharacterData, re
 
   db.prepare(
     `INSERT INTO snapshots
-       (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+       (character_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor, reputations,
         titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(...(values as any[]))
 
   // A reading was filed, so the population's aggregates are stale from this moment: a distribution memo keyed on

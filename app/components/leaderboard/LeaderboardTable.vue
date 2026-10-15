@@ -189,9 +189,9 @@ function initial(player: LeaderboardPlayer): string {
  * is a button, and the figure it names is the preset the endpoint already understands - so ordering
  * by pets is the same request as ordering by mounts, with a different word in it.
  *
- * Two of the nine are written out rather than translated: `M+` and `ilvl` are the game's own
- * shorthand, a player reads them the same in either language, and a translated header is exactly
- * what makes a table look foreign.
+ * One of the eight is written out rather than translated: `M+` is the game's own shorthand, a player reads it the
+ * same in either language, and a translated header is exactly what makes a table look foreign. The item level is
+ * not a column at all - it is read beside the level under a row's name (`metaLine` below).
  */
 const COLUMNS: {
   key: LeaderboardSort
@@ -206,9 +206,8 @@ const COLUMNS: {
   { key: 'pets', label: 'pets', field: 'pets' },
   { key: 'decor', label: 'decor', field: 'decor' },
   { key: 'reputations', label: 'reputations', field: 'reputations' },
-  { key: 'mplus', label: 'M+', field: 'mPlusScore', literal: true },
   { key: 'kills', label: 'lbColKills', field: 'honorableKills' },
-  { key: 'ilvl', label: 'ilvl', field: 'ilvl', literal: true }
+  { key: 'mplus', label: 'M+', field: 'mPlusScore', literal: true }
 ]
 
 /**
@@ -266,24 +265,40 @@ const NAME_WIDTH_MIN = 19.5
 /**
  * What a column's header says.
  *
- * Two columns are named by the figure itself - `M+` and `ilvl` are read that way in every locale - and the
- * `literal` flag on `COLUMNS` is what marks them. The rest are words the locale supplies.
+ * One column is named by the figure itself - `M+` is read that way in every locale - and the `literal` flag on
+ * `COLUMNS` is what marks it. The rest are words the locale supplies.
  */
 function columnLabel(column: { label: string; literal?: boolean }): string {
   return column.literal ? column.label : t(column.label)
 }
 
 /**
- * The figure a column prints for a player.
- *
- * An item level is the one column with a rule of its own - it only reads beside the others among
- * characters who have finished the climb (see `isAtItemLevelCap`) - so a character who has not
- * prints a dash rather than a number that cannot be compared with the rest of its column. Every
- * other column prints what it holds, and an unknown figure prints as a dash in any case.
+ * The figure a column prints for a player: what the row holds, and a dash for a figure that is not there.
  */
 function cell(player: LeaderboardPlayer, column: { key: LeaderboardSort; field: keyof LeaderboardPlayer }): string {
-  if (column.key === 'ilvl' && !isAtItemLevelCap(player.level)) return '—'
   return format(player[column.field] as number)
+}
+
+/**
+ * The line under a row's name: the realm, the class, the level and the item level.
+ *
+ * The item level is read here rather than as a column of its own. It is what a character *wears* rather than what
+ * it has gathered, so it belongs with the line that says what the character is - the same pair the header of a
+ * character's own page and the comparison board's cards read (`app/pages/[region]/[realm]/[name].vue`). And it is
+ * the one figure with a rule of its own: it only reads beside the others among characters who have finished the
+ * climb (`isAtItemLevelCap`), so a row below the cap prints the level alone rather than a number that cannot be
+ * compared with the rest of the table.
+ */
+function metaLine(player: LeaderboardPlayer): string {
+  const parts = [
+    realmLabel(player.region, player.realm, player.realmName),
+    className(player.classId),
+    `${t('lbLevel')} ${formatNumber(player.level)}`
+  ]
+
+  if (isAtItemLevelCap(player.level)) parts.push(`ilvl ${formatNumber(player.ilvl)}`)
+
+  return parts.join(' · ')
 }
 
 /** The rank a row carries in the whole table, not just on the page it is drawn on. */
@@ -550,7 +565,7 @@ function open(player: LeaderboardPlayer) {
                   </div>
 
                   <p class="truncate text-xs text-gray-500">
-                    {{ realmLabel(player.region, player.realm, player.realmName) }} · {{ className(player.classId) }} · {{ t('lbLevel') }} {{ formatNumber(player.level) }}
+                    {{ metaLine(player) }}
                   </p>
                 </div>
               </div>

@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { fileDailyReading, readCharacterHistory, readSnapshotDistribution } from '../../server/utils/characterReading'
 import { fileAccountReading } from '../../server/utils/accountPool'
 import { claimGuestCharacter } from '../../server/utils/accountSync'
+import { fileTransmogReading } from '../../server/utils/profileFeed'
 import { bumpStatisticsRevision } from '../../server/utils/statisticsPopulation'
 import { createMemoryDb, installUseDb, type MemoryDb } from '../helpers/memoryDb'
 
@@ -57,7 +58,6 @@ function account(userId: number, characters: Array<{ name: string; mounts: numbe
     memory.addSnapshot({
       characterId: id,
       takenAt: 1000,
-      ilvl: 300,
       mplus: 0,
       mounts: character.mounts,
       pets: 1,
@@ -101,7 +101,6 @@ describe('the population the statistics are counted over', () => {
     memory.addSnapshot({
       characterId: id,
       takenAt: 1000,
-      ilvl: 300,
       mounts: 40,
       pets: 1,
       toys: 1,
@@ -140,7 +139,6 @@ describe('the population the statistics are counted over', () => {
     memory.addSnapshot({
       characterId: row.id,
       takenAt: 2000,
-      ilvl: 300,
       mounts: 99,
       pets: 1,
       toys: 1,
@@ -166,7 +164,6 @@ describe('the population the statistics are counted over', () => {
     memory.addSnapshot({
       characterId: row.id,
       takenAt: 2000,
-      ilvl: 300,
       mounts: 99,
       pets: 1,
       toys: 1,
@@ -213,7 +210,6 @@ describe('the population the statistics are counted over', () => {
     memory.addSnapshot({
       characterId: id,
       takenAt: 1000,
-      ilvl: 300,
       mplus: 0,
       mounts: 10,
       pets: 1,
@@ -310,5 +306,64 @@ describe('the figure a member is placed by', () => {
       rank: null,
       percentile: null
     })
+  })
+
+  it('has no figure for a character until the wardrobe is read, and one afterwards', () => {
+    guest('stranger', 10)
+
+    // What a panel holds when it is opened *before* the wardrobe has been read: the character is in the population
+    // of every other metric, but not in this one - the figure does not exist yet, so no bucket can be marked.
+    expect(readSnapshotDistribution('transmogs', ['eu:gordunni:stranger']).positions[0]).toMatchObject({
+      key: 'eu:gordunni:stranger',
+      value: null,
+      rank: null
+    })
+
+    // The tray is opened, the wardrobe is read and filed, and the very same question is answered afresh: the
+    // revision every distribution memo is keyed on moved with the reading (`bumpStatisticsRevision`).
+    fileTransmogReading('eu', 'gordunni', 'stranger', 12_000)
+
+    expect(readSnapshotDistribution('transmogs', ['eu:gordunni:stranger']).positions[0]).toMatchObject({
+      key: 'eu:gordunni:stranger',
+      value: 12_000,
+      rank: 1
+    })
+  })
+
+  it("places a character by the wardrobe the tray has read: its own for a guest, its account's for an account", () => {
+    const id = guest('stranger', 10)
+
+    // The wardrobe is the one figure of the fifteen a profile does not carry: it is read by the tray alone, and
+    // filing that reading is what puts the character into this metric's population at all - a guest has no
+    // account's sync to read it for them (`fileTransmogReading`).
+    fileTransmogReading('eu', 'gordunni', 'stranger', 12_000)
+
+    const answer = readSnapshotDistribution('transmogs', ['eu:gordunni:stranger'])
+
+    expect(answer.positions[0]).toMatchObject({ key: 'eu:gordunni:stranger', value: 12_000 })
+    expect(answer.bins.some((bin) => 12_000 >= bin.from && 12_000 <= bin.to)).toBe(true)
+
+    // And the rest of the point is carried forward, so the figures the page had already read are still there.
+    expect(
+      memory.db
+        .prepare('SELECT mounts, transmogs FROM snapshots WHERE character_id = ? ORDER BY taken_at DESC LIMIT 1')
+        .get(id)
+    ).toMatchObject({ mounts: 10, transmogs: 12_000 })
+
+    // A character of an account is placed by the *account* instead, which is the rule every figure of the
+    // population follows: the wardrobe is filed as the reading of the character whose tray was opened, the
+    // account's own point takes it up (the best of its roster's readings), and both of its characters are marked
+    // by the account's figure - the alt here is marked by 9 000 and by nothing of its own.
+    account(42, [
+      { name: 'Main', mounts: 20, isMain: true },
+      { name: 'Alt', mounts: 30 }
+    ])
+    fileTransmogReading('eu', 'gordunni', 'alt', 9_000)
+
+    expect(
+      readSnapshotDistribution('transmogs', ['eu:gordunni:main', 'eu:gordunni:alt']).positions.map(
+        (entry) => entry.value
+      )
+    ).toEqual([9_000, 9_000])
   })
 })

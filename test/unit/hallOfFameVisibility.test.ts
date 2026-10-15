@@ -37,7 +37,6 @@ describe('the keys a row and a presence dot are compared by', () => {
     memory.addSnapshot({
       characterId: main,
       takenAt: 1000,
-      ilvl: 320,
       mounts: 100,
       pets: 10,
       toys: 10,
@@ -52,7 +51,6 @@ describe('the keys a row and a presence dot are compared by', () => {
     memory.addSnapshot({
       characterId: stranger.id,
       takenAt: 1000,
-      ilvl: 300,
       mounts: 5,
       pets: 1,
       toys: 1,

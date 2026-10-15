@@ -379,6 +379,7 @@
   "historyNoData": "Истории пока нет",
   "distributionTitle": "Распределение",
   "distributionNoData": "Распределения пока нет",
+  "distributionNotRead": "У этого персонажа цифра ещё не прочитана",
   "historyTop": "Топ {percent}%",
   "historyError": "Не удалось загрузить историю",
   "historyTooShort": "Пока нет значения",

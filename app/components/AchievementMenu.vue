@@ -84,7 +84,7 @@ watch(
          so the two read as one control. -->
     <button
       type="button"
-      class="hoa-tab hoa-liquid-glass -ml-px rounded-l-none px-2"
+      class="hoa-tab hoa-liquid-glass -ml-px rounded-l-none px-3"
       :class="{ 'hoa-tab-active': props.active || open }"
       aria-haspopup="true"
       :aria-expanded="open"

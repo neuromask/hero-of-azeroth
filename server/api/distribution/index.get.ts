@@ -3,7 +3,7 @@
  *
  * The endpoint answers from what the site already has - no Blizzard lookup, and no disk after the first read.
  * The population is the site's own readings (`readSnapshotDistribution`): every character it has read, one
- * figure each, taken at that character's newest point. One population for all fifteen figures, and the same
+ * figure each, taken at that character's newest point. One population for all fourteen figures, and the same
  * one a character's history is drawn from - so a comparison board is drawing one table's worth of everybody and
  * the site's own record of the two characters in it.
  *

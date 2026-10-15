@@ -37,6 +37,8 @@ import { reputationReachableTotal } from './reputations'
 // The overall rating, and the one place it is computed: the account's own figure, the table's column and
 // every page's tile are one number because they are one call (`server/utils/playerScore`).
 import { calculatePlayerScore, scoreFigures, type ScoreInput } from './playerScore'
+// The season a stored Mythic+ rating is counted in (`./mplus`): a score read before the season began is nothing.
+import { seasonRatingSql } from './mplus'
 // The identity the hall of fame keys a row on, so the totals below are handed back under the key
 // the table itself looks a row up by.
 import { leaderboardKey } from './leaderboardExclusions'
@@ -195,7 +197,6 @@ export function syncPoolFigures(userId: number, figures: Partial<Record<'titles'
   return added
 }
 
-/** The account's own totals, as the profile, the card and the hall of fame read them. */
 /**
  * The figures an account holds beside the six its rating weighs: what its characters have *done*, rather than
  * what they keep.
@@ -222,15 +223,24 @@ export interface AccountExtra {
 }
 
 /**
- * The account's own totals: the six figures the site ranks by, plus the three facts about an account that
- * are not collections of them.
+ * The account's own totals: the six figures the site ranks by, plus the facts about an account that are not
+ * collections of them - its rating, the overall score read off the six, and the figures beside them
+ * (`AccountExtra`).
  *
  * It extends `AccountFigures` rather than listing the six again, so a figure added to the rating is a
  * figure of an account's totals by construction - and the table, the profile page and a character page
  * cannot be reading three different sets of the same account.
  */
 export interface AccountTotals extends AccountFigures {
-  ilvl: number | null
+  /**
+   * The Mythic+ rating of the account, which is the highest any of its characters stands at (`AccountMaxes`).
+   *
+   * There is no item level beside it, and that is deliberate: an item level is never the account's. It is
+   * what *one* character wears, so it is read from a character's own row (`characters.ilvl`) wherever a
+   * character is printed - the hall of fame's row takes it from the very character the row is named after,
+   * and the account's page prints the main's. Aggregating it would put a number on the account that no
+   * character ever wore, which is the same reason the level is not here either.
+   */
   mplus: number | null
   /** The overall rating the hall of fame ranks by, read off the six figures above. */
   score: number
@@ -348,7 +358,6 @@ function readAccountPool(userId: number): AccountPool {
 
 /** The best reading of each figure among the characters of an account that has no pool yet. */
 interface AccountMaxes {
-  ilvl: number | null
   mplus: number | null
   achievements: number | null
   mounts: number | null
@@ -377,9 +386,14 @@ interface AccountMaxes {
  * Nothing here adds two characters together. A collection is account-wide, so the site holds two lower
  * bounds of the account's own figure - the pool's unique count of ids, and the highest reading of any one
  * of its characters - and the higher of the two is the account's (`pick` below). `MAX`, never `SUM`: a
- * pool of one and a reading of one are two views of the same mount rather than two mounts. The item level
- * and the rating are not folded like that at all: they really are one character's, so the roster's best
- * stands for the account without being merged with anything.
+ * pool of one and a reading of one are two views of the same mount rather than two mounts. The rating is
+ * not folded like that either: a rating belongs to a character, and the account's own is the highest any of
+ * its characters stands at, so the roster's best stands for the account without being merged with anything.
+ *
+ * The item level is not here at all, and it is the one figure of a profile the site never aggregates: it is
+ * what *one* character wears (`characters.ilvl`, beside its level), so it is read from a character wherever
+ * a character is printed and nowhere else. A number no character ever wore is not an account's to hold -
+ * the same rule that already keeps the level off an account's totals.
  *
  * Reputations are the one figure the pool answers alone, and the reason is in the readings: until the site
  * counted factions for itself, a stored reputation count was Blizzard's account-wide Exalted counter
@@ -393,8 +407,8 @@ export function readAccountTotals(userId: number): AccountTotals {
   const maxes = useDb()
     .prepare(
       `SELECT
-         (SELECT MAX(s.ilvl)          FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS ilvl,
-         (SELECT MAX(s.mplus_score)   FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mplus,
+         (SELECT MAX(${seasonRatingSql('s.mplus_score', 's.taken_at')})
+            FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mplus,
          (SELECT MAX(s.achievements)  FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS achievements,
          (SELECT MAX(s.mounts)        FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS mounts,
          (SELECT MAX(s.pets)          FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.user_id = ?) AS pets,
@@ -412,7 +426,6 @@ export function readAccountTotals(userId: number): AccountTotals {
           ) AS latest) AS honorableKills`
     )
     .get(
-      userId,
       userId,
       userId,
       userId,
@@ -477,7 +490,6 @@ export function readAccountTotals(userId: number): AccountTotals {
   }
 
   return {
-    ilvl: maxes.ilvl ?? null,
     mplus: maxes.mplus ?? null,
     ...figures,
     extra,
@@ -530,7 +542,6 @@ export function fileAccountReading(userId: number): void {
   const totals = readAccountTotals(userId)
 
   const next: Record<string, number | null> = {
-    ilvl: totals.ilvl,
     mplus_score: totals.mplus,
     achievements: totals.achievements,
     mounts: totals.mounts,
@@ -548,7 +559,7 @@ export function fileAccountReading(userId: number): void {
 
   const latest = db
     .prepare(
-      `SELECT ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+      `SELECT mplus_score, achievements, mounts, pets, toys, decor, reputations,
               titles, quests, recipes, transmogs, honorable_kills, honor_level, taken_at
          FROM account_snapshots WHERE user_id = ? ORDER BY taken_at DESC LIMIT 1`
     )
@@ -559,11 +570,10 @@ export function fileAccountReading(userId: number): void {
   const now = nowSec()
   const takenAt = latest && latest.taken_at >= now ? latest.taken_at + 1 : now
 
-  // Seventeen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
+  // Sixteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
   const values = [
     userId,
     takenAt,
-    next.ilvl,
     next.mplus_score,
     next.achievements,
     next.mounts,
@@ -582,9 +592,9 @@ export function fileAccountReading(userId: number): void {
 
   db.prepare(
     `INSERT INTO account_snapshots
-       (user_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+       (user_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor, reputations,
         titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(...(values as any[]))
 
   // The population has moved: an account's figures are what its characters and every aggregate of them are read

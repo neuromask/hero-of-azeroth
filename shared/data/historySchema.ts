@@ -9,15 +9,20 @@
  */
 
 /**
- * The fifteen metrics a snapshot holds, in the order the wire names them.
+ * The fourteen metrics a snapshot holds, in the order the wire names them.
  *
  * The names are camelCase - the same spelling the leaderboard's row and the profile use - while the snapshot's
  * own columns are the snake_case the database keeps (`mplus_score`, `honorable_kills`, `honor_level`). The
  * mapping between the two is one place (`server/utils/characterReading`).
+ *
+ * The item level is deliberately not one of them, although a profile carries it: it is what a character *wears*
+ * rather than what it has gathered, and it is a fact about the character rather than a figure of its readings
+ * (`characters.ilvl`, beside its level). A curve of an item level says nothing - it climbs with gear and drops
+ * with a season - so the site draws no history and no distribution of it, and a row of the hall of fame reads it
+ * beside the level rather than as a column (`app/components/CharacterVersus.vue`).
  */
 export const METRIC_KEYS = [
   'score',
-  'ilvl',
   'mPlusScore',
   'achievements',
   'mounts',

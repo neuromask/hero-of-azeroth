@@ -143,9 +143,6 @@ describe('the rows the table draws', () => {
     // The figure first, and then the rating: rows that share a figure (everybody with no rating at all) are
     // ordered by what they have gathered, so the two strongest come before the two weakest.
     expect(names({ sort: 'mplus' })).toEqual(['азурмаск', 'gamma', 'alpha', 'beta', 'epsilon', 'delta'])
-    // Item level orders only the rows it is printed for: everybody at the cap comes first, and the row below the
-    // cap follows them however high its own item level is.
-    expect(names({ sort: 'ilvl' })).toEqual(['alpha', 'beta', 'азурмаск', 'epsilon', 'delta', 'gamma'])
     // The filters, and a search that has to fold a Cyrillic name to find it.
     expect(names({ realm: 'gordunni' })).toEqual(['alpha', 'beta', 'азурмаск'])
     expect(names({ faction: 'horde' })).toEqual(['азурмаск'])
@@ -259,7 +256,6 @@ describe('the population the table draws', () => {
       memory.addSnapshot({
         characterId: id,
         takenAt: 1000,
-        ilvl: 320,
         mounts,
         pets: 1,
         toys: 1,
@@ -286,7 +282,6 @@ describe('the population the table draws', () => {
     memory.addSnapshot({
       characterId: hidden,
       takenAt: 1000,
-      ilvl: 320,
       mounts: 40,
       pets: 1,
       toys: 1,
@@ -312,13 +307,17 @@ describe('the population the table draws', () => {
       realm: 'gordunni',
       name: 'Main',
       isMain: true,
-      level: 90
+      level: 90,
+      ilvl: 320
     })
+
+    // A second character wearing better gear, so the row's item level cannot be the roster's best: it is the
+    // main's own, the very character the row is named after.
+    memory.addCharacter({ userId: 42, region: 'eu', realm: 'gordunni', name: 'Geared', level: 80, ilvl: 500 })
 
     memory.addSnapshot({
       characterId: main,
       takenAt: 1000,
-      ilvl: 320,
       mplus: 1234,
       mounts: 20,
       pets: 3,
@@ -335,6 +334,9 @@ describe('the population the table draws', () => {
     const point = memory.db
       .prepare('SELECT * FROM account_snapshots WHERE user_id = 42 ORDER BY taken_at DESC LIMIT 1')
       .get() as Record<string, number | null>
+    const character = memory.db.prepare("SELECT ilvl FROM characters WHERE name_key = 'main'").get() as {
+      ilvl: number | null
+    }
 
     // The row a reader compares and the point its history draws are the same figures, field for field - which is
     // the whole reason an account's own point is kept rather than one character's reading: a table and a graph
@@ -347,9 +349,13 @@ describe('the population the table draws', () => {
       reputations: point.reputations,
       achievements: point.achievements,
       honorableKills: point.honorable_kills,
-      ilvl: point.ilvl,
       mPlusScore: point.mplus_score
     })
+
+    // The item level is not one of those figures: it is what a character *wears*, so it is read from the
+    // character's own row - the main's, the very character the row is named after - and never from the
+    // point, nor from the roster's best gear (`Geared` above wears more of it).
+    expect(row?.ilvl).toBe(character.ilvl)
   })
 
   it('is an empty first page for a table with nothing in it', async () => {
@@ -420,7 +426,6 @@ describe('the writes that keep the table true', () => {
     memory.addSnapshot({
       characterId: main,
       takenAt: 1000,
-      ilvl: 320,
       mounts: 20,
       pets: 1,
       toys: 1,
@@ -437,7 +442,6 @@ describe('the writes that keep the table true', () => {
     memory.addSnapshot({
       characterId: main,
       takenAt: 2000,
-      ilvl: 320,
       mounts: 30,
       pets: 1,
       toys: 1,

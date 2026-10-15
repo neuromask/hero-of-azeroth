@@ -477,7 +477,7 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
              it truncates instead. -->
         <NuxtLink
           :to="links.compare"
-          class="hoa-tab hoa-liquid-glass -ml-px shrink-0 rounded-l-none px-2"
+          class="hoa-tab hoa-liquid-glass -ml-px shrink-0 rounded-l-none px-3"
           :class="{ 'hoa-tab-active': active === 'compare' }"
           :aria-current="active === 'compare' ? 'page' : undefined"
           :aria-label="t('tabVs')"

@@ -65,7 +65,8 @@ export interface ProfileCharacter {
 /** The account's own totals, as the profile page reads them. */
 export interface ProfileTotals {
   characters: number
-  ilvl: number | null
+  // No item level: an item level is never the account's, so the page prints the main's own (`latest.ilvl` of
+  // the roster row above) rather than a figure no character ever wore.
   mplus: number | null
   achievements: number
   mounts: number
@@ -132,8 +133,8 @@ export default defineEventHandler(async (event) => {
     .prepare(
       `SELECT c.id, c.region, c.realm_slug, c.realm_name, c.name, c.display_name, c.class_id, c.level,
               c.faction, c.avatar, c.profession_1, c.profession_2, c.is_main, c.last_seen_at,
-              c.stats_read_at,
-              s.taken_at, s.ilvl, s.mplus_score, s.achievements, s.mounts, s.pets, s.toys, s.decor, s.reputations,
+              c.stats_read_at, c.ilvl,
+              s.taken_at, s.mplus_score, s.achievements, s.mounts, s.pets, s.toys, s.decor, s.reputations,
               s.titles, s.quests, s.recipes, s.transmogs, s.honorable_kills, s.honor_level
          FROM characters c
          LEFT JOIN snapshots s ON s.id = (
@@ -167,7 +168,9 @@ export default defineEventHandler(async (event) => {
       : {
           takenAt: row.taken_at,
           ilvl: row.ilvl,
-          mplus: row.mplus_score,
+          // The rating is read in the season Blizzard is running rather than in the one it was read in
+          // (`server/utils/mplus`): a score from a season that has passed counts as nothing.
+          mplus: seasonRating(row.mplus_score, row.taken_at),
           achievements: row.achievements,
           mounts: row.mounts,
           pets: row.pets,
@@ -194,8 +197,10 @@ export default defineEventHandler(async (event) => {
   // merge the character page and the hall of fame's row are answered with as well. These rows used to be
   // given the raw pool instead: no merge, so a reading that ran ahead of a pool still filling in was
   // thrown away, and no achievement points at all, so the account printed one number on its own page and
-  // another on the character page it was opened from. The item level, the rating and the level stay the
-  // character's own - those really are theirs, and no account has a "best" of them to stand for it.
+  // another on the character page it was opened from. The item level and the level stay the character's
+  // own - no account has a "best" of either to stand for it - and the rating on these rows is the
+  // character's own reading too, because these are the account's characters rather than the account
+  // itself (the account's own rating is in `totals` below).
   for (const character of characters) {
     const latest = character.latest
     if (!latest) continue
@@ -251,7 +256,6 @@ export default defineEventHandler(async (event) => {
 
   const totals: ProfileTotals = {
     characters: characters.length,
-    ilvl: account.ilvl,
     mplus: account.mplus,
     achievements: account.achievements,
     mounts: account.mounts,

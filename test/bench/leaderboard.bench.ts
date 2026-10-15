@@ -85,20 +85,20 @@ function build(): void {
 
   const character = db.prepare(
     `INSERT INTO characters (user_id, region, realm_slug, realm_name, name, name_key, display_name, class_id,
-                             level, faction, is_main, first_seen_at, last_seen_at)
-     VALUES (?, 'eu', ?, ?, ?, ?, ?, ?, 90, ?, ?, 1000000, 1000000)`
+                             level, ilvl, faction, is_main, first_seen_at, last_seen_at)
+     VALUES (?, 'eu', ?, ?, ?, ?, ?, ?, 90, ?, ?, ?, 1000000, 1000000)`
   )
 
   const reading = db.prepare(
-    `INSERT INTO snapshots (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor,
+    `INSERT INTO snapshots (character_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor,
                             reputations, honorable_kills)
-     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
 
   const accountReading = db.prepare(
-    `INSERT INTO account_snapshots (user_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor,
+    `INSERT INTO account_snapshots (user_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor,
                                     reputations, honorable_kills)
-     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
 
   const user = db.prepare(
@@ -120,6 +120,7 @@ function build(): void {
         name,
         name,
         (index % 13) + 1,
+        figure(index, 700),
         FACTIONS[index % 2],
         0
       ).lastInsertRowid
@@ -127,7 +128,6 @@ function build(): void {
 
     reading.run(
       id,
-      figure(index, 700),
       figure(index + 1, 3_500),
       figure(index + 2, 60_000),
       figure(index + 3, 1_300),
@@ -148,12 +148,11 @@ function build(): void {
     for (let alt = 0; alt <= ALTS; alt += 1) {
       const name = `account${index}alt${alt}`
 
-      character.run(userId, realm, realm, name, name, name, (index % 13) + 1, FACTIONS[index % 2], alt === 0 ? 1 : 0)
+      character.run(userId, realm, realm, name, name, name, (index % 13) + 1, figure(index, 700), FACTIONS[index % 2], alt === 0 ? 1 : 0)
     }
 
     accountReading.run(
       userId,
-      figure(index, 700),
       figure(index + 1, 3_500),
       figure(index + 2, 60_000),
       figure(index + 3, 1_300),

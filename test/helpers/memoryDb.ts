@@ -36,6 +36,7 @@ CREATE TABLE characters (
   display_name TEXT,
   class_id INTEGER,
   level INTEGER,
+  ilvl REAL,
   faction TEXT,
   avatar TEXT,
   is_main INTEGER NOT NULL DEFAULT 0,
@@ -49,7 +50,6 @@ CREATE TABLE snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   character_id INTEGER NOT NULL,
   taken_at INTEGER NOT NULL,
-  ilvl REAL,
   mplus_score REAL,
   achievements INTEGER,
   mounts INTEGER,
@@ -77,7 +77,6 @@ CREATE TABLE account_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   taken_at INTEGER NOT NULL,
-  ilvl REAL,
   mplus_score REAL,
   achievements INTEGER,
   mounts INTEGER,
@@ -123,7 +122,6 @@ CREATE TABLE leaderboard (
   achievements INTEGER,
   collectables INTEGER NOT NULL DEFAULT 0,
   score INTEGER NOT NULL DEFAULT 0,
-  capped INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (region, realm_slug, name_key)
 );
 
@@ -151,6 +149,8 @@ export interface NewCharacter {
   name: string
   isMain?: boolean
   level?: number
+  /** The item level the character wears, which is a fact about the character rather than a reading. */
+  ilvl?: number
   statsReadAt?: number
 }
 
@@ -158,7 +158,6 @@ export interface NewCharacter {
 export interface NewSnapshot {
   characterId: number
   takenAt: number
-  ilvl?: number | null
   mplus?: number | null
   achievements?: number | null
   mounts?: number | null
@@ -202,8 +201,8 @@ export function createMemoryDb(): MemoryDb {
     addCharacter(character) {
       const result = db
         .prepare(
-          `INSERT INTO characters (user_id, region, realm_slug, name, name_key, display_name, is_main, level, stats_read_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO characters (user_id, region, realm_slug, name, name_key, display_name, is_main, level, ilvl, stats_read_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           character.userId,
@@ -214,6 +213,7 @@ export function createMemoryDb(): MemoryDb {
           character.name,
           character.isMain ? 1 : 0,
           character.level ?? null,
+          character.ilvl ?? null,
           character.statsReadAt ?? null
         )
 
@@ -224,8 +224,8 @@ export function createMemoryDb(): MemoryDb {
       const result = db
         .prepare(
           `INSERT INTO characters
-             (user_id, region, realm_slug, realm_name, name, name_key, display_name, is_main, level, last_seen_at, stats_read_at)
-           VALUES (NULL, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?)`
+             (user_id, region, realm_slug, realm_name, name, name_key, display_name, is_main, level, ilvl, last_seen_at, stats_read_at)
+           VALUES (NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)`
         )
         .run(
           character.region,
@@ -235,6 +235,7 @@ export function createMemoryDb(): MemoryDb {
           character.name.toLowerCase(),
           character.name,
           character.level ?? null,
+          character.ilvl ?? null,
           character.statsReadAt ?? null
         )
 
@@ -244,13 +245,12 @@ export function createMemoryDb(): MemoryDb {
     addSnapshot(snapshot) {
       db.prepare(
         `INSERT INTO snapshots
-           (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+           (character_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor, reputations,
             titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         snapshot.characterId,
         snapshot.takenAt,
-        snapshot.ilvl ?? null,
         snapshot.mplus ?? null,
         snapshot.achievements ?? null,
         snapshot.mounts ?? null,

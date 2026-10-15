@@ -84,7 +84,7 @@ watch(
          under a shelf wear, so the controls that open a tray read alike. -->
     <button
       type="button"
-      class="hoa-tab hoa-liquid-glass -ml-px rounded-l-none px-2"
+      class="hoa-tab hoa-liquid-glass -ml-px rounded-l-none px-3"
       :class="{ 'hoa-tab-active': props.active || open }"
       aria-haspopup="true"
       :aria-expanded="open"

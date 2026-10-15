@@ -22,17 +22,20 @@ beforeEach(() => {
 describe('readAccountTotals', () => {
   it('takes the best reading of a collection, never the sum of the roster', () => {
     memory.addUser(1)
-    const first = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'AltOne', isMain: true })
-    const second = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'AltTwo' })
+    const first = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'AltOne', isMain: true, ilvl: 300 })
+    const second = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'AltTwo', ilvl: 310 })
 
-    memory.addSnapshot({ characterId: first, takenAt: 1, mounts: 100, pets: 10, toys: 5, decor: 2, achievements: 1000, ilvl: 300, mplus: 2000 })
-    memory.addSnapshot({ characterId: second, takenAt: 2, mounts: 150, pets: 12, toys: 6, decor: 3, achievements: 1200, ilvl: 310, mplus: 2500 })
+    memory.addSnapshot({ characterId: first, takenAt: 1, mounts: 100, pets: 10, toys: 5, decor: 2, achievements: 1000, mplus: 2000 })
+    memory.addSnapshot({ characterId: second, takenAt: 2, mounts: 150, pets: 12, toys: 6, decor: 3, achievements: 1200, mplus: 2500 })
 
     const totals = readAccountTotals(1)
     expect(totals.mounts).toBe(150)
     expect(totals.pets).toBe(12)
     expect(totals.achievements).toBe(1200)
-    expect(totals.ilvl).toBe(310)
+    // And no item level of its own: an item level is always one character's (`characters.ilvl`), so it is
+    // read from a character wherever one is printed and never aggregated - the same rule that keeps the
+    // level off the account. The two roster rows above carry theirs; the account's totals carry none.
+    expect('ilvl' in totals).toBe(false)
     expect(totals.mplus).toBe(2500)
   })
 

@@ -43,6 +43,13 @@ export const LEADERBOARD_COLUMNS_PARAM = 'columns'
 /**
  * The chips a set of columns means in an address: the figures it lights, or nothing at all for the
  * overall state - which is what a table showing everything already says by saying nothing.
+ *
+ * The chips travel as one comma-separated value in the query (`?columns=pets,decor,reputations`) rather than as
+ * segments of a path. The front door *is* the table (`app/pages/index.vue`), so it has no path of its own to hang
+ * filters off, and a set of chips is a state of that one page rather than a page of its own: a path would hand
+ * every combination of chips an address of its own for a crawler to find, and the site would have to serve a page
+ * for each. A caller that would rather repeat the parameter (`?columns=pets&columns=decor`) is read the same way
+ * (`leaderboardColumnsFromQuery` below).
  */
 export function leaderboardColumnsQuery(columns: LeaderboardSort[]): Record<string, string> {
   const picked = columns.filter((key) => key !== 'total')

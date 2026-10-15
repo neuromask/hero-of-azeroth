@@ -60,7 +60,7 @@ const { realmLabel } = useRealmNames()
  * bar above, while the overall score is the prize this page hands out, and a chip is a mark for a
  * figure rather than a second logo.
  */
-const COLUMN_CHIPS: { key: LeaderboardSort; icon: string; label: string; literal?: boolean }[] = [
+const COLUMN_CHIPS: { key: LeaderboardSort; icon: string; label: string }[] = [
   { key: 'total', icon: 'trophy', label: 'lbPresetTotal' },
   { key: 'achievements', icon: 'achievments', label: 'lbPresetAchievements' },
   { key: 'mounts', icon: 'mounts', label: 'lbPresetMounts' },
@@ -68,9 +68,8 @@ const COLUMN_CHIPS: { key: LeaderboardSort; icon: string; label: string; literal
   { key: 'pets', icon: 'pets', label: 'pets' },
   { key: 'decor', icon: 'decor', label: 'lbPresetDecor' },
   { key: 'reputations', icon: 'exalted-rep', label: 'reputations' },
-  { key: 'mplus', icon: 'key', label: 'lbPresetMplus' },
   { key: 'kills', icon: 'kills', label: 'honorableKills' },
-  { key: 'ilvl', icon: 'item-level', label: 'ilvl', literal: true }
+  { key: 'mplus', icon: 'key', label: 'lbPresetMplus' }
 ]
 
 /** Whether a column's chip is lit.
@@ -176,49 +175,23 @@ function clear() {
        the two panes it opens - the realm menu and the legend of the score - are not cut off from the
        page behind them and blur what they hang over. -->
   <div class="hoa-panel hoa-panel-layered relative z-20 space-y-3 p-3 sm:p-4">
-    <!-- The columns, and the search box that narrows whatever they show. A chip is a switch rather
-         than a tab: several can be on at once, each one keeps its column in the table and takes it
-         away again, which is what lets a reader put two figures side by side and drop the rest. -->
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div class="flex flex-wrap gap-2" role="group" :aria-label="t('lbColumns')">
-        <button
-          v-for="chip in COLUMN_CHIPS"
-          :key="chip.key"
-          type="button"
-          :aria-pressed="isShown(chip.key)"
-          class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs sm:text-sm"
-          :class="isShown(chip.key) ? 'hoa-tab-active' : ''"
-          @click="emit('toggle-column', chip.key)"
-        >
-          <AppIcon :name="chip.icon" class="h-[1.05em] w-[1.05em]" />
-          <span>{{ chip.literal ? chip.label : t(chip.label) }}</span>
-        </button>
-      </div>
-
-      <label class="relative block w-full lg:w-72">
-        <span class="sr-only">{{ t('lbSearch') }}</span>
-        <svg
-          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <circle cx="11" cy="11" r="7" />
-          <path d="M20 20l-3.5-3.5" />
-        </svg>
-        <input
-          :value="search"
-          type="search"
-          autocomplete="off"
-          spellcheck="false"
-          :placeholder="t('lbSearchPlaceholder')"
-          class="w-full rounded-xl border border-white/10 bg-black/40 py-2 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 focus:border-wow-gold/60 focus:outline-none"
-          @input="emit('update:search', ($event.target as HTMLInputElement).value)"
-        />
-      </label>
+    <!-- The columns. A chip is a switch rather than a tab: several can be on at once, each one keeps its column
+         in the table and takes it away again, which is what lets a reader put two figures side by side and drop
+         the rest. The search that narrows whatever they show stands on the row below, beside the legend of the
+         score. -->
+    <div class="flex flex-wrap gap-2" role="group" :aria-label="t('lbColumns')">
+      <button
+        v-for="chip in COLUMN_CHIPS"
+        :key="chip.key"
+        type="button"
+        :aria-pressed="isShown(chip.key)"
+        class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs sm:text-sm"
+        :class="isShown(chip.key) ? 'hoa-tab-active' : ''"
+        @click="emit('toggle-column', chip.key)"
+      >
+        <AppIcon :name="chip.icon" class="h-[1.05em] w-[1.05em]" />
+        <span>{{ t(chip.label) }}</span>
+      </button>
     </div>
 
     <!-- The one-click filters: which side, which realm. -->
@@ -321,6 +294,36 @@ function clear() {
            click away. The control is the profile's own as well - one component, one table of weights, read
            off the formula itself (`app/components/ScoreLegend.vue`). -->
       <ScoreLegend class="ml-auto" />
+
+      <!-- And the search for a name, to the right of it: it narrows the table rather than switching a column on,
+           so it is not one of the chips above - and the row it used to share with them was the row a reader
+           looks past to reach the figures. Beside the legend it stands at the end of the filters, where a
+           narrowing field belongs, and it keeps the whole width of a phone (`w-full`) rather than a corner of
+           it. -->
+      <label class="relative block w-full lg:w-72">
+        <span class="sr-only">{{ t('lbSearch') }}</span>
+        <svg
+          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="M20 20l-3.5-3.5" />
+        </svg>
+        <input
+          :value="search"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          :placeholder="t('lbSearchPlaceholder')"
+          class="w-full rounded-xl border border-white/10 bg-black/40 py-2 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 focus:border-wow-gold/60 focus:outline-none"
+          @input="emit('update:search', ($event.target as HTMLInputElement).value)"
+        />
+      </label>
     </div>
 
   </div>

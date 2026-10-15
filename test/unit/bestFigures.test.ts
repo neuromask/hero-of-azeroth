@@ -19,7 +19,6 @@ function account(overrides: Record<string, number> = {}) {
     toys: 0,
     decor: 0,
     reputations: 0,
-    ilvl: null,
     mplus: null,
     score: 0,
     accountWide: [],

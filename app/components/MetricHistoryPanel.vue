@@ -40,7 +40,6 @@ const { t, locale } = useI18n()
 /** The message key that names the metric, which both tooltips lead with. */
 const METRIC_LABELS: Record<MetricKey, string> = {
   score: 'lbColScore',
-  ilvl: 'itemLevel',
   mPlusScore: 'mPlus',
   achievements: 'achievements',
   mounts: 'mounts',
@@ -364,6 +363,18 @@ const highlightBin = computed(() => {
   return value < bins[0]!.from ? 0 : bins.length - 1
 })
 
+/**
+ * Whether this column's own figure for the metric has never been read, which is why no bucket is marked for it.
+ *
+ * The chart places a character by the figure the site's record holds, and some of the fourteen are read by paths
+ * that do not run for everybody - the wardrobe is read by the tray alone, and a character whose only reading is
+ * the one the migration seeded from the old table has no titles, quests or recipes either. A reader who has just
+ * looked at such a figure is owed the reason rather than an unmarked chart.
+ */
+const ownFigureMissing = computed(
+  () => typeof legend.value.find((entry) => entry.key === props.highlight)?.value !== 'number'
+)
+
 /** The bucket under the cursor, or `null` while the cursor is off the histogram. */
 const hoveredBin = ref<number | null>(null)
 const hoveredBinStat = computed(() => (hoveredBin.value === null ? null : (binStats.value[hoveredBin.value] ?? null)))
@@ -476,6 +487,12 @@ function print(value: number | null): string {
             </span>
           </li>
         </ul>
+
+        <!-- And when this column's own figure was never read: a chart cannot mark a character it holds no figure
+             for, and the reader who has just looked at that figure on the row above is owed the reason. -->
+        <p v-if="ownFigureMissing" class="mt-2 text-[11px] leading-relaxed text-gray-500">
+          {{ $t('distributionNotRead') }}
+        </p>
       </template>
     </section>
 

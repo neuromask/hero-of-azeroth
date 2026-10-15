@@ -147,6 +147,17 @@ CREATE TABLE IF NOT EXISTS characters (
   display_name TEXT,
   class_id INTEGER,
   level INTEGER,
+  /**
+   * The item level the character was wearing when it was last read, which is a fact about the character rather
+   * than a figure of its readings.
+   *
+   * Written the way the level above is: a profile read knows both, and both are things a character *is* rather
+   * than things it has gathered (./characterReading writes this one beside stats_read_at). The site draws no
+   * history of an item level - it climbs with gear and drops with a season, so a curve of it says nothing - and
+   * that is why it is not one of the snapshot's metrics (see #shared/data/historySchema). A read that does not
+   * carry one leaves what is here alone, exactly as the readings keep a figure they do not carry.
+   */
+  ilvl REAL,
   faction TEXT,
   avatar TEXT,
   profession_1 TEXT,
@@ -184,7 +195,6 @@ CREATE TABLE IF NOT EXISTS snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   taken_at INTEGER NOT NULL,
-  ilvl REAL,
   mplus_score REAL,
   raid_progress INTEGER,
   achievements INTEGER,
@@ -228,7 +238,6 @@ CREATE TABLE IF NOT EXISTS account_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   taken_at INTEGER NOT NULL,
-  ilvl REAL,
   mplus_score REAL,
   achievements INTEGER,
   mounts INTEGER,
@@ -274,6 +283,11 @@ CREATE TABLE IF NOT EXISTS leaderboard (
   avatar TEXT,
   class_id INTEGER NOT NULL DEFAULT 0,
   faction TEXT NOT NULL DEFAULT 'neutral',
+  -- What the character *is*, read from its own row and from its newest reading: the level as the game reports it
+  -- and the item level it wears. Both are materialised here for the same reason everything else is - a page of the
+  -- table is drawn without touching the characters or the readings at all - and the item level is not an order the
+  -- table offers (it is read beside the level under a row's name, see ./leaderboardRows), which is why nothing
+  -- indexes it.
   level INTEGER NOT NULL DEFAULT 0,
   first_seen_at INTEGER,
   updated_at INTEGER NOT NULL,
@@ -295,10 +309,6 @@ CREATE TABLE IF NOT EXISTS leaderboard (
   -- The overall rating, computed from the figures above at write time (see ./playerScore): a stored column is
   -- what an index can order by, and the whole point of this table.
   score INTEGER NOT NULL DEFAULT 0,
-  -- Whether the character stands at the level cap, which is the one rule an item level is printed under. Stored
-  -- rather than computed so that the item-level order is a plain composite index (isAtItemLevelCap in
-  -- #shared/data/leaderboardSchema).
-  capped INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (region, realm_slug, name_key)
 );
 -- One index per order the page offers, each carrying the tie-breakers the table is drawn in: the preset's figure,
@@ -313,7 +323,6 @@ CREATE INDEX IF NOT EXISTS idx_leaderboard_reputations ON leaderboard(reputation
 CREATE INDEX IF NOT EXISTS idx_leaderboard_mplus ON leaderboard(mplus_score DESC, score DESC, display_name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_leaderboard_kills ON leaderboard(honorable_kills DESC, score DESC, display_name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_leaderboard_achievements ON leaderboard(achievements DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_ilvl ON leaderboard(capped DESC, ilvl DESC, score DESC, display_name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_leaderboard_collectables ON leaderboard(collectables DESC, score DESC, display_name COLLATE NOCASE);
 -- The filters: a realm chip and a class chip are the two the page draws, and each is worth an index of its own
 -- because a filtered page still has to be ordered - the index above cannot be used for both at once.
@@ -379,6 +388,9 @@ const ADDED_COLUMNS = [
   'ALTER TABLE characters ADD COLUMN stats_read_at INTEGER',
   // The day the site first met a character, which the hall of fame's table prints and no later lookup can tell.
   'ALTER TABLE characters ADD COLUMN first_seen_at INTEGER',
+  // The item level a character was wearing, which is a fact about the character rather than a figure of its
+  // readings: the site draws no history of it, and a row of the table reads it beside the level.
+  'ALTER TABLE characters ADD COLUMN ilvl REAL',
   // The account's choice not to appear in the public table at all.
   'ALTER TABLE users ADD COLUMN hide_from_fame INTEGER NOT NULL DEFAULT 0',
   // When the account was last seen on the site, which is what the hall of fame's online dot is read from.
@@ -488,6 +500,43 @@ export function migrateCharacterOwnership(connection: DatabaseSync): void {
 }
 
 /**
+ * Drops the columns this build has taken away from a table.
+ *
+ * Three of them, and each left for a reason that has gone:
+ *
+ *   - `leaderboard.capped`, which carried the item-level order the table no longer offers - the item level is read
+ *     beside the level under a row's name (`shared/data/leaderboardSchema`);
+ *   - `snapshots.ilvl` and `account_snapshots.ilvl`, which held an item level per reading. The site draws no
+ *     history and no distribution of an item level - it climbs with gear and drops with a season, so a curve of it
+ *     says nothing - and the figure is a fact about the character now (`characters.ilvl`), written beside its level.
+ *
+ * A database that has them is asked first - a fresh one is created without any of them (`CREATE TABLE` above) - and
+ * one that does not is left exactly as it is, which is the rule every migration here follows. A database the
+ * change cannot be made to keeps them, which costs a number a row and is read by nobody.
+ */
+function migrateRemovedColumns(connection: DatabaseSync): void {
+  const dropped: Array<{ table: string; column: string; index?: string }> = [
+    { table: 'leaderboard', column: 'capped', index: 'idx_leaderboard_ilvl' },
+    { table: 'snapshots', column: 'ilvl' },
+    { table: 'account_snapshots', column: 'ilvl' }
+  ]
+
+  for (const { table, column, index } of dropped) {
+    const columns = connection.prepare(`PRAGMA table_info(${table})`).all() as unknown as { name: string }[]
+    if (!columns.some((entry) => entry.name === column)) continue
+
+    try {
+      if (index) connection.exec(`DROP INDEX IF EXISTS ${index}`)
+      connection.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`)
+    } catch (error) {
+      console.warn(
+        `[db] ${table} kept its ${column} column: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+}
+
+/**
  * Brings an existing database up to the schema above.
  *
  * The tables themselves are created by `CREATE TABLE IF NOT EXISTS`, so the only thing left to do
@@ -504,6 +553,9 @@ function migrate(connection: DatabaseSync): void {
 
   // A table a column cannot be added to is rebuilt here, before anything else reads it.
   migrateCharacterOwnership(connection)
+
+  // And the columns this build has taken *away* from a table.
+  migrateRemovedColumns(connection)
 
   // A unique (character_id, taken_at) makes the event-log writes race-free, but it must never be added
   // over history that already has duplicates - a duplicate is a real snapshot, and a migration must not

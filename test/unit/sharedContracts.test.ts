@@ -103,7 +103,9 @@ describe('the leaderboard contract', () => {
   })
 
   it('carries the honorable kills column in an address, like every other figure', () => {
-    expect(leaderboardColumnsFromQuery('mplus,kills')).toEqual(['mplus', 'kills'])
+    // An address naming several figures spells them in the order the table draws its columns in
+    // (`LEADERBOARD_SORTS`), which is why the kills come back before the rating however the address wrote them.
+    expect(leaderboardColumnsFromQuery('mplus,kills')).toEqual(['kills', 'mplus'])
     expect(leaderboardColumnsQuery(['kills'])).toEqual({ columns: 'kills' })
   })
 })

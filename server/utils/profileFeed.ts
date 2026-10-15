@@ -108,6 +108,33 @@ export async function feedProfile({ region, realm, name, profile, reading }: Pro
 }
 
 /**
+ * Files the wardrobe count a tray has just read, as that character's own point.
+ *
+ * The appearances are the one figure of the fourteen a profile does not carry: the document behind them is 2.5 MB
+ * and is read by the tray that asks for it (`server/api/transmog`, and the wardrobe row of a comparison board).
+ * A reading the site has taken belongs in the site's record of the character, and this is where it is filed -
+ * without it the one figure a reader has just looked at is the one figure a distribution cannot place, and a
+ * guest, whose profile no account's sync ever reads, would never have it at all.
+ *
+ * A character the site has never met is not created here: the tray is opened from a page that has already read
+ * them, so a row that is not there is a row this call has nothing to say about.
+ */
+export function fileTransmogReading(region: string, realm: string, name: string, count: number): void {
+  const stored = useDb()
+    .prepare('SELECT id, user_id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
+    .get(region, realm, name) as { id: number; user_id: number | null } | undefined
+
+  if (!stored) return
+
+  fileDailyReading(stored.id, { stats: { transmogs: { count } } })
+
+  // And the account's own history, when the character belongs to one: the wardrobe is the account's whole, so its
+  // own point is what its characters print, and the totals are what the roster's readings now say
+  // (`fileAccountReading`).
+  if (stored.user_id !== null) fileAccountReading(stored.user_id)
+}
+
+/**
  * Writes a character's own row for a guest, and answers its id - the one writer of such a row.
  *
  * A guest is a character the site has read that no account holds, and both of the callers that can meet one go

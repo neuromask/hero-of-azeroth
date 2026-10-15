@@ -367,6 +367,7 @@
   "historyNoData": "No history yet",
   "distributionTitle": "Distribution",
   "distributionNoData": "No distribution yet",
+  "distributionNotRead": "No figure read for this character yet",
   "historyTop": "Top {percent}%",
   "historyError": "Could not load the history",
   "historyTooShort": "No figure read yet",

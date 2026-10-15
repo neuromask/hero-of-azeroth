@@ -119,7 +119,7 @@ function dayStart(day?: string): number {
 /**
  * The figures of a legacy row, as the one writer of a reading reads them (`fileDailyReading`).
  *
- * The file holds the ten figures the table printed - which is nine of the fifteen a reading carries, plus the
+ * The file holds the ten figures the table printed - which is nine of the fourteen a reading carries, plus the
  * level. The titles, the quests, the recipes, the wardrobe and the honor level were never in it, so they are
  * filed as `null`: unknown rather than zero, which is what keeps a figure nobody read out of a distribution and
  * out of a score. The five a row did carry are the row's own numbers, which is what the site showed at the time.

@@ -215,7 +215,7 @@ a second implementation is a second answer.
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity`, `compare/*` (the comparison - `/compare` with nobody to compare against yet, and `/compare/:vsRegion/:vsRealm/:vsName` with a second character) |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's five views under the character's own name, the comparison as the second half of that very entry - the name opens the profile, the half beside it carries the two arrows and opens the comparison - the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with those left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row), `CharacterVersus` (the comparison board: two characters and their fifteen figures side by side, each row's winner lit), `FavoriteStar` (the star that saves a character for the favorites: every row of the hall of fame and a character's own name wear it), `CharacterCardActions` (the pair of buttons a comparison card carries - save the character, read them again - and the moment their figures were read, under them) |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's five views under the character's own name, the comparison as the second half of that very entry - the name opens the profile, the half beside it carries the two arrows and opens the comparison - the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with those left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and at the end of the hall of fame's filter row), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row), `CharacterVersus` (the comparison board: two characters and their thirteen figures side by side, each row's winner lit), `FavoriteStar` (the star that saves a character for the favorites: every row of the hall of fame and a character's own name wear it), `CharacterCardActions` (the pair of buttons a comparison card carries - save the character, read them again - and the moment their figures were read, under them) |
 | `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable`, `LeaderboardYou` (the reader's own place in the table) |
 | `app/composables/` | `characterView` (what the shell hands its views: the profile, the feed, and its own Refresh with its cooldown), `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView` (what the table is asked for, and the two questions a link into it spells out: which columns it lights, and which character's row it asks for), `realmNames`, `lang`, `seo`, `searchHistory` (the characters looked up, and the merge that draws them beside the saved ones), `versusFavorites` (the characters saved with a star, which the board and every search field offer), `savedCharacters` (the bridge to the account's own copies: one read of `/api/saved` per page, the browser's lists handed over once, and the three writes that follow a lookup, a star and a cross), `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
@@ -282,8 +282,13 @@ the overall chip means every column, and picking any other one shows exactly the
 several at once — and a `?` beside them opens the legend of the score, whose multipliers are read off
 the formula itself so the panel cannot promise something the server does not compute. The realm names
 come from the site's realm list rather than from whichever language the record happened to be written
-in, and an item level is printed only for a character at the current level cap, a figure that says
-nothing among characters still climbing.
+in, and an item level is read beside the level under a row's name rather than as a column of its own — a figure
+that says nothing among characters still climbing is printed only for one at the current level cap, and the
+comparison board and a character's own header print it unconditionally, because neither ranks anybody. An
+account has no item level of its own at all: it is always the character's, so a row of the hall of fame shows
+the main's — the very character the row is named after — and the account's page prints the main's too. The
+Mythic+ rating is counted in the season Blizzard is running (`server/utils/mplus`): a score read before a season
+began counts as nothing, so a table never prints the season that has just ended.
 
 The page carries the site's one search in three places, and every one of them is the same two fields
 (`app/components/CharacterSearchForm.vue`) - the site's own glass, with the rim of a field warming to the brand
@@ -480,8 +485,8 @@ link that can be shared like any other page, and the two characters are read fro
 pages are.
 
 The board (`app/components/CharacterVersus.vue`) is two columns of the site's glass, each under its own card,
-with the same fifteen figures in the same order below them: the site's score, the collections (achievements,
-mounts, toys, pets, decor), the titles, the item level, the Mythic+ rating, the reputations, the wardrobe, the
+with the same thirteen figures in the same order below them: the site's score, the collections (achievements,
+mounts, toys, pets, decor), the titles, the reputations, the wardrobe, the
 quests, the recipes, the honorable kills and the honor level. Every row says whose figure it is — the account's
 own in the brand gold, the character's own in grey — because a reader who came with an account is shown the
 account's numbers and a stranger is shown the character's, which is the rule every tile of the site already
@@ -489,9 +494,14 @@ prints. The higher of the two figures is lit in green with the `+X` it won by be
 not there to print is a dash rather than a zero: a wardrobe nobody has read and an empty one are different
 answers.
 
-The wardrobe is the one figure of the fifteen that no profile carries — 2.5 MB of Blizzard's own — so it is
+The wardrobe is the one figure of the fourteen that no profile carries — 2.5 MB of Blizzard's own — so it is
 read by the endpoint that keeps it off a page (`/api/transmog`), in the browser, and its two rows fill in a
-moment after the board opens.
+moment after the board opens. That reading is *filed* as the character's own (`fileTransmogReading`), because it
+is the only place the wardrobe is ever read: without it the one figure a reader has just looked at would be the
+one figure the site's record of them never holds. Blizzard counts the wardrobe for the account, so the badge
+beside it says so for everybody — as it does for the pets, the toys, the decor and the achievements — while a
+character of an account on the site is placed in the distribution by the account's own figure, the best of its
+roster's readings.
 
 Under each row stands that metric's panel (`app/components/MetricHistoryPanel.vue`), and it is two charts of the
 site's own record. The **history** is the column's character, one point per real change, drawn as a line over

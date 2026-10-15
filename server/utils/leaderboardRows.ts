@@ -17,7 +17,7 @@
  *   - `ensurePopulation` builds the whole table when it is empty, and rebuilds it when the rating's weights have
  *     changed (`PRAGMA user_version`) - which is what a fresh deploy and a formula change need, and nothing else.
  */
-import { CURRENT_MAX_LEVEL, LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
+import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
 import type {
   LeaderboardFaction,
   LeaderboardLeader,
@@ -30,6 +30,8 @@ import type {
 } from '#shared/data/leaderboardSchema'
 import { SCORE_WEIGHTS } from '#shared/utils/leaderboardScore'
 import { totalCollectables, SCORE_VERSION } from './playerScore'
+// The season a stored Mythic+ rating is counted in: a score read before the season began counts as nothing.
+import { seasonRatingSql } from './mplus'
 import { bumpStatisticsRevision } from './statisticsPopulation'
 
 /**
@@ -56,13 +58,10 @@ const SCORE_SQL = `ROUND(
 const COLLECTABLES_SQL = `MAX(COALESCE(mounts, 0), 0) + MAX(COALESCE(pets, 0), 0)
   + MAX(COALESCE(toys, 0), 0) + MAX(COALESCE(decor, 0), 0)`
 
-/** Whether a row stands at the level cap, which is the one rule an item level is printed under. */
-const CAPPED_SQL = `CASE WHEN COALESCE(level, 0) >= ${CURRENT_MAX_LEVEL} THEN 1 ELSE 0 END`
-
-/** The columns a row carries, in the order both of the shapes below select them, and the three the insert derives. */
+/** The columns a row carries, in the order both of the shapes below select them, and the two the insert derives. */
 const ROW_COLUMNS = `user_id, region, realm_slug, name_key, realm_name, display_name, avatar, class_id, faction,
   level, first_seen_at, updated_at, is_account, ilvl, mplus_score, honorable_kills, mounts, pets, toys, decor,
-  reputations, achievements, collectables, score, capped`
+  reputations, achievements, collectables, score`
 
 /**
  * The side a row plays for, as the table stores it: the API's own spelling folded to the one the filters ask in, and
@@ -94,8 +93,10 @@ const GUEST_ROWS = (where: string): string => `
     c.first_seen_at AS first_seen_at,
     s.taken_at AS updated_at,
     0 AS is_account,
-    s.ilvl AS ilvl,
-    COALESCE(s.mplus_score, 0) AS mplus_score,
+    c.ilvl AS ilvl,
+    -- The Mythic+ rating, read in the season Blizzard is running rather than in the one it was read in
+    -- (see ./mplus): a score from a season that has passed counts as nothing.
+    COALESCE(${seasonRatingSql('s.mplus_score', 's.taken_at')}, 0) AS mplus_score,
     COALESCE(s.honorable_kills, 0) AS honorable_kills,
     COALESCE(s.mounts, 0) AS mounts,
     COALESCE(s.pets, 0) AS pets,
@@ -131,8 +132,12 @@ const ACCOUNT_ROWS = (where: string): string => `
     c.first_seen_at AS first_seen_at,
     a.taken_at AS updated_at,
     1 AS is_account,
-    a.ilvl AS ilvl,
-    COALESCE(a.mplus_score, 0) AS mplus_score,
+    -- The item level of the very character this row is named after (the main joined above), never the roster's
+    -- best: an item level is always one character's, so a row shows the one its identity is read from.
+    c.ilvl AS ilvl,
+    -- The account's Mythic+ rating, which is the highest any of its characters stands at, counted in the season
+    -- Blizzard is running (see ./mplus).
+    COALESCE(${seasonRatingSql('a.mplus_score', 'a.taken_at')}, 0) AS mplus_score,
     COALESCE(a.honorable_kills, 0) AS honorable_kills,
     COALESCE(a.mounts, 0) AS mounts,
     COALESCE(a.pets, 0) AS pets,
@@ -157,7 +162,7 @@ const ACCOUNT_ROWS = (where: string): string => `
  */
 function writeRows(rows: string): string {
   return `INSERT OR REPLACE INTO leaderboard (${ROW_COLUMNS})
-          SELECT *, ${COLLECTABLES_SQL}, ${SCORE_SQL}, ${CAPPED_SQL} FROM (${rows})`
+          SELECT *, ${COLLECTABLES_SQL}, ${SCORE_SQL} FROM (${rows})`
 }
 
 /** The columns a read hands back, named the way a player is read below. */
@@ -358,8 +363,7 @@ const SORT_COLUMNS: Record<LeaderboardSort, string> = {
   achievements: `achievements DESC, ${RATING_ORDER}, ${NAME_ORDER}`,
   pets: `pets DESC, ${RATING_ORDER}, ${NAME_ORDER}`,
   toys: `toys DESC, ${RATING_ORDER}, ${NAME_ORDER}`,
-  reputations: `reputations DESC, ${RATING_ORDER}, ${NAME_ORDER}`,
-  ilvl: `capped DESC, ilvl DESC, ${RATING_ORDER}, ${NAME_ORDER}`
+  reputations: `reputations DESC, ${RATING_ORDER}, ${NAME_ORDER}`
 }
 
 /** The order the "king of collections" widget leads by: the count of collectables, which is stored for it. */

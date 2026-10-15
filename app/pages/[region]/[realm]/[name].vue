@@ -3,6 +3,7 @@
 // page and its card agree (see `#shared/utils/wow-class`). A class shows up in the header, and the
 // header is the shell's - the views below it never print one.
 import { resolveClass, classColorHex } from '#shared/utils/wow-class'
+import { formatNumber } from '#shared/utils/formatNumber'
 // The profile the whole subtree is a view of. The shell fetches it once and hands it to whichever
 // view the address names, so a switch between the views is a swap rather than a second read of
 // Blizzard - and the endpoint keeps it for two hours in any case (see `server/api/character`).
@@ -333,7 +334,10 @@ const metaParts = computed<MetaPart[]>(() => {
   return [
     // 1. Уровень
     {
-      text: String(c.level),
+      // The level, with the item level read beside it: what a character *wears* belongs with what it is rather
+      // than with the figures it has gathered, which is why the board's rows and the table's columns do not carry
+      // it (`app/components/CharacterVersus.vue`, `app/components/leaderboard/LeaderboardTable.vue`).
+      text: [String(c.level), c.ilvl ? `ilvl ${formatNumber(c.ilvl)}` : ''].filter(Boolean).join(' · '),
       className: amberBadge
     },
     // 2. Раса

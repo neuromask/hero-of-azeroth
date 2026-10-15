@@ -4,10 +4,16 @@
  *
  * The board is the whole of the comparison page (`app/pages/[region]/[realm]/[name]/compare/`): the character
  * being read stands in the left column and the one it is read against in the right, each under their own
- * card, with the same fifteen figures in the same order below them - so a reader's eye can go down either
+ * card, with the same thirteen figures in the same order below them - so a reader's eye can go down either
  * column and find the same row in the other. It is the figures of the site's other pages read a second way,
- * and nothing here is computed: the score, the collections and the six things a character *does* all arrive
+ * and nothing here is computed: the score, the collections and the five things a character *does* all arrive
  * on the profile the shell already fetched (`app/composables/characterView.ts`), and the board prints them.
+ *
+ * Two of the figures a character has are deliberately not among them. The item level is not a figure of the
+ * board at all: it is what a character *wears*, so it is read in the pill that carries the level - the same pair
+ * the header of a character's own page and a row of the hall of fame print. And the Mythic+ rating belongs to
+ * the hall of fame's table, which is the one place a reader compares characters by it, and which counts it in
+ * the season Blizzard is running rather than in whatever season it was read in (`server/utils/mplus`).
  *
  * The second character is one Blizzard lookup of its own, and it is fetched here - on the server while the
  * address is being rendered, so a shared comparison link opens whole, and again in the browser when another
@@ -16,7 +22,7 @@
  * OAuth account is shown the account's own figures and a stranger the character's, which is why every row
  * says which of the two it is printed from.
  *
- * One figure of the fifteen is not on that profile: the appearance sources, the document behind which is
+ * One figure of the thirteen is not on that profile: the appearance sources, the document behind which is
  * 2.5 MB (`server/api/transmog`). It is asked for separately, for both characters at once, and a row that has
  * not been answered yet prints a dash rather than a zero - a wardrobe nobody has read and an empty one are
  * different answers (the rule `app/components/StatDrawer.vue` states for the same reason).
@@ -159,8 +165,14 @@ interface VersusRow extends VersusFigure {
 }
 
 /**
- * The fifteen figures of one character, in the order the board reads them - the site's score first, then the
+ * The thirteen figures of one character, in the order the board reads them - the site's score first, then the
  * collections a player looks at, then the things a character has *done*.
+ *
+ * The item level and the Mythic+ rating are deliberately not here: neither is something a character has
+ * *gathered*, and the item level is not even read beside the others - it is what a character wears, and the board
+ * reads it in the pill that carries the level, which is where the header of the character's own page and a row of
+ * the hall of fame read it too. The Mythic+ rating belongs to the table, which is the one place a reader compares
+ * characters by it (see `server/utils/mplus` for the season it is counted in).
  *
  * Whose figure each one is follows the two rules the site already prints its tiles by
  * (`app/pages/[region]/[realm]/[name]/index.vue` and `app/components/StatDrawer.vue`), and it is read off the
@@ -183,8 +195,6 @@ function metricsFor(character: CharacterData | null | undefined, wardrobe: numbe
     { label: 'pets', icon: 'pets', value: count(stats?.pets), accountWide: true },
     { label: 'decor', icon: 'decor', value: count(stats?.decor), accountWide: true },
     { label: 'titles', icon: 'titles', value: count(stats?.titles), accountWide: !!stats?.titles?.accountWide },
-    { label: 'itemLevel', icon: 'item-level', value: character ? figure(character.ilvl) : null, accountWide: false },
-    { label: 'mPlus', icon: 'key', value: character ? figure(character.mPlusScore) : null, accountWide: false },
     { label: 'reputations', icon: 'exalted-rep', value: count(stats?.reputations), accountWide: !!character?.pooled },
     // The one figure that arrives from an endpoint of its own: `undefined` while it is being read.
     { label: 'transmogs', icon: 'transmogs', value: typeof wardrobe === 'number' ? wardrobe : null, accountWide: true },
@@ -267,8 +277,6 @@ const ROW_METRIC: Record<string, MetricKey> = {
   pets: 'pets',
   decor: 'decor',
   titles: 'titles',
-  itemLevel: 'ilvl',
-  mPlus: 'mPlusScore',
   reputations: 'reputations',
   transmogs: 'transmogs',
   quests: 'quests',
@@ -318,7 +326,8 @@ const currentHistoryUrl = computed(() =>
 const {
   data: currentHistory,
   pending: currentHistoryPending,
-  error: currentHistoryError
+  error: currentHistoryError,
+  refresh: refreshCurrentHistory
 } = await useAsyncData(
   currentHistoryKey,
   () => (currentHistoryUrl.value ? $fetch<HistorySeries>(currentHistoryUrl.value) : Promise.resolve(null)),
@@ -338,7 +347,8 @@ const targetHistoryUrl = computed(() =>
 const {
   data: targetHistory,
   pending: targetHistoryPending,
-  error: targetHistoryError
+  error: targetHistoryError,
+  refresh: refreshTargetHistory
 } = await useAsyncData(
   targetHistoryKey,
   () => (targetHistoryUrl.value ? $fetch<HistorySeries>(targetHistoryUrl.value) : Promise.resolve(null)),
@@ -376,11 +386,30 @@ const distributionUrl = computed(() =>
   metric.value ? `/api/distribution?metric=${metric.value}&players=${encodeURIComponent(panelPlayersParam.value)}` : null
 )
 
-const { data: distribution } = await useAsyncData(
+const { data: distribution, refresh: refreshDistribution } = await useAsyncData(
   distributionKey,
   () => (distributionUrl.value ? $fetch<DistributionResponse>(distributionUrl.value) : Promise.resolve(null)),
   { default: () => null }
 )
+
+/**
+ * The wardrobe arrives *after* the page has been rendered, and reading it is what files it as the character's own
+ * figure (`fileTransmogReading` in `server/utils/profileFeed`) - which is the whole of the transmogs row's story:
+ * the number is read by the browser, and the chart is drawn from the site's record of the character, which did not
+ * hold that figure a moment ago.
+ *
+ * So a panel that is already open on the transmogs row when its wardrobe lands was drawn from a question asked
+ * before the character had a wardrobe at all, and it would stay that way - a number in the row and nothing marked
+ * in the chart - until the row was opened again. One refetch when a wardrobe arrives, for that metric alone, is
+ * what keeps the two halves of the row telling one story.
+ */
+watch([currentWardrobe, targetWardrobe], ([current, target]) => {
+  if (metric.value !== 'transmogs' || (current === undefined && target === undefined)) return
+
+  void refreshDistribution()
+  void refreshCurrentHistory()
+  if (props.target) void refreshTargetHistory()
+})
 
 /** The two sides of the comparison as the panel's legend names them: their key, their name and their colour. */
 const panelPlayers = computed(() => {
@@ -431,9 +460,14 @@ const META_CLASS_BADGE = 'inline-flex max-w-full items-center rounded-md border 
 function metaRowsOf(character: CharacterData | null | undefined): MetaPill[][] {
   if (!character) return []
 
+  // The level and the item level, in one pill: the item level is what a character *wears* rather than what it has
+  // gathered, so the board reads it here rather than as a figure of its own - and it is the pair the header of the
+  // character's own page and a row of the hall of fame print as well (`lbLevel` and `ilvl`).
+  const worn = typeof character.ilvl === 'number' && character.ilvl > 0 ? `ilvl ${formatNumber(character.ilvl)}` : ''
+
   return [
     [
-      { text: character.level ? String(character.level) : '', badge: META_BADGE },
+      { text: [character.level ? String(character.level) : '', worn].filter(Boolean).join(' · '), badge: META_BADGE },
       { text: character.race, badge: META_BADGE },
       // The spec and the class, printed in the class's signature colour (see <CharacterName>).
       { text: `${character.spec} ${character.class}`.trim(), badge: META_CLASS_BADGE, isClass: true }
@@ -619,7 +653,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- The board: two columns of glass, the character being read on the left and the one it is read against on
-       the right, each under its own card with the same fifteen figures below it. On a phone the two stack -
+       the right, each under its own card with the same thirteen figures below it. On a phone the two stack -
        the figures of the first character, then the second's - because a row of two half-width columns cannot
        hold a label, a badge and a number. -->
   <main class="relative z-20 container mx-auto flex-1 px-4 py-6">

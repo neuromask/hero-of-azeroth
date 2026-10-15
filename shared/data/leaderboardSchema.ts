@@ -30,31 +30,38 @@ export type LeaderboardFaction = 'alliance' | 'horde' | 'neutral'
  * `kills` is the honorable kills a character has earned, and it is the one figure of the table an account
  * is counted for by *adding its characters up* rather than by taking the best of them: a kill belongs to
  * the character that earned it (see `AccountExtra` in `server/utils/accountPool`).
+ *
+ * The item level is deliberately not among them: it is what a character *wears* rather than what it has
+ * gathered, and a reader meets it beside the level under a row's name (`metaLine` in
+ * `app/components/leaderboard/LeaderboardTable.vue`) rather than as a column of its own.
  */
 export type LeaderboardSort =
   | 'total'
-  | 'mounts'
-  | 'decor'
-  | 'mplus'
-  | 'kills'
   | 'achievements'
-  | 'pets'
+  | 'mounts'
   | 'toys'
+  | 'pets'
+  | 'decor'
   | 'reputations'
-  | 'ilvl'
+  | 'kills'
+  | 'mplus'
 
-/** Every sort the endpoint accepts, which is what a query string is checked against. */
+/**
+ * Every sort the endpoint accepts, which is what a query string is checked against.
+ *
+ * The order is the order the table draws its columns in, which is what an address that names several of them
+ * spells them in (`leaderboardColumnsFromQuery` in `app/composables/leaderboardView.ts`).
+ */
 export const LEADERBOARD_SORTS: readonly LeaderboardSort[] = [
   'total',
-  'mounts',
-  'decor',
-  'mplus',
-  'kills',
   'achievements',
-  'pets',
+  'mounts',
   'toys',
+  'pets',
+  'decor',
   'reputations',
-  'ilvl'
+  'kills',
+  'mplus'
 ]
 
 /**
@@ -71,13 +78,12 @@ export const CURRENT_MAX_LEVEL = 90
 /**
  * Whether a character's item level may be read beside the others': the rule above, written once.
  *
- * Both ends of the wire need the same answer to that question. The table prints an item level for a
- * character at the cap and a dash for everybody else, and the ordering puts the characters whose
- * item level it prints first, because a figure a row does not show cannot be the thing that decides
- * where the row goes. Asked in one place, the two can never drift apart - a number cannot disappear
- * from a row while its place in the table stays, or the other way round. A level the record does not
- * carry is not a level at the cap: the dash is the honest answer, and the tail of the table is where
- * such a row belongs.
+ * The table reads one character's item level beside everybody else's, under the row's name, so it prints one for
+ * a character at the cap and nothing for anybody else - a figure a row does not show cannot be the thing that
+ * decides where the row goes. Asked in one place, the two can never drift apart. The comparison board and the
+ * header of a character's own page print it unconditionally, because neither ranks anybody: the rule is about a
+ * figure read *beside* others, and those two read one character at a time. A level the record does not carry is
+ * not a level at the cap: nothing is the honest answer.
  */
 export function isAtItemLevelCap(level?: number): boolean {
   return typeof level === 'number' && level >= CURRENT_MAX_LEVEL
