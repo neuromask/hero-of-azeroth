@@ -233,27 +233,31 @@ a second implementation is a second answer.
 
 ## 🏆 The hall of fame
 
-The site's front door *is* its hall of fame: `/` is a public ranking of every character the site has ever
-rendered — the same population the sitemap is built from — with the search in the row above it and the community's own
-totals between the two. It is built so that opening it costs the rest of the site nothing:
+The site's front door *is* its hall of fame: `/` is a public ranking of every character the site has read — the
+population the statistics are counted over (`server/utils/statisticsPopulation`) — with the search in the row
+above it and the community's own totals between the two. It is built so that opening it costs the rest of the
+site nothing:
 
-- **Nothing is aggregated per request.** One file, `server/data/leaderboard.json`, holds a record per
-  character, and the overall rating is computed when a profile is *written* rather than when the table
-  is read — so a reader costs the same whether the table holds ten players or ten thousand.
-- **A read is a filter and a sort over memory.** The file is parsed once per process and kept in a
-  snapshot; a write replaces the snapshot and clears the memoised statistics.
+- **Nothing is aggregated per request.** The table is materialised in the site's own database
+  (`leaderboard`, `server/utils/leaderboardRows`): one row per member, holding the figures the table draws and
+  the overall rating computed when the row was written. Every order the page offers is an index over that table
+  (`server/utils/db`), so a read is a page of an indexed query rather than a sort of the population — the same
+  cost whether the table holds ten players or two hundred thousand, and a deep page is an index scan.
+- **The rating is stored, not derived.** It is computed once, by the formula the site's own code holds
+  (`server/utils/playerScore`), and a build that changes the weights — or what a row holds — stamps the table
+  and rebuilds the population once at startup (`SCORE_VERSION`, `ROW_VERSION`).
 - **The endpoint is cached for an hour** (`defineCachedEventHandler`, `maxAge: 3600`, `swr: true`), so
   a burst of readers is answered from Nitro's memory in single-digit milliseconds and the hour is
   refreshed *behind* a response rather than in front of one. The first page of the table is rendered
   on the server and arrives inside the document.
-- **A write is queued and atomic.** Records are appended through one promise chain, and the document
-  is written to a temporary name and renamed over the target: two lookups landing together cannot lose
-  each other, and a process killed mid-write leaves the previous file intact.
-- **It is fed by the pages themselves.** Every character page a reader opens hands the table that
-  character's figures — from the profile cache or from Blizzard, it makes no difference — so a record
-  the sitemap's thinner index could only half write fills in the first time somebody looks that
-  character up. A record that already says everything the profile does is not written again, which is
-  what keeps a reader from costing the disk anything at all.
+- **A write is one row.** A reading filed, an account's totals filed, a character claimed or a main named
+  rewrites exactly the member it moved (`refreshGuestRow`, `refreshAccountRow`), inside a single statement
+  rather than by rewriting a document.
+- **It is fed by the pages themselves.** Every character page a reader opens files a reading
+  (`server/utils/profileFeed`), and that reading is what puts a character in the table or moves its row — so a
+  name nobody has looked up is a name the table does not hold. The sitemap's own thinner index
+  (`server/utils/characterIndex`) is deliberately not a source: it lists addresses a crawler may be told about,
+  and a character known only from that list is not a member of any population.
 
 The figures a reader is most likely to have moved themselves are the ones on the page they are looking at: every
 character page anybody renders hands the table that character's numbers, so a reader who has just looked somebody up
@@ -264,17 +268,17 @@ browser is allowed to keep the endpoint's answer for an hour (`max-age` is Nitro
 cache — a header a handler cannot set for itself), and the second writes what comes back straight into the table on
 screen: nothing waits, nothing dims, and the counts correct themselves a moment later.
 
-The storage sits behind `server/utils/leaderboardStorage.ts`, and that module is the only thing that
-knows the data is a JSON file — `getLeaderboard`, `upsertPlayer` and `getGlobalStats` are the whole
-contract, so moving it to SQLite (`better-sqlite3`, `db0`) is a rewrite of that one file and a change
-to nothing else: not the endpoint, not a component. A table that has never been written is filled from
-the sitemap's own index on the first read, so the page opens with the site's history in it rather than
-empty; a figure the index never kept — pets, toys, decor, achievement points, faction — appears the
-next time that character is looked up.
+The storage sits behind `server/utils/leaderboardStorage.ts`, which is a thin layer over the table itself: the
+rows *are* the hall of fame's table in the database (`server/utils/leaderboardRows`), and a table read from a
+database has no business holding itself in a process.
+
+A database that has never held it builds the whole population once, at startup, from the characters and their
+readings (`rebuildPopulation`, `server/plugins/statisticsMigration`), so the page opens with the site's history
+in it rather than empty.
 
 The weights are one line per category in `shared/utils/leaderboardScore.ts` (`SCORE_WEIGHTS`), each
 chosen so that a top-end character contributes the same order of magnitude to every one of them.
-Adding transmog or reputations is a line there plus a field in the record; the endpoint, the page and
+Adding a category is a line there plus a column on the table's own row; the endpoint, the page and
 the components do not have to learn about it.
 
 On the page itself the figures are the reader's to choose: a row of chips switches columns on and off —
@@ -674,16 +678,18 @@ character up still costs nothing and needs no account.
   profile page turn the mark into a "sign in again" plate. A timeout, a DNS hiccup or a 5xx does not:
   those say nothing about the grant, and the account is left alone for the next request.
 - **Storage** is a single SQLite file, `server/data/hoa.db`, opened through the built-in `node:sqlite`
-  driver (`server/utils/db.ts`): accounts, characters, sessions and one snapshot per character per
-  day. No database server, no native dependency, no migration step - the schema is created on first
-  open. It sits beside the JSON stores, and `npm run deploy --prune` never touches it.
+  driver (`server/utils/db.ts`): accounts, their characters, the readings each character has been through, the
+  account's own points of history, and the hall of fame's materialised table. No database server, no native
+  dependency, and the schema is created on first open — a database written by an older build is brought up to
+  it when the process starts (`migrate`). It sits beside the JSON stores, and `npm run deploy --prune` never
+  touches it.
 - **Stats are filled in the background.** The sign-in writes names, not figures; the profile page
   reads a few characters on demand (`server/api/profile/sync.post.ts`) and a server plugin
   (`server/plugins/characterSync.ts`) does the same on a timer, so no page ever waits on a Blizzard
   read per alt. Every read also stamps the moment it happened on the character
-  (`characters.stats_read_at`), because a snapshot is keyed to the day it belongs to - and a page that
-  printed that day would tell a reader who has just pressed Refresh that their character was read
-  "20 hours ago".
+  (`characters.stats_read_at`), because a reading is filed for the moment it was taken rather than for the day
+  it belongs to — and a page that printed a day would tell a reader who has just pressed Refresh that their
+  character was read "20 hours ago".
 - **The account pool is the source of every figure.** Mounts, pets, toys, decor and the factions
   driven to Exalted are shared across a whole Battle.net account, so the account's numbers are a
   **union of unique ids** (`account_pool`), filled from Blizzard's account collections

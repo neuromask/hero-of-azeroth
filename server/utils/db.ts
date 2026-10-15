@@ -176,10 +176,10 @@ CREATE TABLE IF NOT EXISTS characters (
   /**
    * When this character's figures were last read from Blizzard, to the second.
    *
-   * The snapshots are keyed to the day on purpose (the taken_at column, see ./accountSync), so the
-   * day itself cannot say when a reading happened - and a page that printed the day would answer a
-   * reader who just pressed Refresh with "20 hours ago". This is that moment, and it is written only
-   * where a character is actually read.
+   * The readings beside this row are filed for the moment they were taken rather than for the day they belong
+   * to (the taken_at column, see ./characterReading), so the day cannot say when a reading happened - and a
+   * page that printed a day would answer a reader who just pressed Refresh with "20 hours ago". This is that
+   * moment, and it is written only where a character is actually read.
    */
   stats_read_at INTEGER,
   UNIQUE (user_id, region, realm_slug, name_key)
@@ -191,11 +191,17 @@ CREATE INDEX IF NOT EXISTS idx_characters_key ON characters(region, realm_slug, 
 -- would be split between them.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_guest ON characters(region, realm_slug, name_key) WHERE user_id IS NULL;
 
+-- One reading of one character: what its profile said when the site read it. A point is filed for the moment it
+-- was taken and only when the figures have moved, so this is a character's real history rather than one row a day
+-- (see ./characterReading). It is what a tile prints, what a page weighs a live Blizzard answer against, and what
+-- a history and a distribution are drawn from (./statisticsPopulation).
 CREATE TABLE IF NOT EXISTS snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   taken_at INTEGER NOT NULL,
   mplus_score REAL,
+  -- Read by nothing: the raid progress a profile used to carry. Kept where it is because a build that is rolled
+  -- back still finds every column it selects - the migrations here only ever add (see migrate above).
   raid_progress INTEGER,
   achievements INTEGER,
   mounts INTEGER,
