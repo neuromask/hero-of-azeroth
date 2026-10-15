@@ -22,9 +22,10 @@ export default defineEventHandler(async (event) => {
   const locale = (getQuery(event).locale as string) || 'en_US'
   const result = await upsertAccountCharacters(user.id, region, accessToken, locale)
 
-  // A roster that moved changes who the table must not draw - an account appears in the hall of fame with the
-  // character it leads with - so the exclusions are dropped for the next read rather than when their minute is up.
-  clearLeaderboardExclusions()
+  // A roster that moved changes what the table draws - an account appears in it as the character it leads with,
+  // and every one of its characters now shows the account's own figures - so its row is rewritten here rather than
+  // when a reader's cached answer happens to expire (`server/utils/leaderboardRows`).
+  refreshAccountRow(user.id)
 
   // The account's own collections ride along: they are what the totals block is read from, and a
   // refresh that only re-read the roster would leave those numbers on the best character.

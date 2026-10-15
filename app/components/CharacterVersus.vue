@@ -2,7 +2,7 @@
 /**
  * Two characters, their figures side by side.
  *
- * The board is the whole of the comparison page (`app/pages/[region]/[realm]/[name]/vs/`): the character
+ * The board is the whole of the comparison page (`app/pages/[region]/[realm]/[name]/compare/`): the character
  * being read stands in the left column and the one it is read against in the right, each under their own
  * card, with the same fifteen figures in the same order below them - so a reader's eye can go down either
  * column and find the same row in the other. It is the figures of the site's other pages read a second way,
@@ -42,7 +42,7 @@ interface VersusTarget {
 }
 
 const props = defineProps<{
-  /** This character's own `/vs` address, in the language being read: where a second character is appended. */
+  /** This character's own `/compare` address, in the language being read: where a second character is appended. */
   vsBase: string
   /** The character to read this one against, or `null` while none has been picked. */
   target?: VersusTarget | null

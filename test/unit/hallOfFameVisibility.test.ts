@@ -1,19 +1,20 @@
 /**
  * Who the public table may draw, and the key it is asked by.
  *
- * The rule is the site's own: a row belongs to one character per account - the main - every other
- * character of a signed-in account is personal, and an account that asked to be left out is left out
- * whole, main included. It is written as one SQL query, so it is tested against a throwaway database
- * through that same query. The minute-long memo is exercised as well, because a stale memo is what a
- * main change would otherwise hide behind.
+ * The rule is the site's own: a row belongs to one *account* per signed-in player - drawn as the character it
+ * leads with - a character nobody signed in for is drawn as itself, and an account that asked to be left out is
+ * left out whole. It used to be a set of excluded keys, memoised for a minute; it is the population a query
+ * reads now, and the rules themselves are tested with that query (`./leaderboardRows.test.ts`,
+ * `./statisticsPopulation.test.ts`).
+ *
+ * What is left to test here is the seam between the two: the key a row of the table is addressed by has to be
+ * the key a presence dot is looked up under (`./presence`), or a row would wear no dot however online its player
+ * is.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
-import {
-  clearLeaderboardExclusions,
-  excludedLeaderboardKeys,
-  leaderboardKey
-} from '../../server/utils/leaderboardExclusions'
-import { accountLeaderboardKeys, clearAccountKeys } from '../../server/utils/accounts'
+import { leaderboardKey } from '../../server/utils/leaderboardExclusions'
+import { readLeaderboardPage } from '../../server/utils/leaderboardRows'
+import { fileAccountReading } from '../../server/utils/accountPool'
 import { createMemoryDb, installUseDb, type MemoryDb } from '../helpers/memoryDb'
 
 let memory: MemoryDb
@@ -21,9 +22,6 @@ let memory: MemoryDb
 beforeEach(() => {
   memory = createMemoryDb()
   installUseDb(memory.db)
-  // Both sets are memoised for a minute; each test starts from an empty memo so it reads its own rows.
-  clearLeaderboardExclusions()
-  clearAccountKeys()
 })
 
 describe('leaderboardKey', () => {
@@ -32,44 +30,41 @@ describe('leaderboardKey', () => {
   })
 })
 
-describe('the hall of fame\'s visibility', () => {
-  it('draws one main per account, and drops an account that hid itself - main included', () => {
-    memory.addUser(1, false)
-    memory.addUser(2, true)
-    memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'MainOne', isMain: true })
-    memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'AltOne' })
-    memory.addCharacter({ userId: 2, region: 'eu', realm: 'gordunni', name: 'HiddenMain', isMain: true })
+describe('the keys a row and a presence dot are compared by', () => {
+  it('keys every row of the table the way the dot keys its own', () => {
+    memory.addUser(42)
+    const main = memory.addCharacter({ userId: 42, region: 'eu', realm: 'gordunni', name: 'MainOne', isMain: true })
+    memory.addSnapshot({
+      characterId: main,
+      takenAt: 1000,
+      ilvl: 320,
+      mounts: 100,
+      pets: 10,
+      toys: 10,
+      decor: 10,
+      reputations: 1,
+      achievements: 100
+    })
+    fileAccountReading(42)
 
-    expect([...accountLeaderboardKeys()].sort()).toEqual(['eu:gordunni:hiddenmain', 'eu:gordunni:mainone'])
-    expect([...excludedLeaderboardKeys()].sort()).toEqual(['eu:gordunni:altone', 'eu:gordunni:hiddenmain'])
-  })
+    memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Stranger' })
+    const stranger = memory.db.prepare("SELECT id FROM characters WHERE name_key = 'stranger'").get() as { id: number }
+    memory.addSnapshot({
+      characterId: stranger.id,
+      takenAt: 1000,
+      ilvl: 300,
+      mounts: 5,
+      pets: 1,
+      toys: 1,
+      decor: 1,
+      reputations: 1,
+      achievements: 1
+    })
 
-  it('asks lowercased names, which is how the roster stores them', () => {
-    memory.addUser(1, false)
-    memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'MainOne', isMain: true })
+    const keys = readLeaderboardPage({}, 25)
+      .players.map((player) => leaderboardKey(player.region, player.realm, player.name))
+      .sort()
 
-    expect(accountLeaderboardKeys().has('eu:gordunni:mainone')).toBe(true)
-  })
-
-  it('honours a change the moment the memo is dropped', () => {
-    memory.addUser(1, false)
-    memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'MainOne', isMain: true })
-    memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'AltOne' })
-
-    expect(excludedLeaderboardKeys().has('eu:gordunni:altone')).toBe(true)
-
-    memory.db.prepare('UPDATE characters SET is_main = 1 WHERE name_key = ?').run('altone')
-    // The memo still holds the set it built, which is exactly why the write paths clear it.
-    expect(excludedLeaderboardKeys().has('eu:gordunni:altone')).toBe(true)
-
-    clearLeaderboardExclusions()
-    expect(excludedLeaderboardKeys().has('eu:gordunni:altone')).toBe(false)
-  })
-
-  it('offers no exclusions at all when the database cannot be read', () => {
-    // The conservative answer: a process with no database shows what it always showed.
-    installUseDb(null as unknown as import('node:sqlite').DatabaseSync)
-    clearLeaderboardExclusions()
-    expect(excludedLeaderboardKeys().size).toBe(0)
+    expect(keys).toEqual(['eu:gordunni:mainone', 'eu:gordunni:stranger'])
   })
 })

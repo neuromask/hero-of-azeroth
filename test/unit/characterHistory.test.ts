@@ -9,7 +9,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CharacterData } from '../../server/utils/blizzard'
-import { fileDailyReading, readCharacterHistory } from '../../server/utils/characterReading'
+import { fileDailyReading, readCharacterHistory, readSnapshotDistribution } from '../../server/utils/characterReading'
 import { calculatePlayerScore } from '../../server/utils/playerScore'
 import { createMemoryDb, installUseDb, type MemoryDb } from '../helpers/memoryDb'
 
@@ -151,7 +151,7 @@ describe('readCharacterHistory', () => {
   })
 
   it('reads one metric oldest first, mapped to the wire shape', () => {
-    const id = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Testchar' })
+    const id = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Testchar' })
 
     memory.addSnapshot({ characterId: id, takenAt: 1000, mounts: 10, score: 123 })
     memory.addSnapshot({ characterId: id, takenAt: 2000, mounts: 20, mplus: 1800 })
@@ -167,10 +167,73 @@ describe('readCharacterHistory', () => {
   })
 
   it('reads the snake_case column of a metric the wire spells in camelCase', () => {
-    const id = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Testchar' })
+    const id = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Testchar' })
     memory.addSnapshot({ characterId: id, takenAt: 1000, mplus: 1800 })
 
     const history = readCharacterHistory('eu', 'gordunni', 'testchar', 'mPlusScore')
     expect(history?.points).toEqual([{ takenAt: 1000, value: 1800 }])
+  })
+})
+
+/**
+ * The distribution of one figure, over the population the statistics are counted over.
+ *
+ * What these tests pin down is the figure and the shape - a character read twice counts once, a character never
+ * read for this figure is not in it at all, and a character the site has no row for is answered with nothing
+ * rather than a fabricated place. The population itself (guests, and the main of an account that signed in) is
+ * the subject of `./statisticsPopulation.test.ts`; the characters here are guests, which is the simplest way to
+ * be in it.
+ */
+describe('readSnapshotDistribution', () => {
+  it('reads one figure per character, from its newest point', () => {
+    const alpha = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Alpha' })
+    const beta = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Beta' })
+    const gamma = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Gamma' })
+    const delta = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Delta' })
+
+    memory.addSnapshot({ characterId: alpha, takenAt: 1000, transmogs: 10 })
+    memory.addSnapshot({ characterId: alpha, takenAt: 2000, transmogs: 30 })
+    memory.addSnapshot({ characterId: beta, takenAt: 1000, transmogs: 20 })
+    memory.addSnapshot({ characterId: delta, takenAt: 1000, transmogs: 5 })
+    // Read, but never for this figure: it is not part of the population, and its bucket holds nobody.
+    memory.addSnapshot({ characterId: gamma, takenAt: 1000, quests: 5 })
+
+    const distribution = readSnapshotDistribution('transmogs', ['eu:gordunni:alpha', 'eu:gordunni:beta'])
+
+    expect(distribution.metric).toBe('transmogs')
+    expect(distribution.population).toBe(3)
+    expect(distribution.bins.reduce((sum, bin) => sum + bin.count, 0)).toBe(3)
+    expect(distribution.bins[0]?.from).toBe(5)
+    expect(distribution.bins[distribution.bins.length - 1]?.to).toBe(30)
+    // Alpha's newest point is 30, not the 10 it held before - and the two places count the figures above them.
+    expect(distribution.positions).toEqual([
+      { key: 'eu:gordunni:alpha', value: 30, rank: 1, percentile: 33 },
+      { key: 'eu:gordunni:beta', value: 20, rank: 2, percentile: 67 }
+    ])
+    expect(distribution.updatedAt).toBe(new Date(2000 * 1000).toISOString())
+  })
+
+  it('answers a character the site has never read with nothing rather than a place', () => {
+    const alpha = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Alpha' })
+    memory.addSnapshot({ characterId: alpha, takenAt: 1000, transmogs: 10 })
+
+    const distribution = readSnapshotDistribution('transmogs', ['eu:gordunni:nobody'])
+
+    expect(distribution.population).toBe(1)
+    expect(distribution.positions).toEqual([
+      { key: 'eu:gordunni:nobody', value: null, rank: null, percentile: null }
+    ])
+  })
+
+  it('is an empty histogram for a figure no reading ever carried', () => {
+    const alpha = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Alpha' })
+    memory.addSnapshot({ characterId: alpha, takenAt: 1000, transmogs: 10 })
+
+    const distribution = readSnapshotDistribution('honorLevel', ['eu:gordunni:alpha'])
+
+    expect(distribution.population).toBe(0)
+    expect(distribution.bins).toEqual([])
+    expect(distribution.updatedAt).toBe('')
+    expect(distribution.positions[0]).toMatchObject({ value: null, rank: null, percentile: null })
   })
 })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The comparison on the address that carries no second character: `/vs`.
+ * The comparison on the address that carries no second character: `/compare`.
  *
  * The board itself is one component (`app/components/CharacterVersus.vue`), because the address below this
  * one (`./[vsRegion]/[vsRealm]/[vsName].vue`) draws the very same board with somebody picked, and what the
@@ -15,12 +15,12 @@ const localeUrl = useLocaleUrl()
 /**
  * This character's own comparison address, in the language being read. It is handed to the board and to the
  * search form inside it, and it is the whole of what the form needs to know: a looked-up character's three
- * segments are appended to it (`/vs/eu/azuregos/name`), and every saved quick compare links to it the same
+ * segments are appended to it (`/compare/eu/azuregos/name`), and every saved quick compare links to it the same
  * way.
  */
-const vsBase = computed(() => localeUrl(`/${regionPath(region)}/${realm}/${name}/vs`))
+const compareBase = computed(() => localeUrl(`/${regionPath(region)}/${realm}/${name}/compare`))
 </script>
 
 <template>
-  <CharacterVersus :vs-base="vsBase" />
+  <CharacterVersus :vs-base="compareBase" />
 </template>

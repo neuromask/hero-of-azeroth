@@ -1,11 +1,15 @@
 /**
- * One profile written into both of the stores the site keeps from it.
+ * One profile written into what the site keeps of it.
  *
- * A character page is a Blizzard lookup, and a lookup that came back with somebody is the moment
- * the site learns two things at once: that a page exists (which is what the sitemap's index is for,
- * see `./characterIndex`) and what the character was when it was read (which is what the hall of
- * fame's table is for, see `./leaderboardStorage`). Both are written from here, and from nowhere
- * else, because *every* reader of a profile has to feed both of them.
+ * A character page is a Blizzard lookup, and a lookup that came back with somebody is the moment the site learns
+ * two things at once: that a page exists (which is what the sitemap's index is for, see `./characterIndex`) and
+ * what the character was when it was read - the reading itself, which the hall of fame's table, a character's
+ * history and the distribution a comparison board draws are all read from (`./characterReading`,
+ * `./statisticsPopulation`). Both are written from here, and from nowhere else, because *every* reader of a
+ * profile has to feed both of them.
+ *
+ * There is no third store to keep in step: the table used to have a file of its own, written from here as well,
+ * and it is a query over the reading now (`./leaderboardRows`).
  *
  * That is the rule the two stores were missing. A profile is read by more than the character page:
  * the card the page previews as and the front door shares is read by crawlers, by every share of a
@@ -23,6 +27,8 @@
 import type { CharacterData } from './blizzard'
 import type { BlizzardRegion } from './params'
 import { fileDailyReading } from './characterReading'
+import { fileAccountReading } from './accountPool'
+import { nowSec } from './db'
 
 /** A freshly read profile, and the three address segments it belongs to. */
 export interface ProfileFeedInput {
@@ -46,9 +52,9 @@ export interface ProfileFeedInput {
 }
 
 export async function feedProfile({ region, realm, name, profile, reading }: ProfileFeedInput): Promise<void> {
-  // Everything a stored record is made of, read off the profile once. Both stores are filled from
-  // the same list on purpose: a field the table prints is a field the index has to keep, or the
-  // table's own backfill (`backfillFromIndex`) would write rows without it.
+  // Everything a stored record is made of, read off the profile once: the sitemap's index is filled from this
+  // list, and nothing else is. What the site counts - the table, a history, a distribution - is read from the
+  // database, which the reading below is filed into.
   const figures = {
     displayName: profile.name,
     avatar: profile.avatarUrl,
@@ -72,11 +78,6 @@ export async function feedProfile({ region, realm, name, profile, reading }: Pro
   // The sitemap's index: the page exists, and what the character was when it was seen.
   await rememberCharacter({ region, realm, name, ...figures })
 
-  // The hall of fame's table: the row the page's history is read from. The realm's own name rides
-  // along here too - the index knows the slug alone, and a row prints the realm as the game spells
-  // it.
-  await upsertPlayer({ region, realm, name, realmName: profile.realm, ...figures })
-
   // And the reading's own point, for a character that belongs to an account - and only when this profile is
   // a reading rather than a copy of one (`reading` above). The three readers of an account's figures - the
   // profile page, this page and the hall of fame's row - all compute them from what is filed
@@ -84,14 +85,115 @@ export async function feedProfile({ region, realm, name, profile, reading }: Pro
   // sync behind the page it was taken from. That is the drift a reader notices as one collection reading as
   // two numbers on two pages.
   //
-  // A stranger's character has no account row to file a reading against, and is skipped: what the site
-  // knows about them is the index and the table's row, both written above. The moment the reading belongs
-  // to is UTC, exactly as the background pass files it (`server/utils/characterReading`).
+  // A character nobody has signed in for is filed as well, as a guest (`characters.user_id IS NULL`): the
+  // reading is the site's own record of them - the history a comparison board draws - and it belongs to
+  // whoever asked for the page rather than to an account. Every account-wide read is keyed by `user_id` or
+  // joins `users` (`./accountPool`, `./accounts`, `./presence`, `./leaderboardExclusions`), so the row is
+  // invisible to the roster by itself and the character's own figures stay their own. The moment it belongs to
+  // is UTC, exactly as the background pass files it (`server/utils/characterReading`).
   if (reading) {
     const stored = useDb()
-      .prepare('SELECT id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
-      .get(region, realm, name) as { id: number } | undefined
+      .prepare('SELECT id, user_id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
+      .get(region, realm, name) as { id: number; user_id: number | null } | undefined
 
-    if (stored) fileDailyReading(stored.id, profile)
+    const characterId = stored?.id ?? rememberGuest({ region, realm, name, profile })
+    fileDailyReading(characterId, profile)
+
+    // And the account's own history, when the character belongs to one: what the statistics count is the account
+    // (`./statisticsPopulation`), so every character of it shows the same figures and the same curve, and the
+    // totals are what the pool and the roster's readings now say (`fileAccountReading` in `./accountPool`).
+    const owner = stored ? stored.user_id : null
+    if (owner !== null) fileAccountReading(owner)
   }
+}
+
+/**
+ * Writes a character's own row for a guest, and answers its id - the one writer of such a row.
+ *
+ * A guest is a character the site has read that no account holds, and both of the callers that can meet one go
+ * through here: a profile read (`rememberGuest` below) and the migration of the hall of fame's own table
+ * (`./statisticsMigration`), which holds rows written before the database kept guests at all. The row is the one
+ * an account's character gets, without an owner: the address, what was read about the character, and the day the
+ * site met them - which is written once and never moved again, the way the index keeps its own record.
+ *
+ * The address is unique on its own for a guest (`idx_characters_guest`, see `./db`), and the upsert names that
+ * index as its conflict target: two readers landing on the same stranger at once is one row rather than two,
+ * which is what keeps one character's readings in one history. A field this reading does not carry is kept from
+ * the row already there (`COALESCE`). A character that belongs to an account is never touched: this only ever
+ * inserts or updates a guest row.
+ */
+export function rememberGuestRow(input: {
+  region: string
+  realm: string
+  name: string
+  realmName?: string | null
+  displayName?: string | null
+  avatar?: string | null
+  classId?: number | null
+  level?: number | null
+  faction?: string | null
+  /** The day the site first met the character, in seconds; now when the caller does not say. */
+  firstSeenAt?: number
+}): number {
+  const db = useDb()
+  const now = nowSec()
+
+  db.prepare(
+    `INSERT INTO characters
+       (user_id, region, realm_slug, realm_name, name, name_key, display_name, class_id, level, faction, avatar,
+        first_seen_at, last_seen_at)
+     VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (region, realm_slug, name_key) WHERE user_id IS NULL DO UPDATE SET
+       realm_name = excluded.realm_name,
+       display_name = excluded.display_name,
+       class_id = COALESCE(excluded.class_id, characters.class_id),
+       level = COALESCE(excluded.level, characters.level),
+       faction = COALESCE(excluded.faction, characters.faction),
+       avatar = COALESCE(excluded.avatar, characters.avatar),
+       last_seen_at = excluded.last_seen_at`
+  ).run(
+    input.region,
+    input.realm,
+    input.realmName || input.realm,
+    input.name,
+    input.name,
+    input.displayName || input.name,
+    input.classId ?? null,
+    input.level ?? null,
+    (input.faction || '').toLowerCase() || null,
+    input.avatar || null,
+    input.firstSeenAt ?? now,
+    now
+  )
+
+  const row = db
+    .prepare(
+      'SELECT id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? AND user_id IS NULL LIMIT 1'
+    )
+    .get(input.region, input.realm, input.name) as { id: number } | undefined
+
+  if (!row) throw new Error(`the guest row for ${input.region}:${input.realm}:${input.name} could not be read back`)
+
+  return row.id
+}
+
+/**
+ * Files a character the site has met that no account holds, and answers its row.
+ *
+ * The figures are deliberately not written here - they arrive as the reading the caller files next, which is the
+ * one thing that writes them (`./characterReading`), so a guest's history is filed by exactly the code that files
+ * an account's, down to the carry-forward of a partial read.
+ */
+function rememberGuest({ region, realm, name, profile }: Omit<ProfileFeedInput, 'reading'>): number {
+  return rememberGuestRow({
+    region,
+    realm,
+    name,
+    realmName: profile.realm || realm,
+    displayName: profile.name,
+    avatar: profile.avatarUrl,
+    classId: profile.classId,
+    level: profile.level,
+    faction: profile.faction
+  })
 }

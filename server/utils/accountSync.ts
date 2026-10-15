@@ -8,6 +8,8 @@
  */
 import type { BlizzardRegion } from './params'
 import { fileDailyReading } from './characterReading'
+import { fileAccountReading } from './accountPool'
+import { dropGuestRow } from './leaderboardRows'
 import { nowSec } from './db'
 
 /** What one roster read did, which is what a page or a log needs to explain an empty grid. */
@@ -61,8 +63,9 @@ export async function upsertAccountCharacters(
 
   const statement = useDb().prepare(
     `INSERT INTO characters
-       (user_id, region, realm_slug, realm_name, name, name_key, display_name, class_id, level, faction, last_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (user_id, region, realm_slug, realm_name, name, name_key, display_name, class_id, level, faction,
+        first_seen_at, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, region, realm_slug, name_key) DO UPDATE SET
        realm_name = excluded.realm_name,
        display_name = excluded.display_name,
@@ -90,6 +93,10 @@ export async function upsertAccountCharacters(
     const realmSlug = flat?.realm?.slug || nested?.realm?.slug || (await realmSlugByName(region, realmName))
     if (!name || !realmSlug) continue
 
+    // A row the site already keeps for this character as a guest is handed over first, so the insert below
+    // finds it rather than writing a second row beside it.
+    claimGuestCharacter(userId, region, realmSlug, name)
+
     statement.run(
       userId,
       region,
@@ -101,6 +108,7 @@ export async function upsertAccountCharacters(
       flat?.playable_class?.id ?? nested?.playable_class?.id ?? null,
       flat?.level ?? nested?.level ?? null,
       (flat?.faction?.type || nested?.faction?.type || '').toLowerCase() || null,
+      now,
       now
     )
 
@@ -108,6 +116,35 @@ export async function upsertAccountCharacters(
   }
 
   return result
+}
+
+/**
+ * Hands the guest row of a character over to the account that has just claimed them.
+ *
+ * A character the site read before its owner signed in is on file with no owner (`./profileFeed`), and its
+ * readings are that character's own record - the history a comparison board draws. Naming the owner is what
+ * keeps one character one row: inserting beside the guest would leave the site's record of a single character
+ * split over two ids, and every page would then read whichever of the two its query happened to find first -
+ * two histories for one character, and a reading that appears to jump whenever the other row is found.
+ *
+ * Only a row with no owner is ever touched, so a character that already belongs to somebody - this account or
+ * another - is left exactly as it was, and a character with no guest row simply has none to hand over (the
+ * insert that follows writes one).
+ */
+export function claimGuestCharacter(userId: number, region: string, realm: string, name: string): void {
+  const claimed = useDb()
+    .prepare(
+      `UPDATE characters SET user_id = ?, last_seen_at = ?
+        WHERE region = ? AND realm_slug = ? AND name_key = ? AND user_id IS NULL`
+    )
+    .run(userId, nowSec(), region, String(realm).toLowerCase(), String(name).toLowerCase())
+
+  // The character was a guest and is now an account's, which is the one write here that moves the population: it
+  // is an alt until the account names it its main, so it leaves the table the moment it is claimed
+  // (`./statisticsPopulation`). Dropping the row it held as a guest is what takes it out - and what moves the
+  // revision every memo of the population is keyed on (`./leaderboardRows`). A claim that matched nothing - the
+  // character already belongs to somebody - leaves the table exactly as it was.
+  if (claimed.changes > 0) dropGuestRow(region, realm, name)
 }
 
 /** A realm's display name as the slug an address spells: `Tarren Mill` -> `tarren-mill`. */
@@ -159,7 +196,12 @@ async function realmSlugByName(region: BlizzardRegion, name: string): Promise<st
 /** A character row as the database keeps it, which is what a stats read is made for. */
 export interface CharacterRow {
   id: number
-  user_id: number
+  /**
+   * The account that holds this character, or `null` for a guest: a character the site has read that nobody has
+   * signed in for (`./profileFeed` files one). A guest's reading is filed like any other, but the account's own
+   * pool has nothing to do with it - see `doRefreshCharacterStats`.
+   */
+  user_id: number | null
   region: string
   realm_slug: string
   name: string
@@ -176,8 +218,9 @@ const pendingRefreshes = new Map<number, ReturnType<typeof doRefreshCharacterSta
  *
  * This is the expensive half - a full Blizzard profile read - and it is called only from two
  * places, both of them off the sign-in path: the profile page when a reader clicks a character,
- * and the background task. The snapshot is keyed to the day, so the aggregate is a step chart
- * rather than a log - opening the same character twice in an afternoon updates one row.
+ * and the background task. The point is one per real update rather than one per day: opening the
+ * same character twice in an afternoon leaves one new row only when the figures actually moved
+ * (`server/utils/characterReading`), which is what keeps the history a log of change.
  *
  * Returns the profile, so the endpoint can hand the page the same document the site's public
  * character reader would.
@@ -248,25 +291,36 @@ async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
   // has finished. A pool that grew hands the account's row over at once; the rest of the batch is
   // handed over once per account when the pass ends (`syncDueCharacters`), so a pass over a hundred
   // alts is not a hundred leaderboard writes.
-  try {
-    const [mounts, factions, titles, quests, recipes] = await Promise.all([
-      getCharacterMountIds(row.realm_slug, row.name_key, row.region, locale),
-      getMaxedReputationIds(row.realm_slug, row.name_key, row.region, locale),
-      // The three figures a character *earns*: read here as ids, because a count cannot be unioned with
-      // anything and the account's own figure is exactly that union (`syncPoolFigures`).
-      getCharacterTitleIds(row.realm_slug, row.name_key, row.region),
-      getCharacterQuestIds(row.realm_slug, row.name_key, row.region),
-      getCharacterRecipeIds(row.realm_slug, row.name_key, row.region)
-    ])
+  //
+  // The pool is the *account's*, keyed by it, so a guest has none to add to: a character read for nobody files
+  // its own reading above and nothing else, and the five reads below - the most expensive of the twelve - are
+  // not even asked for, because every figure they carry is only ever folded into that pool.
+  const owner = row.user_id
 
-    const added =
-      addToPool(row.user_id, 'mounts', mounts) +
-      syncPoolReputations(row.user_id, factions) +
-      syncPoolFigures(row.user_id, { titles, quests, recipes })
+  if (owner !== null) {
+    try {
+      const [mounts, factions, titles, quests, recipes] = await Promise.all([
+        getCharacterMountIds(row.realm_slug, row.name_key, row.region, locale),
+        getMaxedReputationIds(row.realm_slug, row.name_key, row.region, locale),
+        // The three figures a character *earns*: read here as ids, because a count cannot be unioned with
+        // anything and the account's own figure is exactly that union (`syncPoolFigures`).
+        getCharacterTitleIds(row.realm_slug, row.name_key, row.region),
+        getCharacterQuestIds(row.realm_slug, row.name_key, row.region),
+        getCharacterRecipeIds(row.realm_slug, row.name_key, row.region)
+      ])
 
-    if (added) syncMainToLeaderboard(row.user_id)
-  } catch {
-    // A read that failed leaves the pool as it was; the next pass tries again.
+      addToPool(owner, 'mounts', mounts)
+      syncPoolReputations(owner, factions)
+      syncPoolFigures(owner, { titles, quests, recipes })
+    } catch {
+      // A read that failed leaves the pool as it was; the next pass tries again.
+    }
+
+    // And the account's own figures, which is what the site counts it by: the reading above and the pool just
+    // folded in are both what they are made of, so the point is filed once, here, after both. `fileAccountReading`
+    // decides what a point is - it writes nothing when the totals say what the newest point already says, and
+    // nothing at all until one of the account's characters has been read in full (`./accountPool`).
+    fileAccountReading(owner)
   }
 
   // The professions ride along on the answer, so a tile that was just refreshed can draw them
@@ -309,6 +363,11 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
                   SELECT 1 FROM snapshots s
                    WHERE s.character_id = c.id AND s.taken_at > ?
                 )
+                -- The accounts' characters only: a guest's reading is taken when somebody opens the page, and
+                -- a background pass that refreshed strangers would spend the site's Blizzard quota on nobody's
+                -- roster. Guests are also the ones this pass cannot finish for - there is no account to hand the
+                -- result to.
+                AND c.user_id IS NOT NULL
                 ${scope}
           ORDER BY c.is_main DESC, COALESCE(c.level, 0) DESC, c.last_seen_at DESC
           LIMIT ?`
@@ -329,18 +388,9 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
     }
   }
 
-  // And the main's public row once per account the pass touched. What that row prints is the
-  // account's own figures (`./accountPool`), and the snapshots written above are one of the things
-  // they are read from - so a pass that moved a figure the row shows has to hand it over. Once per
-  // account rather than once per character: a record that already says these figures is not written
-  // again, so a pass over a hundred alts is one comparison and no disk at all.
-  for (const account of new Set(due.map((row) => row.user_id))) {
-    try {
-      syncMainToLeaderboard(account)
-    } catch {
-      // The row keeps what it had; the next pass tries again.
-    }
-  }
+  // The pool block above already handed each account's own point over, character by character, so nothing is
+  // left to do once the pass ends: a pass over a hundred alts files the account's point a hundred times, and
+  // every one of those but the last says what the point before it said (`fileAccountReading`).
 
   return done
 }

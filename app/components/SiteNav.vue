@@ -19,29 +19,43 @@ import type { SearchHistoryEntry } from '#shared/utils/savedCharacters'
  * group left out: what is left is the site's own two entries and the search, which is everything such a page
  * has.
  *
- * There are two kinds of entry in that row, and they answer two different questions. Six of them are about
- * the character being read - their profile, their collections, their achievements, their reputations, their
- * feed and the comparison they can be read against - and two are the site's own: the hall of fame the figures
- * are ranked in and the search that opens the next character. So the two are held apart from the six: they
- * stand at the far end of the row, past a hairline. One row still, so stepping between a character and the
- * table keeps the bar and the entries exactly where they are - but a reader can see which entries are about
- * the character under the bar and which are about the site they are on.
+ * There are two kinds of entry in that row, and they answer two different questions. Five of them are about
+ * the character being read - their profile, their collections, their achievements, their reputations and their
+ * feed - and two are the site's own: the hall of fame the figures are ranked in and the search that opens the
+ * next character. So the two are held apart from the five: they stand at the far end of the row, past a
+ * hairline. One row still, so stepping between a character and the table keeps the bar and the entries exactly
+ * where they are - but a reader can see which entries are about the character under the bar and which are
+ * about the site they are on.
+ *
+ * The sixth view of a character is the comparison, and it does not stand as a tab of its own: it rides on the
+ * character's own entry, as the second half of a split control beside the name. The name opens the profile and
+ * the half beside it opens the comparison, drawn the way the collections tab and its caret are (`rounded-r-none`
+ * on the first, `-ml-px rounded-l-none` on the second) so the two read as one control with two ends. The row is
+ * where width is scarce, and a comparison is a question about *this* character rather than a section of their
+ * own - so the entry carrying their name carries the way to read them against somebody else. That half is the
+ * two arrows and nothing else, the one control of the row that says what it does rather than where it goes the
+ * way the search's magnifier does; its words ride in its label and its tooltip. In the panel below `lg` the same
+ * entry is a row of its own, because a list of rows has room for it and a phone reads a row better than a split
+ * control.
  *
  * What the row does *not* carry is the reader. The language and the account stand in the header itself
  * (`app/components/HeaderTools.vue`), because they are properties of the reader rather than ways into a
  * section, and a page that drew them here as well would be showing the same two controls a finger's width
  * apart. Below `lg` they are rows of this panel instead, which is the one place a phone has for them.
  *
- * The first of the six carries the character's own name rather than the word "character", because that is
+ * The first of the five carries the character's own name rather than the word "character", because that is
  * the one entry of the row whose subject the page knows: a reader looking at a bar wants to see *who* they
  * are looking at. It wears the class colour and the portrait the table's own rows do, so the tab and the row
  * a click later are recognisably the same character, and the word it stands for is not lost - it is the tab's
- * tooltip and the half of its accessible name that says which page it opens.
+ * tooltip and the half of its accessible name that says which page it opens. It is also the entry the
+ * comparison hangs off, so the two halves of it are the character's own page and the character read against
+ * somebody else's.
  *
- * Below `lg` the row is not the row at all. A phone cannot hold seven entries, a divider and a corner in one
+ * Below `lg` the row is not the row at all. A phone cannot hold the whole row, a divider and a corner in one
  * line, and a row that wraps to three lines costs a reader a whole screen of the page they came for. So the
- * entries that are *navigation* move into the panel the button opens: the six of a character and the hall of
- * fame, under the two headings they are grouped by. Inside the panel the two menus keep their subtrees as
+ * entries that are *navigation* move into the panel the button opens: the character's own entries - the five
+ * views, the comparison and the hall of fame - under the two headings they are grouped by. Inside the panel
+ * the two menus keep their subtrees as
  * inline lists under the entry that opened them rather than as panes hanging off a caret - a pane opened
  * inside a pinned bar covers the panel it was opened from, and a phone reads an indented list under its
  * parent better than a second layer of glass. What stays in the row is the search, which is not a way of
@@ -67,7 +81,7 @@ const props = defineProps<{
   /** What this navigation is the navigation of, which is what an assistive reader hears it called. */
   label: string
   /** The entry the address names, which is the one wearing the gold the rest of the site accents with. */
-  active?: 'overview' | 'collections' | 'achievements' | 'reputations' | 'activity' | 'vs' | 'leaderboard' | null
+  active?: 'overview' | 'collections' | 'achievements' | 'reputations' | 'activity' | 'compare' | 'leaderboard' | null
 }>()
 
 const { t } = useI18n()
@@ -93,7 +107,7 @@ const links = computed(() => {
     achievements: `${base}/achievements`,
     reputations: localeUrl(`${base}/reputations`),
     activity: localeUrl(`${base}/activity`),
-    vs: localeUrl(`${base}/vs`)
+    compare: localeUrl(`${base}/compare`)
   }
 })
 
@@ -369,12 +383,14 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
           {{ t('tabActivity') }}
         </NuxtLink>
 
-        <!-- The comparison, in the panel as in the row: the same entry, the same glyph, right after the
-             feed. A reader on a phone meets the entries in the order the row above lays them out. -->
+        <!-- The comparison: in the panel it is a row of its own rather than the second half of the character's
+             own entry, which is what it is in the row above - a list of rows has room for it, and a phone reads
+             a row better than a split control. It stands right after the feed, so a reader on a phone meets the
+             entries in the order the row lays them out. -->
         <NuxtLink
-          :to="links.vs"
-          :class="active === 'vs' ? ROW_ON : ROW_OFF"
-          :aria-current="active === 'vs' ? 'page' : undefined"
+          :to="links.compare"
+          :class="active === 'compare' ? ROW_ON : ROW_OFF"
+          :aria-current="active === 'compare' ? 'page' : undefined"
           @click="close"
         >
           <svg
@@ -419,33 +435,68 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
     <!-- The character's own entries, on a screen wide enough to hold them: the profile under the
          character's own name, the two menus, the journal and the feed. The name is the tab's visible text and
          `tabOverview` leads its accessible name, so the entry says both which page it opens and whose it
-         is - the label of a control always contains the words a reader can see on it. -->
+         is - the label of a control always contains the words a reader can see on it. Its second half is the
+         comparison: one control in two halves, split the way the collections tab and its caret are, and the half
+         carries the two arrows and nothing else - a comparison is a question about this character rather than a
+         section of their own, and this row is where width is scarce. -->
     <div v-if="links" class="hidden items-center gap-2 lg:flex">
-      <NuxtLink
-        :to="links.overview"
-        class="hoa-tab hoa-liquid-glass max-w-[15rem]"
-        :class="{ 'hoa-tab-active': active === 'overview' }"
-        :aria-current="active === 'overview' ? 'page' : undefined"
-        :title="t('tabOverview')"
-        :aria-label="`${t('tabOverview')}: ${character?.name}`"
-      >
-        <span
-          class="relative grid h-5 w-5 shrink-0 place-items-center overflow-hidden rounded-full border"
-          :style="{ borderColor: `${classHex}66`, backgroundColor: `${classHex}1f` }"
+      <div class="flex items-stretch">
+        <NuxtLink
+          :to="links.overview"
+          class="hoa-tab hoa-liquid-glass max-w-[15rem] rounded-r-none"
+          :class="{ 'hoa-tab-active': active === 'overview' }"
+          :aria-current="active === 'overview' ? 'page' : undefined"
+          :title="t('tabOverview')"
+          :aria-label="`${t('tabOverview')}: ${character?.name}`"
         >
-          <span class="text-[10px] font-extrabold" :style="{ color: classHex }">{{ initial }}</span>
-          <img
-            v-if="character?.avatar && !portraitBroken"
-            :src="character.avatar"
-            :alt="character.name"
-            loading="lazy"
-            decoding="async"
-            class="absolute inset-0 h-full w-full object-cover"
-            @error="portraitBroken = true"
-          />
-        </span>
-        <span class="truncate" :style="{ color: classHex }">{{ character?.name }}</span>
-      </NuxtLink>
+          <span
+            class="relative grid h-5 w-5 shrink-0 place-items-center overflow-hidden rounded-full border"
+            :style="{ borderColor: `${classHex}66`, backgroundColor: `${classHex}1f` }"
+          >
+            <span class="text-[10px] font-extrabold" :style="{ color: classHex }">{{ initial }}</span>
+            <img
+              v-if="character?.avatar && !portraitBroken"
+              :src="character.avatar"
+              :alt="character.name"
+              loading="lazy"
+              decoding="async"
+              class="absolute inset-0 h-full w-full object-cover"
+              @error="portraitBroken = true"
+            />
+          </span>
+          <span class="truncate" :style="{ color: classHex }">{{ character?.name }}</span>
+        </NuxtLink>
+
+        <!-- The comparison, as the second half of that entry: the character read against somebody else. It is
+             drawn against the name (`-ml-px` merges the shared rim) so the two read as one control, and it
+             carries no word of its own - the label and the tooltip say what the glyph means, and the glyph is
+             the two arrows pointing opposite ways, the one thing in this row that says what it does rather than
+             where it goes. Its box is the collections caret's own - the same padding, the same sixteen-pixel
+             glyph, the same hairline of a rim, which is what makes the two icon buttons of the row one width -
+             and `shrink-0` is what keeps it that width in a row that has run out of room, where the name beside
+             it truncates instead. -->
+        <NuxtLink
+          :to="links.compare"
+          class="hoa-tab hoa-liquid-glass -ml-px shrink-0 rounded-l-none px-2"
+          :class="{ 'hoa-tab-active': active === 'compare' }"
+          :aria-current="active === 'compare' ? 'page' : undefined"
+          :aria-label="t('tabVs')"
+          :title="t('tabVs')"
+        >
+          <svg
+            class="h-4 w-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+          </svg>
+        </NuxtLink>
+      </div>
 
       <CollectionMenu :path="links.collections" :active="active === 'collections'" />
       <AchievementMenu :path="links.achievements" :active="active === 'achievements'" />
@@ -466,32 +517,6 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
         :aria-current="active === 'activity' ? 'page' : undefined"
       >
         {{ t('tabActivity') }}
-      </NuxtLink>
-
-      <!-- The comparison the character's own figures can be read against: a second character, side by side
-           with this one. It stands after the feed, which is the last of the character's four views, and it
-           points at the comparing address - `/vs` on its own, where the search for that second character
-           stands. The glyph is the two arrows pointing opposite ways, and it is the one part of the entry
-           that says what it does rather than where it goes, the way the search's magnifier does. -->
-      <NuxtLink
-        :to="links.vs"
-        class="hoa-tab hoa-liquid-glass"
-        :class="{ 'hoa-tab-active': active === 'vs' }"
-        :aria-current="active === 'vs' ? 'page' : undefined"
-      >
-        <svg
-          class="h-4 w-4 shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.7"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-        </svg>
-        {{ t('tabVs') }}
       </NuxtLink>
     </div>
 

@@ -1,18 +1,17 @@
 <script setup lang="ts">
 /**
- * One metric's panel: its history, and the leaderboard's distribution of it.
+ * One metric's panel: its history, and the distribution of it.
  *
  * Drawn under a stat row of the comparison board, once per column. The history is that column's own
  * character (`/api/history`), and it is a series of its own - two players' points are never merged into one
- * dataset. The distribution is the population's (`/api/distribution`), so the very same answer is handed to
- * both columns and each panel marks both players on one shared histogram.
+ * dataset. The distribution is the population's (`/api/distribution`): everyone the site has read, so the very
+ * same answer is handed to both columns and each panel marks both players on one shared histogram.
  *
  * Both charts are interactive without a library: the histogram colours the bucket this column's character
  * falls into and reads any bucket on hover, and the history draws a crosshair through the point nearest the
  * cursor. Two small SVGs, which scale to the column's width and render on the server like everything else.
  */
 import type { DistributionResponse, HistorySeries, HistorySeriesPoint, MetricKey } from '#shared/data/historySchema'
-import { DISTRIBUTION_METRICS } from '#shared/data/historySchema'
 import { formatNumber } from '#shared/utils/formatNumber'
 
 /** One side of the comparison, as the legend names it. */
@@ -37,9 +36,6 @@ const props = defineProps<{
 }>()
 
 const { t, locale } = useI18n()
-
-/** Whether the canonical leaderboard carries this metric at all, so a histogram can be drawn of it. */
-const distributable = computed(() => (DISTRIBUTION_METRICS as readonly string[]).includes(props.metric))
 
 /** The message key that names the metric, which both tooltips lead with. */
 const METRIC_LABELS: Record<MetricKey, string> = {
@@ -103,11 +99,15 @@ const X_TICKS = 4
  * The line's geometry: the path, the per-point positions the crosshair indexes, and the two value ends.
  *
  * The x axis is the whole width (`CHART_W`), which is what lets the cursor's own ratio across the element be
- * turned back into a moment without a second mapping. `null` for a history too short to draw a line through.
+ * turned back into a moment without a second mapping. A history of *one* point is drawn as that point alone -
+ * it is where the curve starts, and a reader whose character has just been read for the first time is owed a
+ * mark rather than a notice that there is nothing to draw - and it is placed at the left edge, which is the
+ * moment it was taken, at the middle of the height, because one figure has no range to be placed in. `null` is
+ * the one case with nothing at all to draw, which is a history whose points carry no figure for this metric.
  */
 const chart = computed(() => {
   const series = drawn.value
-  if (series.length < 2) return null
+  if (!series.length) return null
 
   const t0 = series[0]!.takenAt
   const t1 = series[series.length - 1]!.takenAt
@@ -115,10 +115,11 @@ const chart = computed(() => {
   const vMax = Math.max(...series.map((point) => point.value))
   const tSpan = t1 - t0 || 1
   const vSpan = vMax - vMin || 1
+  const single = series.length === 1
 
   const points = series.map((point) => ({
-    x: ((point.takenAt - t0) / tSpan) * CHART_W,
-    y: PAD_Y + (1 - (point.value - vMin) / vSpan) * (CHART_H - 2 * PAD_Y),
+    x: single ? 0 : ((point.takenAt - t0) / tSpan) * CHART_W,
+    y: single ? CHART_H / 2 : PAD_Y + (1 - (point.value - vMin) / vSpan) * (CHART_H - 2 * PAD_Y),
     takenAt: point.takenAt,
     value: point.value
   }))
@@ -129,7 +130,8 @@ const chart = computed(() => {
     vMin,
     vMax,
     t0,
-    t1
+    t1,
+    single
   }
 })
 
@@ -143,11 +145,14 @@ const yTicks = computed(() => {
  * The vertical gridlines and their date labels, left to right.
  *
  * The ends align to their own edge rather than centring on it, which is what keeps the first and last date
- * inside the chart instead of hanging off it by half a label.
+ * inside the chart instead of hanging off it by half a label. A history of one point has no span to divide: the
+ * moment it was taken is the whole of the axis, and it is labelled at the edge the point stands on.
  */
 const xTicks = computed(() => {
   const geometry = chart.value
   if (!geometry) return []
+
+  if (geometry.single) return [{ takenAt: geometry.t0, leftPercent: 0, align: 'start' }]
 
   return Array.from({ length: X_TICKS }, (_, index) => {
     const share = index / (X_TICKS - 1)
@@ -339,11 +344,24 @@ const legend = computed(() =>
   })
 )
 
-/** The bucket this column's character falls into, or `-1` for one with no figure to place. */
+/**
+ * The bucket this column's character falls into, or `-1` for one with no figure to place.
+ *
+ * The scale is cut from the population's own figures and both of its ends are rounded to whole numbers
+ * (`./distribution`), so a figure can sit a fraction outside the bucket it belongs to - and a chart that simply
+ * found nothing would leave the reader's own column unmarked, which reads as a broken chart rather than as an
+ * arithmetic edge. The nearest bucket is what a reader means by "this one", so a figure below the first bucket
+ * takes the first and one above the last takes the last.
+ */
 const highlightBin = computed(() => {
   const value = legend.value.find((entry) => entry.key === props.highlight)?.value
-  if (typeof value !== 'number') return -1
-  return binStats.value.findIndex((bin) => value >= bin.from && value <= bin.to)
+  const bins = binStats.value
+  if (typeof value !== 'number' || !bins.length) return -1
+
+  const found = bins.findIndex((bin) => value >= bin.from && value <= bin.to)
+  if (found >= 0) return found
+
+  return value < bins[0]!.from ? 0 : bins.length - 1
 })
 
 /** The bucket under the cursor, or `null` while the cursor is off the histogram. */
@@ -390,15 +408,14 @@ function print(value: number | null): string {
 </script>
 
 <template>
-  <div class="space-y-3">
-    <!-- The distribution: the population's histogram, shared by both columns. The bucket this column's
-         character falls into wears their colour, and any bucket can be read under the cursor. -->
+  <div class="grid grid-rows-2 gap-3">
+    <!-- The two sections are laid out as two equal grid rows, so the boxes are the same size whatever each
+         one holds - a chart, an error, or a folded-away table. -->
     <section class="rounded-xl border border-white/10 bg-black/25 p-3">
       <h4 class="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-300">{{ $t('distributionTitle') }}</h4>
 
       <p v-if="!distribution" class="flex h-56 items-center justify-center text-xs text-gray-500">{{ $t('loading') }}</p>
-      <p v-else-if="!distributable" class="flex h-56 items-center justify-center text-xs text-gray-500">{{ $t('distributionUnavailable') }}</p>
-      <p v-else-if="!binStats.length" class="flex h-56 items-center justify-center text-xs text-gray-500">{{ $t('historyNoData') }}</p>
+      <p v-else-if="!binStats.length" class="flex h-56 items-center justify-center text-xs text-gray-500">{{ $t('distributionNoData') }}</p>
       <template v-else>
         <div ref="histogramEl" class="relative" @mousemove="onHistogramMove" @mouseleave="onHistogramLeave">
           <svg viewBox="0 0 100 42" class="h-40 w-full" preserveAspectRatio="none" role="img" :aria-label="metricLabel">
@@ -429,7 +446,7 @@ function print(value: number | null): string {
                beneath it stay legible. -->
           <div
             v-if="hoveredBinStat"
-            class="pointer-events-none absolute left-0 top-0 z-10 w-max max-w-[17rem] rounded-lg border border-white/15 bg-wow-dark/90 px-2.5 py-1.5 text-[11px] shadow-xl backdrop-blur-md"
+            class="pointer-events-none absolute left-0 top-0 z-10 w-max max-w-[17rem] rounded-lg border border-white/15 bg-black/70 px-2.5 py-1.5 text-[11px] shadow-xl"
           >
             <p class="font-semibold text-white">
               {{ formatNumber(hoveredBinStat.from) }} – {{ formatNumber(hoveredBinStat.to) }} {{ metricLabel }}
@@ -533,6 +550,19 @@ function print(value: number | null): string {
                 stroke-linejoin="round"
                 vector-effect="non-scaling-stroke"
               />
+              <!-- A history of one point: the mark itself, since a line through one point is not a line. It is
+                   the dot the crosshair draws, in the brand gold, so the first reading of a character reads as
+                   the start of the curve it is. -->
+              <circle
+                v-if="chart.single"
+                :cx="chart.points[0]!.x"
+                :cy="chart.points[0]!.y"
+                r="4"
+                fill="currentColor"
+                stroke="none"
+                class="text-wow-goldLight"
+                vector-effect="non-scaling-stroke"
+              />
               <template v-if="hoveredPoint">
                 <line :x1="hoveredPoint.x" :x2="hoveredPoint.x" y1="0" y2="120" class="stroke-white/40" stroke-width="1" vector-effect="non-scaling-stroke" />
                 <circle :cx="hoveredPoint.x" :cy="hoveredPoint.y" r="3.5" fill="#ffffff" class="stroke-wow-goldLight" stroke-width="2" vector-effect="non-scaling-stroke" />
@@ -555,11 +585,14 @@ function print(value: number | null): string {
                  plate. The figure itself is left out on purpose - the row above the board already prints it. -->
             <div
               v-if="hoveredPoint && hoveredMoments"
-              class="pointer-events-none absolute left-0 top-0 z-10 w-max max-w-[18rem] rounded-lg border border-white/15 bg-wow-dark/90 px-2.5 py-1.5 text-[11px] shadow-xl backdrop-blur-md"
+              class="pointer-events-none absolute left-0 top-0 z-10 w-max max-w-[18rem] rounded-lg border border-white/15 bg-black/70 px-2.5 py-1.5 text-[11px] shadow-xl"
             >
               <p class="font-semibold text-white">{{ metricLabel }}</p>
               <p class="text-gray-300">{{ $t('historyTooltipLocal', { time: hoveredMoments.local }) }}</p>
               <p class="text-gray-300">{{ $t('historyTooltipUtc', { time: hoveredMoments.utc }) }}</p>
+              <p class="mt-1 font-semibold" :style="{ color: hoveredPlayer?.hex }">
+                {{ hoveredPlayer?.name }} {{ formatNumber(hoveredPoint.value) }}
+              </p>
             </div>
           </div>
         </div>

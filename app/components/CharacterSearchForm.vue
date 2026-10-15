@@ -53,7 +53,7 @@ const props = withDefaults(
      * Everywhere else on the site a search opens the character's own page, because rendering that page is
      * what reads the profile and writes the character into the table. The comparison page asks the same two
      * fields for a different reason - the second character is looked up only to be read beside the first -
-     * so the address it opens is the comparing one (`/${current}/vs/${region}/${realm}/${name}`) and nothing
+     * so the address it opens is the comparing one (`/${current}/compare/${region}/${realm}/${name}`) and nothing
      * else about the act changes: the realm list, the remembered characters and the progress are the same.
      */
     target?: 'profile' | 'versus'
@@ -571,7 +571,7 @@ const handleSearch = async () => {
     // A search on the comparison page does not open the character's own page - it opens the comparison of
     // this character against them, which is why the second character's three segments are appended to the
     // board's own address rather than standing as an address of their own. The segments are spelled the way
-    // the comparison address spells them (`/vs/eu/azuregos/name`): the region bare, the way the address was
+    // the comparison address spells them (`/compare/eu/azuregos/name`): the region bare, the way the address was
     // asked for, and the realm's slug rather than its name.
     const address = versusMode.value && props.vsBase
       ? `${props.vsBase}/${realm.region}/${realm.slug}/${character}`

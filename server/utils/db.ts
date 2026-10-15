@@ -70,6 +70,10 @@ export function nowSec(): number {
  * `is_main` on a character is the one flag the public leaderboard reads: exactly one character per
  * account carries it, and every other character of that account is kept out of the table (see
  * `./leaderboardExclusions`), which is what stops a thirty-alt account from filling it.
+ *
+ * `characters.user_id` is nullable, and that is what a guest is: a character the site has read whose
+ * owner has never signed in. Its readings are the site's own record of it - the history a comparison
+ * board draws - so the row has to exist without an account behind it (`./profileFeed` writes one).
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -130,7 +134,11 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
 
 CREATE TABLE IF NOT EXISTS characters (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- The account that holds this character, or NULL for a guest: a character the site has read whose owner has
+  -- never signed in. A guest row carries the site's own record of that character - the readings its history is
+  -- drawn from - and every account-wide read is keyed by user_id or joins users, so a guest is invisible to all
+  -- of them by itself. See ./profileFeed for what writes one.
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   region TEXT NOT NULL,
   realm_slug TEXT NOT NULL,
   realm_name TEXT,
@@ -146,6 +154,15 @@ CREATE TABLE IF NOT EXISTS characters (
   is_main INTEGER NOT NULL DEFAULT 0,
   last_seen_at INTEGER NOT NULL,
   /**
+   * When the site first met this character, as seconds since the epoch, which no later lookup can tell.
+   *
+   * The hall of fame's table marks a row with the day it first appeared, and this is where that answer comes
+   * from: the table's rows are read from these rows and the readings beside them (see ./leaderboardStorage), so
+   * a field a row prints has to live here. It is written once, when the row is created, and never moved again -
+   * a character looked up a hundred times was still first seen on one day.
+   */
+  first_seen_at INTEGER,
+  /**
    * When this character's figures were last read from Blizzard, to the second.
    *
    * The snapshots are keyed to the day on purpose (the taken_at column, see ./accountSync), so the
@@ -158,6 +175,10 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 CREATE INDEX IF NOT EXISTS idx_characters_user ON characters(user_id);
 CREATE INDEX IF NOT EXISTS idx_characters_key ON characters(region, realm_slug, name_key);
+-- A guest's address is unique on its own. UNIQUE (user_id, ...) cannot hold two NULL owners together - SQLite
+-- reads every NULL as distinct - so without this a character read twice would be two rows, and its readings
+-- would be split between them.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_guest ON characters(region, realm_slug, name_key) WHERE user_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -191,6 +212,115 @@ CREATE TABLE IF NOT EXISTS snapshots (
   score INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_character ON snapshots(character_id, taken_at);
+
+-- The account's own figures over time, one point per change. The unit the statistics are counted over is the
+-- *account* rather than its characters (see ./statisticsPopulation), so an account's history is kept here: a
+-- character's own readings are one character's record - what a tile prints and what a page weighs a live
+-- reading against - and every character of an account shows the account's numbers instead.
+--
+-- The figures are the account's totals (readAccountTotals in ./accountPool), which is what the hall of fame's
+-- row for its main prints. The levels are deliberately not all the same aggregate, and each is named where it
+-- is computed: the collections are the best of the pool's union and the roster's readings, reputations are the
+-- pool's union alone, the item level, the rating and the honor level are the highest any character of the
+-- account stands at, the wardrobe is the account's own document, and honorable kills are the *sum* over its
+-- characters.
+CREATE TABLE IF NOT EXISTS account_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  taken_at INTEGER NOT NULL,
+  ilvl REAL,
+  mplus_score REAL,
+  achievements INTEGER,
+  mounts INTEGER,
+  pets INTEGER,
+  toys INTEGER,
+  decor INTEGER,
+  reputations INTEGER,
+  titles INTEGER,
+  quests INTEGER,
+  recipes INTEGER,
+  transmogs INTEGER,
+  honorable_kills INTEGER,
+  honor_level INTEGER,
+  score INTEGER
+);
+-- A point is one change, and two writes inside one second must not become two points of one account.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_account_snapshots_user ON account_snapshots(user_id, taken_at);
+
+-- The population of the hall of fame, one row per member, materialised.
+--
+-- The rows are derived - a guest's own newest reading, an account's own newest totals under the identity of the
+-- character it leads with (see ./statisticsPopulation, ./leaderboardRows) - and they are kept here because a
+-- *page* of the table has to be an index scan rather than a sort of everybody. Reading the population as a query
+-- was measured at two hundred thousand members: SQLite answered a first page in ~140 ms and a five-thousandth
+-- page in ~1.7 s, with a temporary B-tree for the ordering in the plan, because the figure a page is ordered by is
+-- computed rather than stored and no index can be built over a join. A row per member with the rating computed
+-- once, at write time, is what makes the ten orders below plain indices.
+--
+-- The table is maintained by the writes that move the population - a reading filed, an account's totals moved, a
+-- character claimed by an account, a main named, an account hidden (see ./leaderboardRows) - and rebuilt from
+-- scratch when it is empty or when the rating's weights have changed (PRAGMA user_version carries the version
+-- the stored ratings were computed with). Nothing reads it directly: ./leaderboardRows is the only way in.
+CREATE TABLE IF NOT EXISTS leaderboard (
+  -- The account whose row this is, or NULL for a guest's own: what the maintenance finds a row by when the
+  -- account's identity moves (a main renamed, an account that left the table), since the address below is the
+  -- key and changes with it.
+  user_id INTEGER,
+  region TEXT NOT NULL,
+  realm_slug TEXT NOT NULL,
+  name_key TEXT NOT NULL,
+  realm_name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  avatar TEXT,
+  class_id INTEGER NOT NULL DEFAULT 0,
+  faction TEXT NOT NULL DEFAULT 'neutral',
+  level INTEGER NOT NULL DEFAULT 0,
+  first_seen_at INTEGER,
+  updated_at INTEGER NOT NULL,
+  is_account INTEGER NOT NULL DEFAULT 0,
+  ilvl REAL,
+  mplus_score REAL,
+  honorable_kills INTEGER,
+  mounts INTEGER,
+  pets INTEGER,
+  toys INTEGER,
+  decor INTEGER,
+  reputations INTEGER,
+  achievements INTEGER,
+  -- How many collectables a row holds altogether - mounts, pets, toys and decor - which is what the "king of
+  -- collections" widget leads on (see totalCollectables in ./playerScore). Stored for the same reason the rating is:
+  -- it is a sum over four columns, so no index can order by it, and the widget would otherwise sort the
+  -- population on every read.
+  collectables INTEGER NOT NULL DEFAULT 0,
+  -- The overall rating, computed from the figures above at write time (see ./playerScore): a stored column is
+  -- what an index can order by, and the whole point of this table.
+  score INTEGER NOT NULL DEFAULT 0,
+  -- Whether the character stands at the level cap, which is the one rule an item level is printed under. Stored
+  -- rather than computed so that the item-level order is a plain composite index (isAtItemLevelCap in
+  -- #shared/data/leaderboardSchema).
+  capped INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (region, realm_slug, name_key)
+);
+-- One index per order the page offers, each carrying the tie-breakers the table is drawn in: the preset's figure,
+-- then the rating, then the name without case. LIMIT then stops after a page's worth of rows instead of sorting
+-- the population, which is what these exist for.
+CREATE INDEX IF NOT EXISTS idx_leaderboard_total ON leaderboard(score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_mounts ON leaderboard(mounts DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_pets ON leaderboard(pets DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_toys ON leaderboard(toys DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_decor ON leaderboard(decor DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_reputations ON leaderboard(reputations DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_mplus ON leaderboard(mplus_score DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_kills ON leaderboard(honorable_kills DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_achievements ON leaderboard(achievements DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_ilvl ON leaderboard(capped DESC, ilvl DESC, score DESC, display_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_collectables ON leaderboard(collectables DESC, score DESC, display_name COLLATE NOCASE);
+-- The filters: a realm chip and a class chip are the two the page draws, and each is worth an index of its own
+-- because a filtered page still has to be ordered - the index above cannot be used for both at once.
+CREATE INDEX IF NOT EXISTS idx_leaderboard_realm ON leaderboard(region, realm_slug);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_class ON leaderboard(class_id);
+-- And the account behind a row, which is how the maintenance finds the row an account's own identity moved on.
+CREATE INDEX IF NOT EXISTS idx_leaderboard_user ON leaderboard(user_id);
 
 CREATE TABLE IF NOT EXISTS account_pool (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -247,6 +377,8 @@ const ADDED_COLUMNS = [
   'ALTER TABLE characters ADD COLUMN profession_2 TEXT',
   // The moment a character's figures were read, which is not the day its snapshot is keyed to.
   'ALTER TABLE characters ADD COLUMN stats_read_at INTEGER',
+  // The day the site first met a character, which the hall of fame's table prints and no later lookup can tell.
+  'ALTER TABLE characters ADD COLUMN first_seen_at INTEGER',
   // The account's choice not to appear in the public table at all.
   'ALTER TABLE users ADD COLUMN hide_from_fame INTEGER NOT NULL DEFAULT 0',
   // When the account was last seen on the site, which is what the hall of fame's online dot is read from.
@@ -269,6 +401,93 @@ const ADDED_COLUMNS = [
 ]
 
 /**
+ * Gives `characters` a nullable `user_id`, so the site can keep a character it has only read.
+ *
+ * A character page is a lookup by anyone, signed in or not, and the figures it returns are the site's own
+ * record of that character - the history a comparison board draws. Keeping them needs a row, and a row used to
+ * need an owner: with `user_id NOT NULL` a stranger's reading had nowhere to go (`./profileFeed`), so only the
+ * characters of accounts that had signed in were ever filed. A guest row is that same row with no owner, and
+ * every account-wide read is keyed by `user_id` or joins `users` - so a guest is invisible to the roster, the
+ * pools, the presence dot and the exclusions without any of them being told about guests at all.
+ *
+ * SQLite cannot drop a `NOT NULL`, so the table is rebuilt, by the recipe SQLite's own documentation gives for
+ * a change `ALTER TABLE` cannot make: the new table is filled from the old one, the old one is dropped, the new
+ * one takes its name - all inside one transaction and with foreign keys off, so dropping `characters` cannot
+ * cascade into the readings that point at it. The indexes and the unique constraint go back on afterwards, and
+ * `foreign_key_check` is what says the rebuilt table is still the one `snapshots` refers to. A database this
+ * cannot be done to is left exactly as it was, and the process says so: a migration must never be the reason a
+ * site comes up without its history.
+ *
+ * Exported for the test that builds a database written by the older build and migrates it (`test/unit`): the
+ * one thing that must not go wrong here is the reading of somebody's rows.
+ */
+export function migrateCharacterOwnership(connection: DatabaseSync): void {
+  const columns = connection.prepare('PRAGMA table_info(characters)').all() as unknown as {
+    name: string
+    notnull: number
+  }[]
+
+  const owner = columns.find((column) => column.name === 'user_id')
+  // Nothing to do: no table at all (a fresh database, created by the schema above) or one already rebuilt.
+  if (!owner || owner.notnull === 0) return
+
+  const names = columns.map((column) => column.name).join(', ')
+
+  connection.exec('PRAGMA foreign_keys = OFF')
+
+  try {
+    connection.exec('BEGIN')
+
+    connection.exec(`CREATE TABLE characters_migration (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      region TEXT NOT NULL,
+      realm_slug TEXT NOT NULL,
+      realm_name TEXT,
+      name TEXT NOT NULL,
+      name_key TEXT NOT NULL,
+      display_name TEXT,
+      class_id INTEGER,
+      level INTEGER,
+      faction TEXT,
+      avatar TEXT,
+      profession_1 TEXT,
+      profession_2 TEXT,
+      is_main INTEGER NOT NULL DEFAULT 0,
+      last_seen_at INTEGER NOT NULL,
+      first_seen_at INTEGER,
+      stats_read_at INTEGER,
+      UNIQUE (user_id, region, realm_slug, name_key)
+    )`)
+
+    connection.exec(`INSERT INTO characters_migration (${names}) SELECT ${names} FROM characters`)
+    connection.exec('DROP TABLE characters')
+    connection.exec('ALTER TABLE characters_migration RENAME TO characters')
+
+    connection.exec('CREATE INDEX IF NOT EXISTS idx_characters_user ON characters(user_id)')
+    connection.exec('CREATE INDEX IF NOT EXISTS idx_characters_key ON characters(region, realm_slug, name_key)')
+    connection.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_guest ON characters(region, realm_slug, name_key) WHERE user_id IS NULL'
+    )
+
+    const broken = connection.prepare('PRAGMA foreign_key_check').all()
+    if (broken.length) throw new Error(`${broken.length} broken reference(s) after the rebuild`)
+
+    connection.exec('COMMIT')
+  } catch (error) {
+    try {
+      connection.exec('ROLLBACK')
+    } catch {
+      // Nothing was begun, so there is nothing to undo.
+    }
+
+    console.warn(`[db] characters was left as it was: ${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    connection.exec('PRAGMA foreign_keys = ON')
+  }
+}
+
+/**
  * Brings an existing database up to the schema above.
  *
  * The tables themselves are created by `CREATE TABLE IF NOT EXISTS`, so the only thing left to do
@@ -282,6 +501,9 @@ function migrate(connection: DatabaseSync): void {
       // The column is already there.
     }
   }
+
+  // A table a column cannot be added to is rebuilt here, before anything else reads it.
+  migrateCharacterOwnership(connection)
 
   // A unique (character_id, taken_at) makes the event-log writes race-free, but it must never be added
   // over history that already has duplicates - a duplicate is a real snapshot, and a migration must not

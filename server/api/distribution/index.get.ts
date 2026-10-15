@@ -1,22 +1,27 @@
 /**
- * One metric's distribution over the canonical leaderboard, with the positions of the players a caller named.
+ * One metric's distribution, with the positions of the players a caller named.
  *
- * The endpoint answers from the leaderboard alone (no Blizzard lookup, no disk after the first read). The
- * histogram is the population's and is therefore shared: one request serves a whole comparison, and the
+ * The endpoint answers from what the site already has - no Blizzard lookup, and no disk after the first read.
+ * The population is the site's own readings (`readSnapshotDistribution`): every character it has read, one
+ * figure each, taken at that character's newest point. One population for all fifteen figures, and the same
+ * one a character's history is drawn from - so a comparison board is drawing one table's worth of everybody and
+ * the site's own record of the two characters in it.
+ *
+ * The histogram is the population's and is therefore shared: one request serves a whole comparison, and the
  * `players` it names are the only per-player work - their figure, their place and their percentile.
  *
- * A caller asks for `?metric=<key>&players=region:realm:name,region:realm:name`. A player the table does not
- * know is answered with `null`s rather than a fabricated place.
+ * A caller asks for `?metric=<key>&players=region:realm:name,region:realm:name`. A player the site has not read
+ * is answered with `null`s rather than a fabricated place.
  */
-import { getDistribution } from '~~/server/utils/leaderboardStorage'
-import { DISTRIBUTION_METRICS } from '#shared/data/historySchema'
-import type { DistributionMetricKey } from '#shared/data/historySchema'
+import { readSnapshotDistribution } from '~~/server/utils/characterReading'
+import { METRIC_KEYS } from '#shared/data/historySchema'
+import type { MetricKey } from '#shared/data/historySchema'
 
-/** The metric a caller asked for, or `null` for one this build cannot draw a distribution of. */
-function parseMetric(value: unknown): DistributionMetricKey | null {
+/** The metric a caller asked for, or `null` for one this build does not know. */
+function parseMetric(value: unknown): MetricKey | null {
   const metric = Array.isArray(value) ? value[0] : value
-  return typeof metric === 'string' && (DISTRIBUTION_METRICS as readonly string[]).includes(metric)
-    ? (metric as DistributionMetricKey)
+  return typeof metric === 'string' && (METRIC_KEYS as readonly string[]).includes(metric)
+    ? (metric as MetricKey)
     : null
 }
 
@@ -36,7 +41,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
 
   const metric = parseMetric(query.metric)
-  if (!metric) throw createError({ statusCode: 400, statusMessage: 'A metric with a distribution is required' })
+  if (!metric) throw createError({ statusCode: 400, statusMessage: 'A known metric is required' })
 
-  return await getDistribution(metric, parsePlayers(query.players))
+  return readSnapshotDistribution(metric, parsePlayers(query.players))
 })

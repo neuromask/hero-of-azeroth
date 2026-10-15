@@ -17,9 +17,16 @@
  * what keeps the history an honest log of change and not a wall of repeated readings.
  */
 import type { CharacterData } from './blizzard'
-import type { HistorySeries, MetricKey } from '#shared/data/historySchema'
+import type { DistributionResponse, HistorySeries, MetricKey } from '#shared/data/historySchema'
 import { nowSec } from './db'
 import { calculatePlayerScore } from './playerScore'
+// The scale a histogram is cut by, and the empty buckets of one: the half of the rule that the chart and the
+// SQL below have to agree on.
+import { binEdges, DISTRIBUTION_BINS } from './distribution'
+// Who the statistics are about, and how a memo of them is thrown away when that moves.
+import { bumpStatisticsRevision, populationRows, statisticsRevision } from './statisticsPopulation'
+// The row a guest's reading is drawn from, rewritten here the moment the reading moves.
+import { refreshGuestRow } from './leaderboardRows'
 
 /**
  * What the site knows about a character of its own, apart from the collections the account's figures are
@@ -105,6 +112,10 @@ const METRIC_COLUMNS: Record<MetricKey, string> = {
  * a column cannot drift the reader and the writer apart. One metric rather than all fifteen, because a view
  * that draws one figure at a time should pay for one figure at a time. A character the site has no row for is
  * `null`.
+ *
+ * A character of an account is answered with the **account's** history rather than its own: what the statistics
+ * count is the account (`./statisticsPopulation`), so a main and its alts show one curve - the account's own
+ * figures, which is what every one of them prints beside it. A guest's history is its own reading.
  */
 export function readCharacterHistory(
   region: string,
@@ -114,20 +125,168 @@ export function readCharacterHistory(
 ): HistorySeries | null {
   const db = useDb()
   const row = db
-    .prepare('SELECT id, display_name FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
-    .get(region, realm, name) as { id: number; display_name: string | null } | undefined
+    .prepare(
+      'SELECT id, user_id, display_name FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1'
+    )
+    .get(region, realm, name) as { id: number; user_id: number | null; display_name: string | null } | undefined
 
   if (!row) return null
 
-  const points = db
-    .prepare(`SELECT taken_at, ${METRIC_COLUMNS[metric]} AS value FROM snapshots WHERE character_id = ? ORDER BY taken_at ASC`)
-    .all(row.id) as Array<{ taken_at: number; value: number | null }>
+  const column = METRIC_COLUMNS[metric]
+
+  const points =
+    row.user_id === null
+      ? (db
+          .prepare(`SELECT taken_at, ${column} AS value FROM snapshots WHERE character_id = ? ORDER BY taken_at ASC`)
+          .all(row.id) as Array<{ taken_at: number; value: number | null }>)
+      : (db
+          .prepare(`SELECT taken_at, ${column} AS value FROM account_snapshots WHERE user_id = ? ORDER BY taken_at ASC`)
+          .all(row.user_id) as Array<{ taken_at: number; value: number | null }>)
 
   return {
     character: { region, realm, name, displayName: row.display_name },
     metric,
     points: points.map((point) => ({ takenAt: point.taken_at, value: point.value ?? null }))
   }
+}
+
+/**
+ * The distributions already answered, and the revision of the data they were answered at.
+ *
+ * A comparison board asks for one metric's distribution every time a stat row is opened, and the answer is the
+ * population's rather than a reader's: a pass over the population to cut the bars, another to place the players
+ * named beside them. Both are worth not paying twice, so the whole answer is kept until the data moves.
+ *
+ * Two things bound it. The key is a metric and the players a caller named - at most four addresses
+ * (`parsePlayers` in `server/api/distribution`) - and the map is capped: the oldest entry is dropped when a new
+ * one arrives, which is what keeps a caller walking through metrics and pairs from growing it without end. The
+ * revision is what makes it correct: every write that moves the population calls `bumpStatisticsRevision`, so a
+ * stale entry is unreachable rather than merely old.
+ */
+const DISTRIBUTION_MEMO_LIMIT = 64
+const distributionMemo = new Map<string, { revision: number; answer: DistributionResponse }>()
+
+/**
+ * One metric's distribution over the site's own readings, for every one of the fifteen figures.
+ *
+ * The population is the one `./statisticsPopulation` describes - every guest the site has read, and the main of
+ * every account that signed in, and nobody else - which is the same population a history is drawn from and the
+ * same one the hall of fame's table draws. An alt, an account that asked to be left out of the table, and a
+ * character the sitemap knows of but nobody has read are all absent, deliberately.
+ *
+ * It is also deliberately small in memory, and that is the point of its shape. The scale is cut by the shared
+ * rule (`./distribution`) and the counts are grouped in SQL, so what comes back is one row per bucket -
+ * twenty-four of them - however many characters the site has read; a player's place is a `SUM` over the same
+ * walk rather than a list of figures to sort. Nothing here grows with the population but the time it takes,
+ * which is what lets a population of two hundred thousand be drawn by the same code as a population of ten.
+ *
+ * A key the site has never read is answered with `null`s rather than a fabricated place.
+ */
+export function readSnapshotDistribution(metric: MetricKey, playerKeys: string[]): DistributionResponse {
+  const memoKey = `${metric}|${playerKeys.join(',')}`
+  const at = statisticsRevision()
+
+  const answered = distributionMemo.get(memoKey)
+  if (answered && answered.revision === at) return answered.answer
+
+  const db = useDb()
+  const column = METRIC_COLUMNS[metric]
+
+  // The population's readings, one per member, at the newest point of each. A figure a reading does not carry is
+  // left out rather than counted as a zero, which is what keeps a collection nobody has read out of the bars.
+  const readings = `SELECT value, taken_at FROM (${populationRows(column)}) WHERE value IS NOT NULL`
+
+  // The players' own figures, each a keyed lookup rather than a walk: the *member* the key names - a guest's own
+  // newest reading, an account's own newest totals - which is the very figure the histogram counts and the one
+  // every other page prints for them (`./statisticsPopulation`). A character of an account is answered with the
+  // account's figure, so a main and each of its alts are placed in the same bucket, and a character whose own
+  // reading never carried a figure - a collection only the account's own point has - is placed by the account
+  // rather than left off the chart.
+  const own = playerKeys.map((key) => {
+    const [region = '', realm = '', ...rest] = key.split(':')
+    const row = db
+      .prepare(
+        `SELECT CASE WHEN c.user_id IS NULL THEN s.${column} ELSE a.${column} END AS value
+           FROM characters c
+           LEFT JOIN snapshots s ON s.id = (
+             SELECT id FROM snapshots WHERE character_id = c.id ORDER BY taken_at DESC LIMIT 1
+           )
+           LEFT JOIN account_snapshots a ON a.id = (
+             SELECT id FROM account_snapshots WHERE user_id = c.user_id ORDER BY taken_at DESC LIMIT 1
+           )
+          WHERE c.region = ? AND c.realm_slug = ? AND c.name_key = ?
+          LIMIT 1`
+      )
+      .get(region, realm, rest.join(':')) as { value: number | null } | undefined
+
+    return typeof row?.value === 'number' ? row.value : null
+  })
+
+  // One row for the whole population: how many characters hold a figure at all, the two ends of the scale the
+  // buckets are cut over, when those readings were taken, and how many figures stand above each player. The
+  // count above a figure is a sum over the same walk, which is what keeps this one row and not one per
+  // character.
+  const aboveColumns = playerKeys.map((_, index) => `, SUM(value > ?) AS above_${index}`).join('')
+  const totals = db
+    .prepare(
+      `WITH readings AS (${readings})
+       SELECT COUNT(value) AS population, MIN(value) AS lo, MAX(value) AS hi, MAX(taken_at) AS newest${aboveColumns}
+         FROM readings`
+    )
+    .get(...own) as Record<string, number | null>
+
+  const population = Number(totals.population ?? 0)
+  const lo = Number(totals.lo ?? 0)
+  const hi = Number(totals.hi ?? 0)
+  const newest = Number(totals.newest ?? 0)
+
+  // The scale, cut the way the table's own histogram cuts it, with the counts read off the database's buckets.
+  const bins = population ? binEdges(lo, hi) : []
+  if (population) {
+    const counts = db
+      .prepare(
+        `WITH readings AS (${readings})
+         SELECT MIN(${DISTRIBUTION_BINS - 1}, CAST((value - ?) * ${DISTRIBUTION_BINS} / ? AS INTEGER)) AS bin,
+                COUNT(*) AS count
+           FROM readings
+          GROUP BY bin`
+      )
+      .all(lo, hi - lo || 1) as Array<{ bin: number; count: number }>
+
+    for (const bucket of counts) {
+      const edge = bins[bucket.bin]
+      if (edge) edge.count = bucket.count
+    }
+  }
+
+  const answer: DistributionResponse = {
+    metric,
+    bins,
+    population,
+    positions: playerKeys.map((key, index) => {
+      const value = own[index] ?? null
+      const above = value === null ? null : Number(totals[`above_${index}`] ?? 0)
+      const rank = above === null ? null : above + 1
+
+      return {
+        key,
+        value,
+        rank,
+        percentile: rank !== null && population ? Math.max(1, Math.round((rank / population) * 100)) : null
+      }
+    }),
+    updatedAt: newest ? new Date(newest * 1000).toISOString() : ''
+  }
+
+  // Kept until the data moves, and never beyond the cap: a map hands its keys back in the order they were
+  // added, so the first one is the oldest.
+  distributionMemo.set(memoKey, { revision: at, answer })
+  if (distributionMemo.size > DISTRIBUTION_MEMO_LIMIT) {
+    const oldest = distributionMemo.keys().next().value
+    if (oldest !== undefined) distributionMemo.delete(oldest)
+  }
+
+  return answer
 }
 
 /**
@@ -142,11 +301,17 @@ export function readCharacterHistory(
  * whose reputation read timed out must not blank a number that was read this morning. A point already holding
  * these very figures is left alone, so a page the site has read again costs the disk nothing beyond the
  * moment above.
+ *
+ * `readAt` is the moment the reading was taken, in seconds, and it is now unless a caller says otherwise. The
+ * two readers of a profile file the second they read it; the migration that moves the hall of fame's own table
+ * into the database (`./statisticsMigration`) files the day that table recorded instead, because a reading taken
+ * days ago must not be filed as one taken now - a history would then start with a point that never happened.
  */
-export function fileDailyReading(characterId: number, profile: CharacterData): void {
+export function fileDailyReading(characterId: number, profile: CharacterData, readAt?: number): void {
   const db = useDb()
+  const moment = readAt ?? nowSec()
 
-  db.prepare('UPDATE characters SET stats_read_at = ? WHERE id = ?').run(nowSec(), characterId)
+  db.prepare('UPDATE characters SET stats_read_at = ? WHERE id = ?').run(moment, characterId)
 
   const reading: Record<string, number | null> = {
     ilvl: profile.ilvl ?? null,
@@ -206,8 +371,7 @@ export function fileDailyReading(characterId: number, profile: CharacterData): v
 
   // A point is one real update, so its moment is the second it was read - and never earlier than the newest
   // point already on file, so two reads inside one second cannot collide on the unique key.
-  const now = nowSec()
-  const takenAt = latest && latest.taken_at >= now ? latest.taken_at + 1 : now
+  const takenAt = latest && latest.taken_at >= moment ? latest.taken_at + 1 : moment
 
   // Seventeen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
   const values = [
@@ -236,4 +400,18 @@ export function fileDailyReading(characterId: number, profile: CharacterData): v
         titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(...(values as any[]))
+
+  // A reading was filed, so the population's aggregates are stale from this moment: a distribution memo keyed on
+  // the revision cannot answer from before it (`./statisticsPopulation`).
+  bumpStatisticsRevision()
+
+  // And the row itself, when the character is nobody's. A guest is a member of the population in its own right
+  // and this reading is what its row holds, so the row is rewritten here rather than left for a rebuild
+  // (`./leaderboardRows`). A character an account holds is not a member of its own - the account's totals are the
+  // row - and it is the caller that files those (`fileAccountReading` in ./accountPool), which is what moves it.
+  const owner = db
+    .prepare('SELECT region, realm_slug, name_key, user_id FROM characters WHERE id = ?')
+    .get(characterId) as { region: string; realm_slug: string; name_key: string; user_id: number | null } | undefined
+
+  if (owner && owner.user_id === null) refreshGuestRow(owner.region, owner.realm_slug, owner.name_key)
 }

@@ -81,11 +81,10 @@ export default defineEventHandler(async (event) => {
       console.error('[auth/callback] roster read failed:', syncError?.data || syncError?.message || syncError)
     }
 
-    // The roster just changed, and with it who the table must not draw: an account appears in the hall of fame
-    // with the character it leads with, so its alts leave the table the moment it signs in - including any row a
-    // lookup wrote for them before it signed in - and they leave now rather than on the next read of a set that is
-    // cached for a minute (`clearLeaderboardExclusions`).
-    clearLeaderboardExclusions()
+    // The roster just changed, and with it what the table draws: an account appears in the hall of fame as the
+    // character it leads with, and every one of its characters now shows the account's own figures - so its row is
+    // written here rather than on the next read of an answer cached for an hour (`server/utils/leaderboardRows`).
+    refreshAccountRow(user.id)
 
     // And the account's own collections, which is what the profile's totals are read from: they are
     // the account's, not a character's, so this is the one place the true numbers come from.

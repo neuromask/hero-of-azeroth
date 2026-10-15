@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * The comparison with a second character in it: `/vs/region/realm/name` - the comparison the search on
- * `/vs` opens, and the one a saved quick compare links to.
+ * The comparison with a second character in it: `/compare/region/realm/name` - the comparison the search on
+ * `/compare` opens, and the one a saved quick compare links to.
  *
  * The board is the same component the address above draws (`app/components/CharacterVersus.vue`); what this
  * page adds is one thing, which is who the second character is. The segments are the third, fourth and fifth
@@ -30,9 +30,9 @@ const target = computed(() => {
 })
 
 /** This character's own comparison address, which the board offers as the way back to the search. */
-const vsBase = computed(() => localeUrl(`/${regionPath(region)}/${realm}/${name}/vs`))
+const compareBase = computed(() => localeUrl(`/${regionPath(region)}/${realm}/${name}/compare`))
 </script>
 
 <template>
-  <CharacterVersus :vs-base="vsBase" :target="target" />
+  <CharacterVersus :vs-base="compareBase" :target="target" />
 </template>

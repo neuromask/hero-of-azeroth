@@ -48,11 +48,12 @@ const onCollectionsTab = computed(() => /\/collections(?:\/|$)/.test(route.path)
 const onAchievementsTab = computed(() => /\/achievements(?:\/|$)/.test(route.path))
 const onReputationsTab = computed(() => /\/reputations\/?$/.test(route.path))
 /**
- * The comparison, which has two addresses: `/vs` with nobody to compare against yet - the search for a second
- * character stands there - and `/vs/region/realm/name` once one has been picked. The second one carries three
- * more segments below the `vs`, so the match is on the segment rather than on the end of the address.
+ * The comparison, which has two addresses: `/compare` with nobody to compare against yet - the search for a
+ * second character stands there - and `/compare/region/realm/name` once one has been picked. The second one
+ * carries three more segments below the `compare`, so the match is on the segment rather than on the end of
+ * the address.
  */
-const onVsTab = computed(() => /\/vs(?:\/|$)/.test(route.path))
+const onCompareTab = computed(() => /\/compare(?:\/|$)/.test(route.path))
 
 /**
  * The character as the row is built from, in the shape a remembered character has: the three segments of the
@@ -75,7 +76,7 @@ const navCharacter = computed<SearchHistoryEntry>(() => ({
 const activeTab = computed(() => {
   if (onReputationsTab.value) return 'reputations' as const
   if (onActivityTab.value) return 'activity' as const
-  if (onVsTab.value) return 'vs' as const
+  if (onCompareTab.value) return 'compare' as const
   if (onCollectionsTab.value) return 'collections' as const
   if (onAchievementsTab.value) return 'achievements' as const
   return 'overview' as const
@@ -189,7 +190,7 @@ const seoTitle = computed(() => {
   if (onActivityTab.value) return `${base} - ${t('tabActivity')}`
   if (onCollectionsTab.value) return `${base} - ${t('tabCollections')}`
   if (onReputationsTab.value) return `${base} - ${t('tabReputations')}`
-  if (onVsTab.value) return `${base} - ${t('tabVs')}`
+  if (onCompareTab.value) return `${base} - ${t('tabVs')}`
   return base
 })
 

@@ -1,10 +1,10 @@
 /**
  * The shapes the history and distribution endpoints serve, and the metrics they cover.
  *
- * A character's history is one point per real update, read from `snapshots` (`server/utils/characterReading`),
- * and its distribution is where that character stands inside the canonical leaderboard
- * (`server/utils/leaderboardStorage`). Both ends of the wire need the same list of metrics, so the list lives
- * here - the only thing the frontend is told about the data, exactly as the leaderboard's own shapes live in
+ * A character's history is one point per real update, and its distribution is where that character stands among
+ * everyone the site has read - both read from `snapshots` (`server/utils/characterReading`), because one
+ * population draws both charts. Both ends of the wire need the same list of metrics, so the list lives here -
+ * the only thing the frontend is told about the data, exactly as the leaderboard's own shapes live in
  * `leaderboardSchema`.
  */
 
@@ -34,30 +34,6 @@ export const METRIC_KEYS = [
 ] as const
 
 export type MetricKey = (typeof METRIC_KEYS)[number]
-
-/**
- * The metrics that really exist in the canonical leaderboard, so a distribution can be drawn for them.
- *
- * The other five (`titles`, `quests`, `recipes`, `transmogs`, `honorLevel`) are stored and graphed as history,
- * but they have no population to stand in - the leaderboard never carried them, and a distribution mixed out of
- * a separate account population would be a different table wearing the same name (decision B). The UI shows
- * their history and, instead of a histogram, a plain "distribution unavailable" state.
- */
-export const DISTRIBUTION_METRICS = [
-  'score',
-  'mounts',
-  'decor',
-  'mPlusScore',
-  'honorableKills',
-  'achievements',
-  'pets',
-  'toys',
-  'reputations',
-  'ilvl'
-] as const satisfies readonly MetricKey[]
-
-/** The metric keys a distribution can be drawn of, which is `DISTRIBUTION_METRICS` as a union. */
-export type DistributionMetricKey = (typeof DISTRIBUTION_METRICS)[number]
 
 /** One point of one metric's history: the moment it was read, and the figure - `null` where the read had none. */
 export interface HistorySeriesPoint {
@@ -97,7 +73,7 @@ export interface DistributionPosition {
 }
 
 /**
- * One metric's distribution over the canonical leaderboard, shared by every player a caller named.
+ * One metric's distribution over the site's own readings, shared by every player a caller named.
  *
  * The histogram is the population's, so it is the same for all of them and one answer serves a whole
  * comparison (`players` below); the positions are the players' own, one per key the caller asked about.

@@ -22,6 +22,8 @@
 import { nowSec } from './db'
 import { debugLog } from './logger'
 import { readCharacterReading } from './characterReading'
+// The account's own row in the hall of fame, which the point filed below is what moves.
+import { refreshAccountRow } from './leaderboardRows'
 // The journal a character's mount tile is measured against, which is served out of the Armoury cache alone
 // and is read here rather than taken from the profile this module is handed (`mountDenominator` below).
 import { readMountJournal } from './armory'
@@ -160,9 +162,10 @@ export async function syncAccountCollections(
 
   debugLog('[accountPool] collections added', JSON.stringify(added))
 
-  // The main's public row follows the pool: the Hall of Fame should compare accounts, not the
-  // faction-limited collections of one character.
-  syncMainToLeaderboard(userId)
+  // The account's own figures follow the pool: the hall of fame compares accounts rather than the
+  // faction-limited collections of one character, and the point filed here is what its row is drawn from
+  // (`fileAccountReading`).
+  fileAccountReading(userId)
 
   return added
 }
@@ -486,6 +489,112 @@ export function readAccountTotals(userId: number): AccountTotals {
 }
 
 /**
+ * Files the account's own totals as a point of its history, when they have moved.
+ *
+ * The unit the site's statistics are counted over is the *account* (`./statisticsPopulation`): one value in a
+ * distribution, one curve on a comparison board, one row in the hall of fame - the row of its main. So an
+ * account needs a history of its own, and it is kept here rather than in the readings: a reading is one
+ * character's record, which is what a tile prints and what a page weighs a live Blizzard answer against, while
+ * every character of an account shows the account's numbers.
+ *
+ * Three rules, and they are the three the readings obey as well (`fileDailyReading` in `./characterReading`):
+ *
+ *   - a point is one real change. Totals that say what the newest point already says are not written again, so
+ *     refreshing the same character twice in an afternoon costs the disk nothing;
+ *   - the moment is the second the totals moved, never the start of a day, and never earlier than the newest
+ *     point on file - which is what keeps two writes inside one second from colliding on the unique key;
+ *   - a set that is not complete is not a point. The totals are gathered from the pool and from the roster's
+ *     readings, and an account none of whose characters has ever been read in full has zeros where its figures
+ *     will be; a history that started with a zero would show a climb that never happened, so nothing is filed
+ *     until one of its characters carries all six collections.
+ */
+export function fileAccountReading(userId: number): void {
+  const db = useDb()
+
+  const complete = db
+    .prepare(
+      `SELECT 1
+         FROM characters c
+         JOIN snapshots s ON s.id = (
+           SELECT id FROM snapshots WHERE character_id = c.id ORDER BY taken_at DESC LIMIT 1
+         )
+        WHERE c.user_id = ?
+          AND s.achievements IS NOT NULL AND s.mounts IS NOT NULL AND s.pets IS NOT NULL
+          AND s.toys IS NOT NULL AND s.decor IS NOT NULL AND s.reputations IS NOT NULL
+        LIMIT 1`
+    )
+    .get(userId)
+
+  if (!complete) return
+
+  const totals = readAccountTotals(userId)
+
+  const next: Record<string, number | null> = {
+    ilvl: totals.ilvl,
+    mplus_score: totals.mplus,
+    achievements: totals.achievements,
+    mounts: totals.mounts,
+    pets: totals.pets,
+    toys: totals.toys,
+    decor: totals.decor,
+    reputations: totals.reputations,
+    titles: totals.extra.titles,
+    quests: totals.extra.quests,
+    recipes: totals.extra.recipes,
+    transmogs: totals.extra.transmogs,
+    honorable_kills: totals.extra.honorableKills,
+    honor_level: totals.extra.honorLevel
+  }
+
+  const latest = db
+    .prepare(
+      `SELECT ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+              titles, quests, recipes, transmogs, honorable_kills, honor_level, taken_at
+         FROM account_snapshots WHERE user_id = ? ORDER BY taken_at DESC LIMIT 1`
+    )
+    .get(userId) as (Record<string, number | null> & { taken_at: number }) | undefined
+
+  if (latest && Object.keys(next).every((key) => next[key] === latest[key])) return
+
+  const now = nowSec()
+  const takenAt = latest && latest.taken_at >= now ? latest.taken_at + 1 : now
+
+  // Seventeen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
+  const values = [
+    userId,
+    takenAt,
+    next.ilvl,
+    next.mplus_score,
+    next.achievements,
+    next.mounts,
+    next.pets,
+    next.toys,
+    next.decor,
+    next.reputations,
+    next.titles,
+    next.quests,
+    next.recipes,
+    next.transmogs,
+    next.honorable_kills,
+    next.honor_level,
+    totals.score
+  ]
+
+  db.prepare(
+    `INSERT INTO account_snapshots
+       (user_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+        titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(...(values as any[]))
+
+  // The population has moved: an account's figures are what its characters and every aggregate of them are read
+  // from, so whatever was cut out of the population before this point is stale. The account's own row in the hall
+  // of fame is rewritten from the point just filed - it is the row the table draws an account by - and that write
+  // is what moves the revision every memo of the population is keyed on (`./leaderboardRows`).
+  refreshAccountRow(userId)
+}
+
+/**
  * The account's totals, handed back under the key the hall of fame keys a row on.
  *
  * This is what lets the table *read* the account rather than wait to be told: the row of a
@@ -504,11 +613,17 @@ export function accountTotalsByCharacterKey(): Map<string, AccountTotals> {
   try {
     const rows = useDb()
       .prepare('SELECT user_id, region, realm_slug, name_key FROM characters')
-      .all() as { user_id: number; region: string; realm_slug: string; name_key: string }[]
+      .all() as { user_id: number | null; region: string; realm_slug: string; name_key: string }[]
 
     const byAccount = new Map<number, AccountTotals>()
 
     for (const row of rows) {
+      // A guest has no account, so there are no account figures to stand behind its row: it is answered with the
+      // character's own numbers, exactly as a stranger's lookup is - and no row of the table is marked for it
+      // (`./accounts` reads the same join). A guest's figures are its own by definition; there is no roster for
+      // them to be merged with.
+      if (row.user_id === null) continue
+
       let account = byAccount.get(row.user_id)
       if (!account) {
         account = readAccountTotals(row.user_id)
@@ -550,7 +665,11 @@ export function accountTotalsByCharacterKey(): Map<string, AccountTotals> {
 export function accountOwnerId(region: string, realm: string, name: string): number | null {
   try {
     const row = useDb()
-      .prepare('SELECT user_id FROM characters WHERE region = ? AND realm_slug = ? AND name_key = ? LIMIT 1')
+      .prepare(
+        `SELECT user_id FROM characters
+          WHERE region = ? AND realm_slug = ? AND name_key = ? AND user_id IS NOT NULL
+          LIMIT 1`
+      )
       .get(region, String(realm).toLowerCase(), String(name).toLowerCase()) as { user_id: number } | undefined
 
     return row?.user_id ?? null
@@ -562,62 +681,6 @@ export function accountOwnerId(region: string, realm: string, name: string): num
 function findOwnerTotals(region: string, realm: string, name: string): AccountTotals | null {
   const owner = accountOwnerId(region, realm, name)
   return owner === null ? null : readAccountTotals(owner)
-}
-
-/**
- * Writes the account's own figures into the main's row of the public table.
- *
- * The hall of fame draws one character per account - its main - and the numbers a collector compares
- * there should be the account's, not that one character's faction-limited collections. The identity,
- * the class and the level ride along from the stored row; the collections are the pool's, and the
- * table's own merge keeps whatever this pass does not carry.
- */
-export function syncMainToLeaderboard(userId: number): void {
-  const main = useDb()
-    .prepare(
-      `SELECT region, realm_slug, realm_name, name, display_name, class_id, level, faction
-         FROM characters
-        WHERE user_id = ?
-        ORDER BY is_main DESC, COALESCE(level, 0) DESC, name ASC
-        LIMIT 1`
-    )
-    .get(userId) as
-    | {
-        region: string
-        realm_slug: string
-        realm_name: string | null
-        name: string
-        display_name: string | null
-        class_id: number | null
-        level: number | null
-        faction: string | null
-      }
-    | undefined
-
-  if (!main) return
-
-  const totals = readAccountTotals(userId)
-
-  void upsertPlayer({
-    region: main.region,
-    realm: main.realm_slug,
-    realmName: main.realm_name || undefined,
-    name: main.name,
-    displayName: main.display_name || undefined,
-    classId: main.class_id ?? undefined,
-    level: main.level ?? undefined,
-    faction: main.faction || undefined,
-    mounts: totals.mounts || undefined,
-    pets: totals.pets || undefined,
-    toys: totals.toys || undefined,
-    decor: totals.decor || undefined,
-    reputations: totals.reputations || undefined,
-    achievements: totals.achievements || undefined,
-    // The one figure of the row that is the *account's* rather than the main's alone: a kill belongs to the
-    // character that earned it, so the account's answer is the sum over its roster (`AccountExtra`), and it is
-    // what the hall of fame's own column, standing after the rating, prints for an account's main.
-    honorableKills: totals.extra.honorableKills || undefined
-  })
 }
 
 /**

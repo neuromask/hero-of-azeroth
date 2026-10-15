@@ -21,7 +21,10 @@ export default defineEventHandler(async (event) => {
 
   useDb().prepare('UPDATE users SET hide_from_fame = ? WHERE id = ?').run(body.hideFromFame ? 1 : 0, user.id)
 
-  clearLeaderboardExclusions()
+  // Leaving the table is leaving the population every aggregate is counted over: the account's row is taken out of
+  // the hall of fame - or written back, when the switch is turned on again - and the revision every memo of the
+  // population is keyed on moves with it (`server/utils/leaderboardRows`).
+  refreshAccountRow(user.id)
 
   return { ok: true, hideFromFame: body.hideFromFame }
 })

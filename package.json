@@ -12,6 +12,7 @@
     "typecheck": "nuxt typecheck",
     "check:secrets": "node scripts/check-secrets.mjs",
     "test": "vitest run",
+    "test:bench": "vitest run --config vitest.bench.config.ts",
     "test:watch": "vitest",
     "preview": "nuxt preview --port 3100",
     "postinstall": "nuxt prepare",

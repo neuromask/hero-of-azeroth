@@ -41,19 +41,10 @@ export default defineEventHandler(async (event) => {
     throw error
   }
 
-  // The table's own view of who is excluded is a minute old at most; a main that just changed
-  // must not wait for it.
-  clearLeaderboardExclusions()
-
-  // And the row the table draws for this account is published here, from the roster the switch just moved.
-  //
-  // The order matters: `upsertPlayer` checks the very set dropped above, so the memo goes first. The write
-  // itself is needed because a row only ever *enters* the table when the character is read, or when the pool
-  // writes the main out (`server/utils/accountPool`, which the account refresh and the background pass call).
-  // Both can be hours away, and a character that was an alt the last time it was read was dropped then and
-  // left nothing behind - so a reader who had just named it the main would keep looking for a row no pass was
-  // ever going to write. This is the one moment that knows the account leads with it now.
-  syncMainToLeaderboard(user.id)
+  // The statistics themselves: the account's row in the hall of fame is drawn from the character this switch just
+  // moved, and its address with it - so the row is rewritten here, under the name the account now leads with, and
+  // every aggregate of the population is stale from this moment (`server/utils/leaderboardRows`).
+  refreshAccountRow(user.id)
 
   return { ok: true, mainCharacterId: characterId }
 })

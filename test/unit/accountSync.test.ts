@@ -19,7 +19,6 @@ const getCharacterTransmogs = vi.fn(async () => null)
 const addToPool = vi.fn(() => 0)
 const syncPoolReputations = vi.fn(() => 0)
 const syncPoolFigures = vi.fn(() => 0)
-const syncMainToLeaderboard = vi.fn(() => {})
 
 const profile = {
   name: 'X',
@@ -70,7 +69,6 @@ beforeEach(() => {
   g.addToPool = addToPool
   g.syncPoolReputations = syncPoolReputations
   g.syncPoolFigures = syncPoolFigures
-  g.syncMainToLeaderboard = syncMainToLeaderboard
   g.useDb = () => ({ prepare: () => ({ run: () => ({}), get: () => undefined, all: () => [] }) })
 })
 

@@ -8,8 +8,8 @@
  * The handler is wrapped in `defineCachedEventHandler` with an hour's `maxAge`, which is the whole
  * performance story of this page: the first reader of an hour pays for the read, everybody after
  * them is answered from Nitro's own in-memory cache in single-digit milliseconds. What the reader
- * pays for the hour's first answer is small in any case - the payload is a filter and a sort over a
- * snapshot the process already holds, with no Blizzard lookup and no disk - so the stale-while-
+ * pays for the hour's first answer is small in any case - a page of an indexed table and the widgets'
+ * own figures beside it, with no Blizzard lookup and no walk of the population - so the stale-while-
  * revalidate half is deliberately not used: it would answer the first reader after a change with the
  * table as it was, which is exactly the situation a reader cannot tell from a broken one.
  *
@@ -27,8 +27,8 @@
  * character looked up, a pool that grew) times the queries that were actually asked in that hour is
  * what the cache holds, and Nitro bounds it besides.
  *
- * This handler knows a query and a payload. What the payload is read from - today a JSON file,
- * tomorrow a SQLite table - is entirely inside `leaderboardStorage`.
+ * This handler knows a query and a payload. What the payload is read from - the rows of the hall of fame's own
+ * table in SQLite, materialised and maintained as the population moves - is entirely inside `leaderboardStorage`.
  */
 import { getLeaderboard, leaderboardDataStamp } from '~~/server/utils/leaderboardStorage'
 import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'

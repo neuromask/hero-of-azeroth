@@ -1,15 +1,15 @@
 /**
  * The shapes the leaderboard is written, stored and served in.
  *
- * The table on `/leaderboard` is built from one record per character the site has ever rendered,
- * and both ends of the wire need to agree on what such a record is: the storage layer writes it,
- * the endpoint reads it out of a cache, the components draw it. The three types below are that
- * agreement, and they are the only thing the frontend is told about the data - nothing here says
- * where a record lives or how it got there, which is what lets the storage layer be swapped for
+ * The table on `/leaderboard` is built from one record per member of the population the site counts its
+ * statistics over - an account, or a guest the site has read - and both ends of the wire need to agree on what
+ * such a record is: the storage layer writes it, the endpoint reads it out of a cache, the components draw it.
+ * The three types below are that agreement, and they are the only thing the frontend is told about the data -
+ * nothing here says where a record lives or how it got there, which is what let the storage layer be swapped for
  * SQLite without a line changing in a handler or a component.
  *
  * Everything is plain JSON: numbers, strings and one nested object per aggregate. No `Date`, no
- * class instance, because a record has to survive being written to a file, cached by Nitro and
+ * class instance, because a record has to survive being written to a database row, cached by Nitro and
  * serialised into an HTML payload.
  */
 
@@ -17,8 +17,8 @@
  * The side a character plays for, as the profile API reports it (`faction.type`) and lowercased.
  *
  * `neutral` is a real answer rather than a missing one: the API returns it for a character whose
- * faction it will not state, and a record backfilled from the sitemap's index - which never kept
- * a faction at all - wears it too. It is filtered out by both of the faction chips.
+ * faction it will not state, and a character whose side the site has never read wears it too. It is
+ * filtered out by both of the faction chips.
  */
 export type LeaderboardFaction = 'alliance' | 'horde' | 'neutral'
 
@@ -103,8 +103,8 @@ export interface LeaderboardPlayer {
   displayName: string
   /**
    * Blizzard's square portrait of the character, which the table draws beside the name. Optional
-   * because a record backfilled from the sitemap's index has none - that index never kept a URL -
-   * and a row without one draws a monogram in the class colour instead.
+   * because a character whose portrait the site has never read has none, and a row without one draws a
+   * monogram in the class colour instead.
    */
   avatar?: string
   /**
@@ -114,7 +114,7 @@ export interface LeaderboardPlayer {
    * The table wears it as a blue halo on the portrait: the same blue the Battle.net plate of the header
    * wears, because it says the same thing (there is an account behind this), and it is the one mark that
    * tells a reader which figures are the site's own reading of a whole account rather than one glimpse of
-   * one character (see `server/utils/accounts.ts`). Absent on every other row, and on every row of a table
+   * one character (see `server/utils/statisticsPopulation`). Absent on every other row, and on every row of a table
    * that could not read the database at all.
    */
   isAccount?: true

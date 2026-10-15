@@ -37,12 +37,11 @@ export interface IndexedCharacter {
    *
    * None of it is a page - the map is built from the addresses - but it is what makes the map worth
    * opening for a reader: the file a browser paints is a page about the characters the site has been
-   * asked about, and what they were when they were asked for. It is the same list the hall of fame's
-   * table is filled from when it has no file of its own (`backfillFromIndex` in
-   * `./leaderboardStorage`), which is the other reason it is kept whole: a record that carries only
-   * half of what a row prints writes a table of rows without a portrait and without a faction, and a
-   * backfilled row is only ever completed by looking that character up again. A record written before
-   * a field was kept simply carries none of it, and every field is optional for exactly that reason.
+   * asked about, and what they were when they were asked for.
+   *
+   * The figures are the sitemap's own and go no further: what the site counts, ranks and graphs is read from
+   * the database (`./statisticsPopulation`), which holds a character the moment it is read and only then. A
+   * record here is an address a crawler may be told about, not a member of any population.
    */
   avatar?: string
   faction?: string
@@ -59,9 +58,10 @@ export interface IndexedCharacter {
   /**
    * The honorable kills the profile reported, which is the figure the hall of fame's own column prints.
    *
-   * It is kept here for the reason every other figure is: the table is filled from this index when it has no
-   * file of its own (`backfillFromIndex` in `./leaderboardStorage`), so a figure the table draws and the index
-   * forgets is a column that comes up empty on every row the backfill writes.
+   * It is kept here for the reason every other figure is: the page a crawler is handed is about the characters
+   * the site has been asked about, and what they were when they were asked for. What the site *counts* is read
+   * from the database (`./statisticsPopulation`), which holds a character the moment it is read - so this record
+   * is a map entry and not a member of any population.
    */
   honorableKills?: number
 }
