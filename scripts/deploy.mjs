@@ -70,6 +70,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { sameEnv } from './lib/envFile.mjs'
 import { findSecrets, readDotenv, secretValues } from './lib/secrets.mjs'
@@ -92,6 +93,46 @@ const DATA_DIR = 'server/data'
  * names it then fails to fetch, and nothing about it looks wrong until the day the copy is needed.
  */
 const DATA_LISTING = `${DATA_DIR}/`
+
+/**
+ * The stores the site used to keep beside its database and no longer reads.
+ *
+ * `leaderboard.json` was the hall of fame's own table before it moved into the database
+ * (`server/utils/statisticsMigration` moves its rows and deliberately leaves the file where it is - a build that
+ * turned out wrong can be rolled back to one that still understands it). So it is copied only while the database
+ * does not hold that table yet: the same table twice, in every backup, for ever, is not a backup.
+ */
+const LEGACY_STORES = [{ name: 'leaderboard.json', table: 'leaderboard' }]
+
+/** The database in the copy, under the name the site keeps it in (`server/utils/db`). */
+const DATA_DATABASE = 'hoa.db'
+
+/**
+ * True when the database in the copy just taken already holds the rows a legacy store was the only copy of.
+ *
+ * Asked of the copy rather than of the host, because the copy is the file that would be read back one day. Every
+ * answer that is not a clear yes keeps the store: no database, one that cannot be opened, a table this build does
+ * not have, no rows in it - each of those is a copy that must not throw a file away.
+ */
+function databaseHolds(database, table) {
+  if (!fs.existsSync(database)) return false
+
+  let db = null
+
+  try {
+    db = new DatabaseSync(database, { readOnly: true })
+    const counted = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()
+    return Number(counted?.n) > 0
+  } catch {
+    return false
+  } finally {
+    try {
+      db?.close()
+    } catch {
+      // Never opened, or already closed: nothing to do about either.
+    }
+  }
+}
 
 /** A credential helper may want to open a dialog, so pushes never hang forever. */
 const PUSH_TIMEOUT_MS = 5 * 60 * 1000
@@ -539,16 +580,20 @@ function packBackup(directory) {
 /**
  * Reads the site's own data directory back into `backups/<stamp>/` on this machine.
  *
- * It is the one thing this deploy does not own and could not rebuild: the SQLite database (accounts, their
- * characters and the snapshots), the character index the sitemap is built from, and the hall of fame's
- * table - all three written by the running site into the directory `server/utils/appPaths` names. Nothing
- * here deletes or replaces them; the copy is for the day something else does, when the alternative is a
- * front page that has to be filled again from scratch.
+ * It is the one thing this deploy does not own and could not rebuild: the SQLite database, which holds the
+ * accounts, their characters, the snapshots and the hall of fame's own table, and the character index the sitemap
+ * is built from - both written by the running site into the directory `server/utils/appPaths` names. Nothing here
+ * deletes or replaces them; the copy is for the day something else does, when the alternative is a front page that
+ * has to be filled again from scratch.
  *
  * The copy is kept two ways, because they answer different needs: `server-data/` is what a restore copies
  * back file by file, and `server-data.zip` is one archive holding that folder and a `backup.json` saying
  * where it came from, which commit it was taken beside, and what is inside. A host that has never run the
  * site has no directory there, which is not a problem worth reporting.
+ *
+ * A store the database has taken over is left out of the copy - and only once the copied database really holds
+ * it (`databaseHolds`), so the deploy that first ships the move still carries the file, and every deploy after
+ * that one does not.
  */
 function backupRemoteData(target, netrc) {
   const listed = remoteNames(target, netrc, DATA_LISTING)
@@ -582,7 +627,22 @@ function backupRemoteData(target, netrc) {
     }
   }
 
-  const bytes = kept.reduce((total, file) => total + file.bytes, 0)
+  // A store the database has taken over is left out of the copy, and only when it really has it: the file stays
+  // for every other answer (`databaseHolds`). This is where `leaderboard.json` stops being copied - the deploy
+  // that first ships the move still keeps it, because the table is not in the database until the new build has
+  // started once, and every deploy after that one leaves it out.
+  const skipped = []
+
+  for (const store of LEGACY_STORES) {
+    const file = path.join(directory, store.name)
+    if (!fs.existsSync(file) || !databaseHolds(path.join(directory, DATA_DATABASE), store.table)) continue
+
+    fs.rmSync(file, { force: true })
+    skipped.push({ name: store.name, reason: `${store.table} is in ${DATA_DATABASE}` })
+  }
+
+  const copied = kept.filter((file) => !skipped.some((gone) => gone.name === file.name))
+  const bytes = copied.reduce((total, file) => total + file.bytes, 0)
 
   fs.writeFileSync(
     path.join(folder, 'backup.json'),
@@ -591,7 +651,9 @@ function backupRemoteData(target, netrc) {
         takenAt: new Date().toISOString(),
         from: `${target.server}${target.root}${DATA_DIR}`,
         commit: sourceSha,
-        files: kept,
+        files: copied,
+        // What was there and was not copied, so a copy that is missing a file says why it is.
+        skipped,
         bytes
       },
       null,
@@ -604,7 +666,8 @@ function backupRemoteData(target, netrc) {
 
   return {
     relative: relative(folder),
-    kept,
+    kept: copied,
+    skipped,
     failed,
     bytes,
     archive: packed ? { relative: relative(packed.archive), bytes: packed.bytes, entries: packed.entries } : null
@@ -902,7 +965,10 @@ if (SKIP_FTP) {
     }
   if (PRUNE) log('   --prune: stale files below public/ and server/chunks/ would be deleted')
   if (VERIFY) log('   --verify: every directory would be read back afterwards')
-  if (!SKIP_BACKUP) log(`   would read ${DATA_DIR} back into backups/ first, and pack it into server-data.zip`)
+  if (!SKIP_BACKUP) {
+    log(`   would read ${DATA_DIR} back into backups/ first, and pack it into server-data.zip`)
+    log(`   (${LEGACY_STORES.map((store) => store.name).join(', ')} is left out of the copy once the database holds it)`)
+  }
 } else {
   step('Uploading .output to the FTP target')
 
@@ -944,6 +1010,10 @@ if (SKIP_FTP) {
         log(`   ${DATA_DIR} <- nothing to read back there yet`)
       } else {
         log(`   ${DATA_DIR} <- ${kept.kept.length} file(s), ${sizeOf(kept.bytes)} kept in ${kept.relative}`)
+
+        for (const gone of kept.skipped) {
+          log(`   ${DATA_DIR}/${gone.name} <- left out of the copy: ${gone.reason}`)
+        }
 
         if (kept.archive) {
           log(`   ${path.basename(kept.archive.relative)} <- one archive, ${sizeOf(kept.archive.bytes)}, ${kept.archive.entries} entries`)

@@ -841,14 +841,16 @@ settled on while it starts (`[data] ...`, beside the `[env]` line).
 
 Every `npm run deploy` reads that directory back into `backups/<date>/` before it uploads anything: the files
 under `server-data/`, and one `server-data.zip` holding that folder plus a `backup.json` saying where it came
-from, which commit it was taken beside and what is inside (`--no-backup` skips it). None of it is part of
-`.output` and nothing in the deploy deletes it — which is why a copy is worth taking: it is the only thing in
-this repository's world that a build cannot produce again.
+from, which commit it was taken beside and what is inside (`--no-backup` skips it). A store the database has
+taken over — `leaderboard.json`, the hall of fame's table before it moved into `hoa.db` — is left out of the copy
+once the copied database really holds its rows, and kept until then, so the deploy that first ships the move still
+carries it. None of it is part of `.output` and nothing in the deploy deletes it — which is why a copy is worth
+taking: it is the only thing in this repository's world that a build cannot produce again.
 
-To put a copy back, **stop the site first**: the table is held in memory for as long as the process runs
-(`server/utils/leaderboardStorage`), so the files have to be copied over while nothing is running, and the
-site started again afterwards to read them. Unpack the archive with `tar -x -f backups/<date>/server-data.zip`
-it holds the same `server-data/` folder the rest of the copy is in.
+To put a copy back, **stop the site first**: the files are written by the running process - the database is open
+for as long as it runs, and the character index is rewritten as characters are read - so they have to be copied
+over while nothing is running, and the site started again afterwards to read them. Unpack the archive with
+`tar -x -f backups/<date>/server-data.zip` it holds the same `server-data/` folder the rest of the copy is in.
 
 ### Deploy options
 

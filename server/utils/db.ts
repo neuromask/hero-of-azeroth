@@ -513,8 +513,41 @@ export function migrateCharacterOwnership(connection: DatabaseSync): void {
  * A database that has them is asked first - a fresh one is created without any of them (`CREATE TABLE` above) - and
  * one that does not is left exactly as it is, which is the rule every migration here follows. A database the
  * change cannot be made to keeps them, which costs a number a row and is read by nobody.
+ *
+ * The item level is *moved* before it is dropped, and that is the one part of this migration that is not a
+ * removal: `snapshots.ilvl` holds the only copy of a figure the site still prints, so each character takes the
+ * newest reading that carried one before the readings lose the column. Without that step every character would
+ * come out of this wearing nothing and would stay that way until its next profile read - the hall of fame's table
+ * and an account's page print that figure, and a dash for a character the site has known for months is a loss the
+ * migration made rather than one it found. The account's own copy is not moved anywhere: it was the best gear
+ * among its characters, which is no one character's, and an account has no item level of its own any more
+ * (`./accountPool`).
+ *
+ * Exported for the test that builds a database written by the older build and migrates it (`test/unit`).
  */
-function migrateRemovedColumns(connection: DatabaseSync): void {
+export function migrateRemovedColumns(connection: DatabaseSync): void {
+  const hasColumn = (table: string, column: string): boolean =>
+    (connection.prepare(`PRAGMA table_info(${table})`).all() as unknown as { name: string }[]).some(
+      (entry) => entry.name === column
+    )
+
+  // Asked only while the reading still holds the column: on the next start there is nothing to move, and a
+  // statement against a column that is gone would be a warning on every boot for a migration already done.
+  if (hasColumn('snapshots', 'ilvl') && hasColumn('characters', 'ilvl')) {
+    try {
+      connection.exec(
+        `UPDATE characters SET ilvl = (
+           SELECT s.ilvl FROM snapshots s
+            WHERE s.character_id = characters.id AND s.ilvl IS NOT NULL
+            ORDER BY s.taken_at DESC LIMIT 1)
+         WHERE ilvl IS NULL
+           AND EXISTS (SELECT 1 FROM snapshots s WHERE s.character_id = characters.id AND s.ilvl IS NOT NULL)`
+      )
+    } catch (error) {
+      console.warn(`[db] characters kept no item level: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   const dropped: Array<{ table: string; column: string; index?: string }> = [
     { table: 'leaderboard', column: 'capped', index: 'idx_leaderboard_ilvl' },
     { table: 'snapshots', column: 'ilvl' },
@@ -522,8 +555,7 @@ function migrateRemovedColumns(connection: DatabaseSync): void {
   ]
 
   for (const { table, column, index } of dropped) {
-    const columns = connection.prepare(`PRAGMA table_info(${table})`).all() as unknown as { name: string }[]
-    if (!columns.some((entry) => entry.name === column)) continue
+    if (!hasColumn(table, column)) continue
 
     try {
       if (index) connection.exec(`DROP INDEX IF EXISTS ${index}`)

@@ -9,7 +9,7 @@
  */
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { migrateCharacterOwnership } from '../../server/utils/db'
+import { migrateCharacterOwnership, migrateRemovedColumns } from '../../server/utils/db'
 
 /** The tables as the older build left them: a character without an owner was not allowed. */
 const OLD_SCHEMA = `
@@ -132,5 +132,86 @@ describe('migrateCharacterOwnership', () => {
 
     const columns = db.prepare('PRAGMA table_info(characters)').all() as unknown as { name: string; notnull: number }[]
     expect(columns.find((column) => column.name === 'user_id')?.notnull).toBe(0)
+  })
+})
+
+/**
+ * The other half of a migration: the columns this build has taken away, and the one figure of them that is moved
+ * rather than dropped.
+ *
+ * `snapshots.ilvl` is the only copy of an item level the site still prints, so the character it belongs to takes
+ * the newest reading that carried one before the readings lose the column - a read is allowed to say nothing about
+ * a figure, so the newest *that carried one* is the answer, and a character no reading ever carried one for keeps
+ * nothing rather than a nought. The account's own copy is dropped without being moved: it was the best gear on the
+ * roster, which is no one character's, and an account has no item level of its own any more.
+ */
+const OLD_REMOVED_SCHEMA = `
+CREATE TABLE characters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  region TEXT NOT NULL,
+  realm_slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  name_key TEXT NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  ilvl REAL
+);
+CREATE TABLE snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  taken_at INTEGER NOT NULL,
+  mounts INTEGER,
+  ilvl REAL
+);
+CREATE TABLE account_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  taken_at INTEGER NOT NULL,
+  ilvl REAL
+);
+CREATE TABLE leaderboard (
+  region TEXT NOT NULL,
+  name_key TEXT NOT NULL,
+  capped INTEGER
+);
+CREATE INDEX idx_leaderboard_ilvl ON leaderboard(capped);
+`
+
+describe('migrateRemovedColumns', () => {
+  it('moves a character its newest item level, then drops the columns', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(OLD_REMOVED_SCHEMA)
+
+    db.exec(
+      `INSERT INTO characters (id, user_id, region, realm_slug, name, name_key, last_seen_at)
+       VALUES (1, 7, 'eu', 'gordunni', 'Testchar', 'testchar', 1), (2, 7, 'eu', 'gordunni', 'Unread', 'unread', 1)`
+    )
+    db.exec('INSERT INTO snapshots (character_id, taken_at, mounts, ilvl) VALUES (1, 100, 10, 300)')
+    db.exec('INSERT INTO snapshots (character_id, taken_at, mounts, ilvl) VALUES (1, 200, 11, 320)')
+    db.exec('INSERT INTO snapshots (character_id, taken_at, mounts, ilvl) VALUES (1, 300, 12, NULL)')
+    db.exec('INSERT INTO account_snapshots (user_id, taken_at, ilvl) VALUES (7, 300, 500)')
+    db.exec("INSERT INTO leaderboard (region, name_key, capped) VALUES ('eu', 'testchar', 1)")
+
+    migrateRemovedColumns(db)
+
+    expect(db.prepare('SELECT ilvl FROM characters WHERE id = 1').get()).toMatchObject({ ilvl: 320 })
+    expect(db.prepare('SELECT ilvl FROM characters WHERE id = 2').get()).toMatchObject({ ilvl: null })
+
+    const columns = (table: string) =>
+      (db.prepare(`PRAGMA table_info(${table})`).all() as unknown as { name: string }[]).map((entry) => entry.name)
+
+    expect(columns('snapshots')).not.toContain('ilvl')
+    expect(columns('account_snapshots')).not.toContain('ilvl')
+    expect(columns('leaderboard')).not.toContain('capped')
+    expect(columns('characters')).toContain('ilvl')
+
+    // The order that column was read in goes with it.
+    expect(
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_leaderboard_ilvl'").get()
+    ).toBeUndefined()
+
+    // And the migration is done: a second run finds nothing to move and nothing to drop.
+    expect(() => migrateRemovedColumns(db)).not.toThrow()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM snapshots').get()).toMatchObject({ n: 3 })
   })
 })

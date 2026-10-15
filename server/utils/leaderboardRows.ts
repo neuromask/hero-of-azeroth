@@ -288,6 +288,21 @@ export function dropGuestRow(region: string, realm: string, name: string): void 
 }
 
 /**
+ * The version of the rows the table holds, stamped beside the weights' own (`PRAGMA application_id`, next to the
+ * `user_version` `SCORE_VERSION` is kept in).
+ *
+ * A row is a materialised copy of a member - the collections, the rating and the item level, frozen so that an
+ * index can order by them (`./db`) - so a build that changes *what a row holds* leaves every row written by the
+ * older build saying something the site no longer means, while the weights' stamp still matches and the table is
+ * served as it is. Bumping this is the one-line way to say so: the next process to start rebuilds the population
+ * once (`ensurePopulation`), exactly as a changed weight does.
+ *
+ * 2: an account's row carries the item level of the main it is named after rather than the best gear on its
+ *    roster, which is what the row had been written with.
+ */
+export const ROW_VERSION = 2
+
+/**
  * Rebuilds every row from the database, which is what a fresh database and a changed formula need.
  *
  * The version the rows were rated with is kept in the database's own header (`PRAGMA user_version`), so a process
@@ -311,6 +326,7 @@ export function rebuildPopulation(): number {
     db.prepare(writeRows(GUEST_ROWS('1 = 1'))).run()
     db.prepare(writeRows(ACCOUNT_ROWS('1 = 1'))).run()
     db.exec(`PRAGMA user_version = ${SCORE_VERSION}`)
+    db.exec(`PRAGMA application_id = ${ROW_VERSION}`)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
@@ -328,8 +344,8 @@ export function rebuildPopulation(): number {
  * Two things can leave it stale, and both are one-off costs paid on the first read after they happen:
  *
  *   - a fresh database, whose header carries no version yet - every deploy of a new database, and every test;
- *   - a rating whose weights have changed (`SCORE_VERSION`), which is a rebuild for the same reason the write path
- *     used to re-rate every row.
+ *   - a rating whose weights have changed (`SCORE_VERSION`) or a row whose content has (`ROW_VERSION`), which is
+ *     a rebuild for the same reason the write path used to re-rate every row.
  *
  * Everything else is maintained as it moves, by the writes above, so this is a header read on the steady path.
  */
@@ -337,7 +353,8 @@ export function ensurePopulation(): void {
   const db = useDb()
 
   const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number }
-  if (version === SCORE_VERSION) return
+  const { application_id: rows } = db.prepare('PRAGMA application_id').get() as { application_id: number }
+  if (version === SCORE_VERSION && rows === ROW_VERSION) return
 
   rebuildPopulation()
 }

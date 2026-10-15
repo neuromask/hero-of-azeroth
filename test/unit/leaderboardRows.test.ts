@@ -388,6 +388,14 @@ describe('the writes that keep the table true', () => {
     // the rows were rated with, so the second answer is the write path's doing and not a rebuild's.
     expect(memory.db.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: SCORE_VERSION })
 
+    // And the stamp the rows themselves are checked against (`ROW_VERSION`, kept in the header's other field): a
+    // table written by a build whose rows said something else is rebuilt once, exactly as a changed weight is.
+    memory.db.exec('PRAGMA application_id = 1')
+    rows.ensurePopulation()
+
+    const rowsStamp = memory.db.prepare('PRAGMA application_id').get() as { application_id: number }
+    expect(rowsStamp.application_id).toBeGreaterThan(1)
+
     const page = rows.readLeaderboardPage({}, 25)
 
     expect(page.total).toBe(1)
