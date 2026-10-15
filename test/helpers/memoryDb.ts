@@ -28,6 +28,7 @@ CREATE TABLE characters (
   realm_slug TEXT NOT NULL,
   name TEXT NOT NULL,
   name_key TEXT NOT NULL,
+  display_name TEXT,
   is_main INTEGER NOT NULL DEFAULT 0,
   level INTEGER,
   stats_read_at INTEGER
@@ -50,7 +51,8 @@ CREATE TABLE snapshots (
   recipes INTEGER,
   transmogs INTEGER,
   honorable_kills INTEGER,
-  honor_level INTEGER
+  honor_level INTEGER,
+  score INTEGER
 );
 
 CREATE TABLE account_pool (
@@ -98,6 +100,7 @@ export interface NewSnapshot {
   pets?: number | null
   toys?: number | null
   decor?: number | null
+  reputations?: number | null
   /** The figures beside the collections (`server/utils/blizzard`), which no rating weighs. */
   titles?: number | null
   quests?: number | null
@@ -105,6 +108,8 @@ export interface NewSnapshot {
   transmogs?: number | null
   honorableKills?: number | null
   honorLevel?: number | null
+  /** The overall rating, computed at write time; `null` where it was not. */
+  score?: number | null
 }
 
 export interface MemoryDb {
@@ -130,8 +135,8 @@ export function createMemoryDb(): MemoryDb {
     addCharacter(character) {
       const result = db
         .prepare(
-          `INSERT INTO characters (user_id, region, realm_slug, name, name_key, is_main, level, stats_read_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO characters (user_id, region, realm_slug, name, name_key, display_name, is_main, level, stats_read_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           character.userId,
@@ -139,6 +144,7 @@ export function createMemoryDb(): MemoryDb {
           character.realm.toLowerCase(),
           character.name,
           character.name.toLowerCase(),
+          character.name,
           character.isMain ? 1 : 0,
           character.level ?? null,
           character.statsReadAt ?? null
@@ -151,8 +157,8 @@ export function createMemoryDb(): MemoryDb {
       db.prepare(
         `INSERT INTO snapshots
            (character_id, taken_at, ilvl, mplus_score, achievements, mounts, pets, toys, decor, reputations,
-            titles, quests, recipes, transmogs, honorable_kills, honor_level)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         snapshot.characterId,
         snapshot.takenAt,
@@ -163,13 +169,14 @@ export function createMemoryDb(): MemoryDb {
         snapshot.pets ?? null,
         snapshot.toys ?? null,
         snapshot.decor ?? null,
-        null,
+        snapshot.reputations ?? null,
         snapshot.titles ?? null,
         snapshot.quests ?? null,
         snapshot.recipes ?? null,
         snapshot.transmogs ?? null,
         snapshot.honorableKills ?? null,
-        snapshot.honorLevel ?? null
+        snapshot.honorLevel ?? null,
+        snapshot.score ?? null
       )
     },
 

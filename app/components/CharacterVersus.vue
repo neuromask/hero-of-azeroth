@@ -32,6 +32,7 @@ import { searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCh
 import { useSearchHistory } from '~/composables/searchHistory'
 import { useVersusFavorites } from '~/composables/versusFavorites'
 import type { CharacterData } from '~~/server/utils/blizzard'
+import type { DistributionResponse, HistorySeries, MetricKey } from '#shared/data/historySchema'
 
 /** The second character of a comparison: the three segments of its own address, as the address spells them. */
 interface VersusTarget {
@@ -250,6 +251,153 @@ const brokenPortraits = ref<Record<string, boolean>>({})
 function hexOf(character: CharacterData | null): string {
   return classById(character?.classId ?? 0)?.hex || DEFAULT_CLASS_HEX
 }
+
+/**
+ * The metric a row of the board stands for, read off the message key the row prints its name with.
+ *
+ * The rows are keyed by their label (the very i18n key a tile already uses), while the history and distribution
+ * endpoints speak the metric names of `#shared/data/historySchema`. This is the one place the two are told
+ * apart, so a row added to the board has to name its metric here and nowhere else.
+ */
+const ROW_METRIC: Record<string, MetricKey> = {
+  lbColScore: 'score',
+  achievements: 'achievements',
+  mounts: 'mounts',
+  toys: 'toys',
+  pets: 'pets',
+  decor: 'decor',
+  titles: 'titles',
+  itemLevel: 'ilvl',
+  mPlus: 'mPlusScore',
+  reputations: 'reputations',
+  transmogs: 'transmogs',
+  quests: 'quests',
+  recipes: 'recipes',
+  honorableKills: 'honorableKills',
+  honorLevel: 'honorLevel'
+}
+
+/** The metric a row of the board stands for. */
+function metricOf(row: VersusRow): MetricKey {
+  return ROW_METRIC[row.label] ?? 'score'
+}
+
+/**
+ * The one metric whose panel is open, shared by both columns on purpose: opening a row on either side opens
+ * the very same metric on the other, and closing it closes both - which is what makes the two columns read as
+ * one accordion rather than two that can drift. The score is open when the page arrives.
+ *
+ * One active metric rather than a set of them: the board is a pair of narrow columns, and a metric's panel is
+ * two charts tall, so a single open one keeps the board legible - and it is also what keeps the client to one
+ * metric's data at a time (see the requests below).
+ */
+const openMetric = ref<MetricKey | null>('score')
+
+function toggleMetric(metric: MetricKey): void {
+  openMetric.value = openMetric.value === metric ? null : metric
+}
+
+/** The open metric, or `null` when every row is folded away - the key every request below hangs off. */
+const metric = computed(() => openMetric.value)
+
+/**
+ * The first character's history for the open metric.
+ *
+ * One request per (character, metric), so the first paint pays for the score alone and every other metric is
+ * read only when its row is opened. The key is a `computed`, which is what makes Nuxt refetch on its own when
+ * the metric - or the character - changes; a late answer to a key that is no longer asked for lands on that
+ * key's own entry and can never overwrite the current one.
+ */
+const currentHistoryKey = computed(() =>
+  metric.value ? `vs-history:${currentWardrobeKey.value}:${metric.value}` : 'vs-history:none'
+)
+const currentHistoryUrl = computed(() =>
+  metric.value ? `/api/history/${region}/${realm}/${encodeURIComponent(name)}?metric=${metric.value}` : null
+)
+
+const {
+  data: currentHistory,
+  pending: currentHistoryPending,
+  error: currentHistoryError
+} = await useAsyncData(
+  currentHistoryKey,
+  () => (currentHistoryUrl.value ? $fetch<HistorySeries>(currentHistoryUrl.value) : Promise.resolve(null)),
+  { default: () => null }
+)
+
+/** The second character's history for the open metric, read the same way and in parallel with the first. */
+const targetHistoryKey = computed(() =>
+  metric.value && props.target ? `vs-history:${targetWardrobeKey.value}:${metric.value}` : 'vs-history-target:none'
+)
+const targetHistoryUrl = computed(() =>
+  metric.value && props.target
+    ? `/api/history/${props.target.region}/${props.target.realm}/${encodeURIComponent(props.target.name)}?metric=${metric.value}`
+    : null
+)
+
+const {
+  data: targetHistory,
+  pending: targetHistoryPending,
+  error: targetHistoryError
+} = await useAsyncData(
+  targetHistoryKey,
+  () => (targetHistoryUrl.value ? $fetch<HistorySeries>(targetHistoryUrl.value) : Promise.resolve(null)),
+  { default: () => null }
+)
+
+/**
+ * The metric's distribution, asked for once and shared by both columns.
+ *
+ * The histogram is the population's, so the answer is the same whoever is reading it; the `players` it names
+ * are the two sides of the comparison, and both their markers come back in the one answer. Asking for it once
+ * is what keeps the two panels from paying for the same histogram twice.
+ */
+/**
+ * A character keyed the way the table keys a row: the three address segments lowercased whole, which is the
+ * string `identity` in `server/utils/leaderboardStorage` builds and the one a distribution position comes
+ * back under. The browser's own character key (`searchHistoryKey`) lowercases the name alone, so the
+ * distribution is asked about - and its positions matched by - this key instead.
+ */
+const currentTableKey = computed(() => `${region}:${realm}:${name}`.toLowerCase())
+const targetTableKey = computed(() =>
+  props.target ? `${props.target.region}:${props.target.realm}:${props.target.name}`.toLowerCase() : ''
+)
+
+const panelPlayersParam = computed(() => {
+  const keys = [currentTableKey.value]
+  if (props.target) keys.push(targetTableKey.value)
+  return keys.join(',')
+})
+
+const distributionKey = computed(() =>
+  metric.value ? `vs-distribution:${metric.value}:${panelPlayersParam.value}` : 'vs-distribution:none'
+)
+const distributionUrl = computed(() =>
+  metric.value ? `/api/distribution?metric=${metric.value}&players=${encodeURIComponent(panelPlayersParam.value)}` : null
+)
+
+const { data: distribution } = await useAsyncData(
+  distributionKey,
+  () => (distributionUrl.value ? $fetch<DistributionResponse>(distributionUrl.value) : Promise.resolve(null)),
+  { default: () => null }
+)
+
+/** The two sides of the comparison as the panel's legend names them: their key, their name and their colour. */
+const panelPlayers = computed(() => {
+  const list = [
+    { key: currentTableKey.value, name: character.value?.name || name, hex: hexOf(character.value ?? null) }
+  ]
+
+  if (props.target) {
+    list.push({
+      key: targetTableKey.value,
+      name: targetCharacter.value?.name || props.target.name,
+      hex: hexOf(targetCharacter.value)
+    })
+  }
+
+  return list
+})
 
 /** One pill of an identity row: a scrap of what a character is, and the plate it is read in. */
 interface MetaPill {
@@ -564,34 +712,59 @@ onBeforeUnmount(() => {
           <li
             v-for="row in comparison"
             :key="row.key"
-            class="flex items-center gap-3 rounded-xl border px-3 py-2 transition-colors"
+            class="overflow-hidden rounded-xl border transition-colors"
             :class="winnerOf(row) === 'current' ? 'border-emerald-400/30 bg-emerald-400/[0.07]' : 'border-white/10 bg-white/[0.03]'"
           >
-            <AppIcon :name="row.icon" class="h-6 w-6 shrink-0 text-gray-400" />
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/[0.04]"
+              :aria-expanded="openMetric === metricOf(row)"
+              @click="toggleMetric(metricOf(row))"
+            >
+              <AppIcon :name="row.icon" class="h-6 w-6 shrink-0 text-gray-400" />
 
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-xs font-semibold uppercase tracking-wider text-gray-300">
-                {{ $t(row.label) }}
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-xs font-semibold uppercase tracking-wider text-gray-300">
+                  {{ $t(row.label) }}
+                </span>
+                <span
+                  class="block text-[10px] font-semibold uppercase tracking-wider"
+                  :class="row.accountWide ? 'text-wow-goldLight/80' : 'text-gray-500'"
+                >{{ row.accountWide ? $t('accountWide') : $t('perCharacter') }}</span>
               </span>
-              <span
-                class="block text-[10px] font-semibold uppercase tracking-wider"
-                :class="row.accountWide ? 'text-wow-goldLight/80' : 'text-gray-500'"
-              >{{ row.accountWide ? $t('accountWide') : $t('perCharacter') }}</span>
-            </span>
 
-            <span class="shrink-0 whitespace-nowrap text-right">
-              <span
-                class="text-lg font-extrabold leading-none tabular-nums"
-                :class="[
-                  winnerOf(row) === 'current' ? WINNER_TEXT : 'text-white',
-                  row.label === 'transmogs' && isReadingWardrobe('current') ? 'animate-pulse text-gray-500' : ''
-                ]"
-              >{{ print(row.value) }}</span>
-              <span
-                v-if="winnerOf(row) === 'current' && marginLabel(row)"
-                class="ml-1 align-middle text-[11px] font-bold text-emerald-400"
-              >{{ marginLabel(row) }}</span>
-            </span>
+              <span class="shrink-0 whitespace-nowrap text-right">
+                <span
+                  class="text-lg font-extrabold leading-none tabular-nums"
+                  :class="[
+                    winnerOf(row) === 'current' ? WINNER_TEXT : 'text-white',
+                    row.label === 'transmogs' && isReadingWardrobe('current') ? 'animate-pulse text-gray-500' : ''
+                  ]"
+                >{{ print(row.value) }}</span>
+                <span
+                  v-if="winnerOf(row) === 'current' && marginLabel(row)"
+                  class="ml-1 align-middle text-[11px] font-bold text-emerald-400"
+                >{{ marginLabel(row) }}</span>
+              </span>
+
+              <svg class="h-4 w-4 shrink-0 text-gray-500 transition-transform" :class="openMetric === metricOf(row) ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+
+            <!-- The panel opens on both sides at once, because `openMetric` is one shared value: this is the
+                 first character's own history beside the population's histogram, with both markers on it. -->
+            <div v-if="openMetric === metricOf(row)" class="border-t border-white/10 bg-black/20 p-2">
+              <MetricHistoryPanel
+                :metric="metricOf(row)"
+                :history="currentHistory"
+                :pending="currentHistoryPending"
+                :failed="!!currentHistoryError"
+                :distribution="distribution"
+                :players="panelPlayers"
+                :highlight="currentTableKey"
+              />
+            </div>
           </li>
         </ul>
       </section>
@@ -752,34 +925,59 @@ onBeforeUnmount(() => {
             <li
               v-for="row in comparison"
               :key="row.key"
-              class="flex items-center gap-3 rounded-xl border px-3 py-2 transition-colors"
+              class="overflow-hidden rounded-xl border transition-colors"
               :class="winnerOf(row) === 'target' ? 'border-emerald-400/30 bg-emerald-400/[0.07]' : 'border-white/10 bg-white/[0.03]'"
             >
-              <AppIcon :name="row.icon" class="h-6 w-6 shrink-0 text-gray-400" />
+              <button
+                type="button"
+                class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/[0.04]"
+                :aria-expanded="openMetric === metricOf(row)"
+                @click="toggleMetric(metricOf(row))"
+              >
+                <AppIcon :name="row.icon" class="h-6 w-6 shrink-0 text-gray-400" />
 
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-xs font-semibold uppercase tracking-wider text-gray-300">
-                  {{ $t(row.label) }}
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-xs font-semibold uppercase tracking-wider text-gray-300">
+                    {{ $t(row.label) }}
+                  </span>
+                  <span
+                    class="block text-[10px] font-semibold uppercase tracking-wider"
+                    :class="row.target.accountWide ? 'text-wow-goldLight/80' : 'text-gray-500'"
+                  >{{ row.target.accountWide ? $t('accountWide') : $t('perCharacter') }}</span>
                 </span>
-                <span
-                  class="block text-[10px] font-semibold uppercase tracking-wider"
-                  :class="row.target.accountWide ? 'text-wow-goldLight/80' : 'text-gray-500'"
-                >{{ row.target.accountWide ? $t('accountWide') : $t('perCharacter') }}</span>
-              </span>
 
-              <span class="shrink-0 whitespace-nowrap text-right">
-                <span
-                  class="text-lg font-extrabold leading-none tabular-nums"
-                  :class="[
-                    winnerOf(row) === 'target' ? WINNER_TEXT : 'text-white',
-                    row.label === 'transmogs' && isReadingWardrobe('target') ? 'animate-pulse text-gray-500' : ''
-                  ]"
-                >{{ print(row.target.value) }}</span>
-                <span
-                  v-if="winnerOf(row) === 'target' && marginLabel(row)"
-                  class="ml-1 align-middle text-[11px] font-bold text-emerald-400"
-                >{{ marginLabel(row) }}</span>
-              </span>
+                <span class="shrink-0 whitespace-nowrap text-right">
+                  <span
+                    class="text-lg font-extrabold leading-none tabular-nums"
+                    :class="[
+                      winnerOf(row) === 'target' ? WINNER_TEXT : 'text-white',
+                      row.label === 'transmogs' && isReadingWardrobe('target') ? 'animate-pulse text-gray-500' : ''
+                    ]"
+                  >{{ print(row.target.value) }}</span>
+                  <span
+                    v-if="winnerOf(row) === 'target' && marginLabel(row)"
+                    class="ml-1 align-middle text-[11px] font-bold text-emerald-400"
+                  >{{ marginLabel(row) }}</span>
+                </span>
+
+                <svg class="h-4 w-4 shrink-0 text-gray-500 transition-transform" :class="openMetric === metricOf(row) ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+
+              <!-- The same metric as the first column's, opened by the one shared `openMetric`: the second
+                   character's own history, with the population's histogram and both markers beside it. -->
+              <div v-if="openMetric === metricOf(row)" class="border-t border-white/10 bg-black/20 p-2">
+                <MetricHistoryPanel
+                  :metric="metricOf(row)"
+                  :history="targetHistory"
+                  :pending="targetHistoryPending"
+                  :failed="!!targetHistoryError"
+                  :distribution="distribution"
+                  :players="panelPlayers"
+                  :highlight="targetTableKey"
+                />
+              </div>
             </li>
           </ul>
         </template>

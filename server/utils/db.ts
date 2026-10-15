@@ -184,7 +184,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
   recipes INTEGER,
   transmogs INTEGER,
   honorable_kills INTEGER,
-  honor_level INTEGER
+  honor_level INTEGER,
+  -- The overall rating the six figures above weigh, frozen at write time (see server/utils/playerScore):
+  -- the weights change with SCORE_VERSION, and a history point must not silently re-rank behind a reader's
+  -- back. Old rows keep NULL - the score cannot be re-derived honestly from a formula that has moved on.
+  score INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_character ON snapshots(character_id, taken_at);
 
@@ -257,7 +261,11 @@ const ADDED_COLUMNS = [
   'ALTER TABLE snapshots ADD COLUMN recipes INTEGER',
   'ALTER TABLE snapshots ADD COLUMN transmogs INTEGER',
   'ALTER TABLE snapshots ADD COLUMN honorable_kills INTEGER',
-  'ALTER TABLE snapshots ADD COLUMN honor_level INTEGER'
+  'ALTER TABLE snapshots ADD COLUMN honor_level INTEGER',
+  // The overall rating the six figures above weigh, stored so a history point freezes the score that
+  // was computed when the reading was taken: the weights change with SCORE_VERSION, and a graph must
+  // not silently re-rank old points. Old rows keep NULL - the score cannot be re-derived honestly.
+  'ALTER TABLE snapshots ADD COLUMN score INTEGER'
 ]
 
 /**
@@ -273,5 +281,26 @@ function migrate(connection: DatabaseSync): void {
     } catch {
       // The column is already there.
     }
+  }
+
+  // A unique (character_id, taken_at) makes the event-log writes race-free, but it must never be added
+  // over history that already has duplicates - a duplicate is a real snapshot, and a migration must not
+  // decide to discard one. The duplicates are counted first: with none the plain index is swapped for a
+  // unique one; with some the plain index stays and the process says so rather than failing or deleting.
+  const alreadyUnique = connection
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_snapshots_character' AND sql LIKE '%UNIQUE%'")
+    .get()
+
+  if (alreadyUnique) return
+
+  const dupes = connection
+    .prepare('SELECT COUNT(*) AS n FROM (SELECT 1 FROM snapshots GROUP BY character_id, taken_at HAVING COUNT(*) > 1)')
+    .get() as { n: number }
+
+  if (dupes.n === 0) {
+    connection.exec('DROP INDEX IF EXISTS idx_snapshots_character')
+    connection.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_snapshots_character ON snapshots(character_id, taken_at)')
+  } else {
+    console.warn(`[db] snapshots has ${dupes.n} duplicate (character_id, taken_at) groups; the unique index was left off to preserve history`)
   }
 }

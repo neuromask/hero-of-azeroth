@@ -54,6 +54,13 @@ import type {
   LeaderboardStats
 } from '#shared/data/leaderboardSchema'
 import { LEADERBOARD_SORTS, isAtItemLevelCap } from '#shared/data/leaderboardSchema'
+import { DISTRIBUTION_METRICS } from '#shared/data/historySchema'
+import type {
+  DistributionBin,
+  DistributionMetricKey,
+  DistributionPosition,
+  DistributionResponse
+} from '#shared/data/historySchema'
 
 /**
  * Where the table is kept: the app's own data directory (`./appPaths`), the same one the database and the
@@ -859,6 +866,96 @@ export async function getLeaderboardStanding(
     player,
     rank: ranked.findIndex((entry) => identity(entry) === key) + 1,
     total: ranked.length
+  }
+}
+
+/**
+ * How a metric's figure is read off a row, for each of the ten metrics the table really carries. Item level
+ * is the one figure with a rule in front of it (`isAtItemLevelCap`), so a row the table does not print it for
+ * reads as `null` here and is left out of that histogram rather than counted as a level-40 character wearing 120.
+ */
+const DISTRIBUTION_FIELDS: Record<(typeof DISTRIBUTION_METRICS)[number], (player: LeaderboardPlayer) => number | null> = {
+  score: (player) => player.score,
+  mounts: (player) => player.mounts,
+  pets: (player) => player.pets,
+  toys: (player) => player.toys,
+  decor: (player) => player.decor,
+  reputations: (player) => player.reputations,
+  achievements: (player) => player.achievements,
+  mPlusScore: (player) => player.mPlusScore,
+  honorableKills: (player) => player.honorableKills,
+  ilvl: (player) => (isAtItemLevelCap(player.level) ? player.ilvl : null)
+}
+
+/** How many buckets a histogram is cut into. */
+const DISTRIBUTION_BINS = 24
+
+/** A histogram of one figure: equal-width buckets from the lowest to the highest value in the population. */
+function buildBins(values: number[]): DistributionBin[] {
+  if (!values.length) return []
+
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  if (min === max) return [{ from: min, to: max, count: values.length }]
+
+  const width = (max - min) / DISTRIBUTION_BINS
+  const bins: DistributionBin[] = Array.from({ length: DISTRIBUTION_BINS }, (_, index) => ({
+    from: Math.round(min + index * width),
+    to: Math.round(index === DISTRIBUTION_BINS - 1 ? max : min + (index + 1) * width),
+    count: 0
+  }))
+
+  for (const value of values) {
+    const index = Math.min(DISTRIBUTION_BINS - 1, Math.floor((value - min) / width))
+    bins[index]!.count += 1
+  }
+
+  return bins
+}
+
+/**
+ * One metric's distribution over the canonical table, with the positions of the players a caller named.
+ *
+ * The histogram is the population's and is therefore shared: one answer serves a whole comparison. The
+ * positions are the players' own - their figure, their place (one-based, highest first) and their percentile
+ * as a whole percent from the top - and a key the table does not know is answered with `null`s rather than a
+ * fabricated place (`decision: never show a rank the source cannot support`).
+ *
+ * The population is the one the page's own table draws (`visiblePlayers`), and the metric is one the table
+ * really carries (`DISTRIBUTION_METRICS`): the five snapshot metrics the table never had are not drawn here at
+ * all, so a histogram is never padded with a population that is not the table.
+ */
+export async function getDistribution(metric: DistributionMetricKey, playerKeys: string[]): Promise<DistributionResponse> {
+  const file = await readTable()
+  const players = visiblePlayers(file.players)
+  const read = DISTRIBUTION_FIELDS[metric]
+
+  const values = players
+    .map((player) => read(player))
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+
+  const byKey = new Map(players.map((player) => [identity(player), player]))
+
+  const positions: DistributionPosition[] = playerKeys.map((key) => {
+    const player = byKey.get(key)
+    const own = player ? read(player) : null
+    const placed = typeof own === 'number' && Number.isFinite(own)
+    const rank = placed ? values.filter((value) => value > own).length + 1 : null
+
+    return {
+      key,
+      value: placed ? own : null,
+      rank,
+      percentile: rank !== null && values.length ? Math.max(1, Math.round((rank / values.length) * 100)) : null
+    }
+  })
+
+  return {
+    metric,
+    bins: buildBins(values),
+    population: values.length,
+    positions,
+    updatedAt: file.updatedAt
   }
 }
 

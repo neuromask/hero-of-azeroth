@@ -201,7 +201,6 @@ async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
   const professions = await getCharacterProfessions(row.realm_slug, row.name_key, row.region)
   const db = useDb()
   const now = nowSec()
-  const dayStart = Math.floor(now / 86400) * 86400
 
   // The row as the roster lists it. The moment its figures were read is not set here: it belongs to the
   // reading below, which sets it whether or not the figures moved (`server/utils/characterReading`), so
@@ -238,10 +237,10 @@ async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
     if (transmogs !== null) profile.stats.transmogs = { count: transmogs, accountWide: true }
   }
 
-  // The day's reading, filed by the one function that knows how (`fileDailyReading`): the same call a
-  // character page makes when it reads a profile in full, so the two can never write the day's row
-  // differently - or leave one of them unfiled.
-  fileDailyReading(row.id, profile, dayStart)
+  // The reading's own point, filed by the one function that knows how (`fileDailyReading`): the same call a
+  // character page makes when it reads a profile in full, so the two can never file a point differently -
+  // or leave one of them unfiled.
+  fileDailyReading(row.id, profile)
 
   // What this character adds to the account's pool, both folded in as ids: its own mount journal
   // (a mount can belong to a side or a race, and it only ever appears in the journal of a character
