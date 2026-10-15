@@ -141,6 +141,15 @@ const PUSH_TIMEOUT_MS = 5 * 60 * 1000
 const FTP_CONNECT_TIMEOUT = 30
 const FTP_TRANSFER_TIMEOUT = 60 * 60
 
+/**
+ * The cap on a call that carries no file: a listing, or the quote that deletes one.
+ *
+ * These are the calls a host throttles after a burst of uploads, and the transfer timeout above is an hour -
+ * long enough that a deploy being refused looks like a deploy that has hung. A listing is a few kilobytes and a
+ * `DELE` is a line of text, so a minute is generous, and a call that trips it is reported instead of waited on.
+ */
+const FTP_LIST_TIMEOUT = 60
+
 /** Transfers per curl call: Windows caps a whole command line at ~32k characters. */
 const FTP_BATCH = 20
 
@@ -356,8 +365,8 @@ function ftpUrl(target, dir) {
   return `${scheme}://${target.server}:${target.port}${target.root}${dir}`
 }
 
-/** curl arguments every FTP call shares. */
-function ftpArgs(target, netrc) {
+/** curl arguments every FTP call shares. `maxTime` is the transfer's cap, an hour by default. */
+function ftpArgs(target, netrc, { maxTime = FTP_TRANSFER_TIMEOUT } = {}) {
   const args = [
     '--silent',
     '--show-error',
@@ -366,7 +375,7 @@ function ftpArgs(target, netrc) {
     '--connect-timeout',
     String(FTP_CONNECT_TIMEOUT),
     '--max-time',
-    String(FTP_TRANSFER_TIMEOUT),
+    String(maxTime),
     '--ftp-create-dirs'
   ]
 
@@ -505,6 +514,10 @@ function upload(target, netrc, files) {
         args.push(fileUrl(target, file))
       }
 
+      // Said before the call rather than after it: one batch is twenty files and curl says nothing until it is
+      // done, so a directory of twenty resvg binaries is minutes of a terminal that looks stuck rather than busy.
+      log(`   ${dir || './'} -> ${batch.length} file(s), ${uploaded}/${files.length}...`)
+
       const result = curlWithRetry(args)
 
       if (result.status === 0) {
@@ -530,7 +543,9 @@ function fileUrl(target, file) {
 
 /** Names in a remote directory, or null when the directory is not there yet. */
 function remoteNames(target, netrc, dir) {
-  const listing = curl([...ftpArgs(target, netrc), '--list-only', ftpUrl(target, dir)], { allowFailure: true })
+  const listing = curl([...ftpArgs(target, netrc, { maxTime: FTP_LIST_TIMEOUT }), '--list-only', ftpUrl(target, dir)], {
+    allowFailure: true
+  })
 
   if (listing.status !== 0) return null
 
@@ -710,7 +725,7 @@ function localTree(files) {
  * first, a refusal is an error curl exits on, which is what makes a retry and a reason possible.
  */
 function deleteRemote(target, netrc, dir, names) {
-  const args = ftpArgs(target, netrc)
+  const args = ftpArgs(target, netrc, { maxTime: FTP_LIST_TIMEOUT })
 
   for (const name of names) {
     const file = `${dir}${name}`
@@ -719,7 +734,12 @@ function deleteRemote(target, netrc, dir, names) {
     args.push('--quote', `DELE ${target.root}${key}${path.posix.basename(file)}`)
   }
 
-  // No listing in this call: it is here to delete, and the directory is read back once by the caller.
+  // The listing at the end is what gives curl a URL: `--quote` on its own is sent to nothing, and curl exits with
+  // `(2) no URL specified` before it opens a connection - measured at 23 ms, which is how a `--prune` came to
+  // delete nothing at all while reporting that the host would not let the files go. It is also the read-back the
+  // caller wants, so the commands and the proof they were carried out arrive in one call.
+  args.push('--list-only', ftpUrl(target, dir))
+
   return curlWithRetry(args)
 }
 
@@ -734,6 +754,13 @@ function prune(target, netrc, directories) {
   let removed = 0
   const skipped = []
   let reason = null
+
+  // Said before the pass rather than after it: a listing a throttled host is refusing takes up to a minute per
+  // directory (`FTP_LIST_TIMEOUT`), and a deploy working through that must not look like one that has hung.
+  const walked = [...directories.keys()].filter(
+    (dir) => dir.startsWith('public/') || dir.startsWith('server/chunks/')
+  )
+  log(`   reading ${walked.length} director(ies) below public/ and server/chunks/ for stale files...`)
 
   for (const [dir, names] of directories) {
     if (!dir.startsWith('public/') && !dir.startsWith('server/chunks/')) continue
