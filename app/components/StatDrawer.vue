@@ -3,11 +3,10 @@
 import { formatNumber } from '#shared/utils/formatNumber'
 // The profile the shell fetched, which already carries five of the six figures (`useCharacterView`).
 import { useCharacterView } from '~/composables/characterView'
-// Where a tile of the drawer leads: the ranking of the very figure it prints, over the whole population. The
-// address is built by the composable every metric page is addressed by (`metricLeaderboardPath`), which is the
-// same call a character page's own tiles make - so the two halves of the page open the same table, and a figure
-// the site ranks nowhere cannot be linked to because it cannot be named.
-import { metricLeaderboardPath } from '~/composables/metricLeaderboard'
+// Where a tile of the drawer leads: the ranking of the very figure it prints, turned to the place this character
+// holds in it - the same composable a character page's own tiles read (`useCharacterRanks`), so the two halves of
+// the page open the same table, and a figure the site ranks nowhere cannot be linked to because it cannot be named.
+import { useCharacterRanks } from '~/composables/characterRanks'
 import type { MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
 
 /**
@@ -34,7 +33,9 @@ import type { MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
  */
 const { character, region, realm, name } = useCharacterView()
 const { t } = useI18n()
-const localeUrl = useLocaleUrl()
+// The places this character holds in the site's rankings, read while the page is rendered: a door carries the place
+// its reader holds in the table it opens, and the place is part of the address rather than of the move.
+const { urlFor } = await useCharacterRanks()
 
 /** Whether the tray is out, which the label on the panel toggles. */
 const open = ref(false)
@@ -142,17 +143,21 @@ const figures = computed<DrawerFigure[]>(() => {
 })
 
 /**
- * Where a figure leads: the ranking of that very figure, over everybody the site has read.
+ * Where a figure leads: the ranking of that very figure, over everybody the site has read - turned to the place
+ * this character holds in it, so the table opens the page their row stands on and brings the row into view.
  *
- * The same reading the tiles beside the character make, and the same scope (`tileUrl` in
- * `app/pages/[region]/[realm]/[name]/index.vue`): the figure under the reader's eye is a column of a table the
- * site keeps, and the table is one press behind it - whole, rather than narrowed to the realm the character
- * happens to play on, because the ranking is the population's and the filters that narrow it are on the page. The
- * drawer is where the six figures *without* a bar live, so this is what turns the other half of the page's
+ * The same reading the tiles beside the character make, and the same composable (`tileUrl` in
+ * `app/pages/[region]/[realm]/[name]/index.vue`, `useCharacterRanks`): the figure under the reader's eye is a column
+ * of a table the site keeps, and the table is one press behind it - whole, rather than narrowed to the realm the
+ * character happens to play on, because the ranking is the population's and the filters that narrow it are on the
+ * page. The drawer is where the six figures *without* a bar live, so this is what turns the other half of the page's
  * figures into doors as well - a title is a ranking, a quest is a ranking, a kill is a ranking.
+ *
+ * A character the table does not hold is linked to the ranking without a place, which is the same door with nothing
+ * to turn to (`app/composables/characterRanks`).
  */
-function figureUrl(slug: MetricLeaderboardSlug): string {
-  return localeUrl(metricLeaderboardPath(slug))
+function figureUrl(slug: MetricLeaderboardSlug) {
+  return urlFor(slug)
 }
 </script>
 

@@ -9,17 +9,26 @@ import { formatNumber } from '#shared/utils/formatNumber'
 // The profile the shell fetched (see the composable). The tiles and the summary are the
 // overview's alone, so everything they draw is computed here.
 import { useCharacterView } from '~/composables/characterView'
-// Where a tile leads: the ranking of the figure it prints, on the character's own realm. The address is built by
-// the composable every metric page is addressed by (`metricLeaderboardPath`), so a tile and the table it opens
-// cannot spell the same scope differently.
-import { metricLeaderboardPath } from '~/composables/metricLeaderboard'
+// Where a tile leads: the ranking of the figure it prints, carrying the place this character holds in it. Both
+// halves of that address - which ranking, and where in it - come from one composable, which is the same one the
+// drawer under the summary plate reads, so the two halves of the page cannot spell one address differently.
+import { useCharacterRanks } from '~/composables/characterRanks'
 // The figures a tile stands for are the site's own rankings, so the keys below are that type rather than any
 // string: a tile added for a figure the site ranks nowhere would not compile.
 import type { MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
 
 const { character } = useCharacterView()
 const { t } = useI18n()
-const localeUrl = useLocaleUrl()
+
+/**
+ * The places this character holds in the site's rankings, which is what every tile below links with.
+ *
+ * Read while the page is being rendered rather than after it, because a place travels in the *address* of a link
+ * (`?rank=`, see `tileUrl`) - and an address written after the first frame is an address a reader who follows the
+ * link before it lands does not carry. The answer is one request for the whole page, cached on the server under
+ * the stamp of the data (`app/composables/characterRanks`).
+ */
+const { urlFor } = await useCharacterRanks()
 
 /**
  * The rating wears the tier it has reached, off the same Mythic+ bands the card colours the
@@ -105,7 +114,9 @@ const tileColumns = computed<StatTile[][]>(() => {
 })
 
 /**
- * Where a tile leads: the ranking of the figure it prints, over the whole population.
+ * Where a tile leads: the ranking of the figure it prints, over the whole population - and, in the address's own
+ * `?rank=`, the place this character holds in that ranking, so the table opens the page their row stands on and
+ * brings it into view (`useCharacterRanks`, which is the same answer the drawer under the summary plate reads).
  *
  * The tile shows one figure of one character, and the table behind it is the site's ranking of that very figure -
  * the same figure the hall of fame has a column for and the comparison board a row for, read from the same rows
@@ -118,11 +129,13 @@ const tileColumns = computed<StatTile[][]>(() => {
  * a reader who wants their own corner of it narrows it from the filters that page carries (which are the same two
  * scopes the plate at the top of it links to).
  *
- * A figure whose place the site cannot work out without asking the table something extra - the score is a column of
+ * A character the table does not hold - an alt that is neither its account's main nor a row of its own - is linked
+ * to the ranking without a place: a row that is not there cannot be turned to, and the door is still a door. A
+ * figure whose place the site cannot work out without asking the table something extra - the score is a column of
  * figures rather than a statistic of the profile - is not a tile, so every tile here names a ranking that exists.
  */
 function tileUrl(key: MetricLeaderboardSlug) {
-  return localeUrl(metricLeaderboardPath(key))
+  return urlFor(key)
 }
 </script>
 

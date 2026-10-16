@@ -26,32 +26,21 @@
 import { metricLeaderboardPath, metricLeaderboardRankQuery } from '~/composables/metricLeaderboard'
 import type { MetricLeaderboardRank, MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
 
-const props = withDefaults(
-  defineProps<{
-    /** The ranking the open row is of, which is the address every link below is built from. */
-    slug: MetricLeaderboardSlug
-    /** The figure's own name, which the block is labelled by for a reader who cannot see the row above it. */
-    label: string
-    /** The character this block is about: the column's own side of the comparison. */
-    region: string
-    realm: string
-    name: string
-    /** Their places, or `undefined` while the answer is on its way and `null` when it carries none. */
-    rank?: MetricLeaderboardRank | null
-    pending?: boolean
-    /** True when the read failed, which is said rather than drawn as an absence of places. */
-    failed?: boolean
-    /**
-     * How the block is laid out: a block under a row of a comparison board, or the middle column of a plate.
-     *
-     * The links are the same three either way - the scopes and the places - and only their clothes differ: in a
-     * column of the comparison board the block leads a line and stands against the left edge, while in the centre
-     * of the plate it is the thing a reader looks for, so its heading and its row are centred.
-     */
-    variant?: 'links' | 'plate'
-  }>(),
-  { variant: 'links' }
-)
+const props = defineProps<{
+  /** The ranking the open row is of, which is the address every link below is built from. */
+  slug: MetricLeaderboardSlug
+  /** The figure's own name, which the block is labelled by for a reader who cannot see the row above it. */
+  label: string
+  /** The character this block is about: the column's own side of the comparison. */
+  region: string
+  realm: string
+  name: string
+  /** Their places, or `undefined` while the answer is on its way and `null` when it carries none. */
+  rank?: MetricLeaderboardRank | null
+  pending?: boolean
+  /** True when the read failed, which is said rather than drawn as an absence of places. */
+  failed?: boolean
+}>()
 
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()
@@ -110,12 +99,10 @@ const columns = computed(() => {
   return links.value.length === 2 ? 'grid-cols-2' : 'grid-cols-1'
 })
 
-/** Whether the block is the middle column of a plate, which is the centred of the two shapes. */
-const plate = computed(() => props.variant === 'plate')
 </script>
 
 <template>
-  <div class="flex flex-col gap-2" :class="plate ? 'items-center text-center' : ''">
+  <div class="flex flex-col gap-2">
     <!-- The heading of the block, over the row rather than beside it: the three places are one reading at three
          scopes, and a reader who has just opened a row is told what the row of figures under it is. -->
     <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('lbMetricRanks') }}</p>

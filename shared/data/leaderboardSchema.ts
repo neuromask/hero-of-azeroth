@@ -229,6 +229,20 @@ export interface MetricLeaderboardScope {
   realm?: string
 }
 
+/**
+ * A ranking as a page draws it: which figure, and at which scope.
+ *
+ * It is the two halves of a metric leaderboard's own address (`metricLeaderboardPath` in
+ * `app/composables/metricLeaderboard`) travelling as one value, because the two are never useful apart: a page that
+ * is drawing a table knows both, and a control that has to open *that* table - the chip of the selected character in
+ * a header's corner, which finds the reader's row in it - is handed them together rather than as three props that
+ * could name a figure and a scope a page is not drawing.
+ */
+export interface MetricLeaderboardTarget extends MetricLeaderboardScope {
+  /** The ranking's slug, as its address spells it. */
+  metric: MetricLeaderboardSlug
+}
+
 /** What a caller may ask a metric leaderboard for. */
 export interface MetricLeaderboardQuery extends MetricLeaderboardScope {
   /** One-based. */
@@ -309,6 +323,20 @@ export interface MetricLeaderboardRanks {
   /** When the data behind the answer was last written, so a reader can judge how fresh it is. */
   updatedAt: string
 }
+
+/**
+ * Where one character stands in every ranking the site keeps, keyed by the ranking's slug: their place, or `null`
+ * in a ranking the table does not hold them in.
+ *
+ * It is the ranks question asked the other way round - one character and all thirteen figures rather than one
+ * figure and all the names a caller has - and it exists because a *link* needs a place. Every figure on a
+ * character's page is a door into the ranking of that figure, and a door carries the place its reader holds in the
+ * table it opens (`?rank=`, `app/composables/metricLeaderboard`), so the table turns to their row instead of
+ * opening at its first page. The thirteen places come back together because thirteen doors are written from one
+ * page, and a place and nothing beside it is what comes back: how many members it is a place among is the table's
+ * own to print, and a place is the whole of what an address is written from.
+ */
+export type CharacterRanks = Record<MetricLeaderboardSlug, number | null>
 
 /**
  * Every sort the endpoint accepts, which is what a query string is checked against.

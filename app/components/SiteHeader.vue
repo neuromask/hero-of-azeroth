@@ -30,14 +30,41 @@
  * pinned, and the bar's own isolation is what keeps a repaint of the page below from being measured as
  * a change of the bar (`app/assets/css/main.css`).
  */
+// The ranking a page draws, which the chip beside the reader's corner is drawn from and finds this reader's row in,
+// and the shape of the character it is about (`MetricLeaderboardTarget`, `SearchHistoryEntry`).
+import type { MetricLeaderboardTarget } from '#shared/data/leaderboardSchema'
+import type { SearchHistoryEntry } from '#shared/utils/savedCharacters'
+
 defineProps<{
   /** The page's name, printed where a character page prints the character's. */
   title: string
   /** One line under it: the facts the page is about, in the page's own language. */
   meta?: string
+  /**
+   * The ranking this page draws, if it draws one: which figure, and at which scope.
+   *
+   * It is what the chip about the character this browser selected finds the reader's row in
+   * (`app/components/SelectedCharacterChip.vue`), so handing it over is also how a page says that it has a table at
+   * all: the hall of fame hands over the overall rating, every page under `/leaderboards/*` its own figure and
+   * scope, and a page that draws no table hands over nothing and gets no chip - which is the whole of the rule, and
+   * the reason this is one value rather than a figure and a scope that could disagree.
+   */
+  ranking?: MetricLeaderboardTarget
 }>()
 
 const localeUrl = useLocaleUrl()
+
+const { history, load } = useSearchHistory()
+
+/**
+ * The list of characters this browser has looked up lives in the browser and the server has none, so it is read once
+ * the page is mounted: the first render carries no chip at all - the corner draws it only when there is somebody to
+ * draw it for - and both sides render the same bar at the same moment, so hydration has nothing to disagree about.
+ */
+onMounted(load)
+
+/** The character this browser selected, or `null` for a browser that has never looked anybody up. */
+const you = computed<SearchHistoryEntry | null>(() => history.value[0] || null)
 </script>
 
 <template>
@@ -72,15 +99,25 @@ const localeUrl = useLocaleUrl()
         </div>
       </div>
 
-      <!-- Whatever the page puts on the right, and the reader's own corner beside it: the language and the
-           account are drawn by `app/components/HeaderTools.vue` on every page of the site, so a page hands over
-           its own actions alone and never the corner. The hairline stands between the two and is drawn only
-           when there is something to hold apart - a page that offers no action of its own ends in the corner,
-           as a document does and as the hall of fame does. -->
+      <!-- Whatever the page puts on the right, the chip about the character this browser selected, and the reader's
+           own corner beside it: a page hands over its own actions and never the corner, which
+           `app/components/HeaderTools.vue` draws on every page of the site. The hairline stands between the two and
+           is drawn only when there is something to hold apart - a page that offers no action of its own ends in the
+           corner, as a document does and as the hall of fame does. -->
       <div class="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
         <slot name="actions" />
 
         <span v-if="$slots.actions" class="hidden h-6 w-px shrink-0 bg-white/10 lg:block" aria-hidden="true" />
+
+        <!-- The character this browser has selected, as a plate of the site's own glass standing beside the reader's
+             group rather than inside it: it is one control of two sections of its own - who that character is, and
+             the press that finds their row of the table under this header - and it is drawn only where a page draws a
+             table at all (`ranking` above), with the hairline that parts it from the group drawn with it. -->
+        <template v-if="you && ranking">
+          <SelectedCharacterChip :character="you" :ranking="ranking" />
+
+          <span class="hidden h-6 w-px shrink-0 bg-white/10 lg:block" aria-hidden="true" />
+        </template>
 
         <HeaderTools />
       </div>

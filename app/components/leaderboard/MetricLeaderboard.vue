@@ -58,7 +58,7 @@ const { realmLabel, knowsRealm } = useRealmNames()
  * as well as asked with it (`requestKey`), which is what keeps a rebuilt page from being handed the rows of the
  * ranking it replaced.
  */
-const { rows, total, pages, page, realms, offset, rankOf, highlighted, stale, faction, search, setFaction, reveal, pending, error, refresh, setPage } =
+const { rows, total, pages, page, realms, offset, rankOf, highlighted, stale, faction, search, setFaction, pending, error, refresh, setPage } =
   useMetricLeaderboardView(props)
 
 /**
@@ -239,8 +239,9 @@ const ownerKey = computed(() => {
 /**
  * The character above, keyed the way a row of the table is keyed, so the table can mark their row.
  *
- * It is the same string the plate is built from (`searchHistoryKey`), which is what makes the two the same
- * character rather than two spellings of one name.
+ * It is the same string the chip in the header is built from (`searchHistoryKey`), which is what makes the two the
+ * same character rather than two spellings of one name: the row this table marks and the row the chip's press opens
+ * are one row.
  */
 const selectedKey = computed(() => (reading.value ? searchHistoryKey(reading.value) : ''))
 
@@ -302,20 +303,21 @@ usePageSeo({
     <SiteBackdrop :image="backdrop" />
 
     <!-- The same header every page of the site wears: the brand, this ranking's name where a character page
-         prints a character's, the scope under it, and the reader's own corner on the right. -->
-    <SiteHeader :title="title" :meta="meta">
+         prints a character's, the scope under it, and the reader's own corner on the right. It is handed this
+         page's own figure and scope as its ranking, which is what draws the chip about the selected character in
+         the corner and what that chip's press finds their row in. -->
+    <SiteHeader :title="title" :meta="meta" :ranking="{ metric: metric.slug, region, realm }">
       <SiteNav :character="reading" :label="t('lbTitle')" active="leaderboard" />
     </SiteHeader>
 
     <main class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4 pb-6">
       <!-- The same bar a table of the site wears: the menu of the site's thirteen rankings above the filters, then
            which side, which region, which realm and a name. It leads the page, because choosing the table is what a
-           reader does before reading one, and the plate about *them* stands under it - which is also where the
-           filters a reader has set are read from, one row above the rows they narrow. The region and the realm are
-           this page's *address* - a press on either is a step from one ranking to another - and the reset button is
-           the step back to the world's ranking, where neither is named. The legend of the score stands beside the
-           field wherever the score is what the table shows, and it is the bare question mark: the figure it explains
-           is the one in the column below. -->
+           reader does before reading one, and it is also where the filters a reader has set are read from, one row
+           above the rows they narrow. The region and the realm are this page's *address* - a press on either is a
+           step from one ranking to another - and the reset button is the step back to the world's ranking, where
+           neither is named. The legend of the score stands beside the field wherever the score is what the table
+           shows, and it is the bare question mark: the figure it explains is the one in the column below. -->
       <LeaderboardFilters
         :faction="faction"
         :region="region || ''"
@@ -331,26 +333,6 @@ usePageSeo({
         @update:realm="pickRealm"
         @update:search="search = $event"
       />
-
-      <!-- The character this browser has selected, with their value for this figure and their three places: the
-           plate every ranking wears, wearing this table's question, and the press that walks the table to their row
-           (`app/components/leaderboard/MetricLeaderboardYou.vue`). -->
-      <!-- TEMP-OFF (asked for by the site's owner, 2026-10-16): the selected-character plate is taken off
-           every ranking page for now - it is off the front door by the same marker
-           (`app/pages/index.vue`). Nothing is deleted: cutting this comment out - this line and the closing
-           one under the tag - is the whole restore, and the note at the top of the component says what the
-           plate is and what a page hands it. The table's own mark on the reader's row does not depend on it:
-           that is `selectedKey`, which the table is still given.
-
-      <MetricLeaderboardYou
-        v-if="reading"
-        class="mt-3"
-        :metric="metric"
-        :character="reading"
-        :scope="scope"
-        @reveal="reveal"
-      />
-      -->
 
       <!-- A place a link asked for that the ranking no longer holds: the site says so rather than pretending
            the link landed where it meant to. The rows below are the ranking around where it would have been. -->

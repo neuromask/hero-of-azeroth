@@ -4,10 +4,11 @@
  *
  * It is a *summary* rather than a table, and the tables are the rankings the menu leads to
  * (`/leaderboards/<figure>`, at the world, a region or a realm). This page is what stands in front of them: the menu
- * of the site's fourteen entries - the hall of fame itself, and the thirteen figures - the plate of the character
- * this browser selected, and the ten plates about the population: how many members it holds and who is on it right
- * now, the class most of them wear, and the leader of each figure the site ranks. A reader who wants rows presses a
- * plate (their own name, or the leader's) or a menu entry; every one of those is an address of its own.
+ * of the site's fourteen entries - the hall of fame itself, and the thirteen figures - and the ten plates about the
+ * population: how many members it holds and who is on it right now, the class most of them wear, and the leader of
+ * each figure the site ranks. A reader who wants rows presses a plate (the leader's) or a menu entry; every one of
+ * those is an address of its own, and the character this browser selected is one press away in the corner of the bar
+ * (`app/components/SelectedCharacterChip.vue`), which the ranking pages wear with their own figure and scope.
  *
  * That is a change of shape rather than of purpose. For a while the site had two doors - a form to walk through and
  * a ranking to arrive at - and a reader had to choose between them before knowing which one they wanted; they became
@@ -36,14 +37,13 @@
  */
 definePageMeta({ alias: '/ru' })
 
-// The characters this browser has looked up, which is where the row's character views and the plate below find the
-// character they belong to (see the composable for the shape and the limit).
-import { searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCharacters'
+// The characters this browser has looked up, which is where the row's character views find the character they
+// belong to (see the composable for the shape and the limit).
+import type { SearchHistoryEntry } from '#shared/utils/savedCharacters'
 import { useSearchHistory } from '~/composables/searchHistory'
-// The figure the reader's own plate is about - the overall rating, which is the order the hall of fame was always
-// read in - and the address a place in a ranking is opened at, from the composable that owns that address.
-import { metricLeaderboardOf } from '#shared/data/leaderboardSchema'
-import { metricLeaderboardPath, metricLeaderboardRankQuery } from '~/composables/metricLeaderboard'
+// The shape the plates below are drawn from, shared with the endpoint that builds it. The figure the reader's own
+// plate was about - the overall rating - is what this page hands the corner as its ranking (`ranking` below), and the
+// chip of the selected character is built from it (`app/components/SelectedCharacterChip.vue`).
 import type { LeaderboardStats } from '#shared/data/leaderboardSchema'
 import { formatNumber } from '#shared/utils/formatNumber'
 
@@ -60,9 +60,6 @@ import hoaPrev from '~/assets/img/hoa-prev.jpg'
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()
 const publicConfig = useRuntimeConfig().public
-
-/** The ranking the reader's own plate stands for: the overall rating, at the world's scope. */
-const score = metricLeaderboardOf('score')
 
 /**
  * The population, as the plates below read it - and the same object every widget of the page is drawn from
@@ -160,32 +157,33 @@ const accountMain = computed(() => {
 })
 
 /**
- * The character this page is about for this reader: the one the plate in the bar and the row of links belong to.
+ * The character this page is about for this reader: the one the row of links under the header belongs to.
  *
  * The hall of fame is not a character, so the profile, the shelves and the feed it offers have to belong to
- * somebody - and for a reader who is signed in that somebody is **the main their account leads with**: the plate
- * is about *them*, its link leads to *their* character page, and the button that finds them in the table walks to
- * the row of the main it just printed. A character this browser looked up last, on the other hand, is somebody
- * else's page being read: it is remembered as one lookup among others (`useSearchHistory`) and it is *not* what
- * the plate stands for. Reading a visitor's last lookup as "you" was how a reader signed in as themselves came to
- * see their main in the plate and be sent to an alt by the link under it.
+ * somebody - and for a reader who is signed in that somebody is **the main their account leads with**: the row
+ * leads to *their* character page and offers *their* profile. A character this browser looked up last, on the other
+ * hand, is somebody else's page being read: it is remembered as one lookup among others (`useSearchHistory`) and it
+ * is *not* what the row stands for. Reading a visitor's last lookup as "you" was how a reader signed in as
+ * themselves came to see their main in the row and be sent to an alt by the entry under it.
  *
  * A reader with no account has only the browser to go on, and there the last character looked at is exactly the
- * right answer: it is their own page coming back, which is what the plate and the row of links have always been
- * (`MyProfile.vue` reads the same history for the same reason).
+ * right answer: it is their own page coming back, which is what the row has always been (`MyProfile.vue` reads the
+ * same history for the same reason).
  *
  * Before either is known - a first visit with no session, a crawler, a reader who followed a link - there is no
  * such character at all: the row below the header draws no character links and the bar offers the search instead
- * (see the note at the top of this file).
+ * (see the note at the top of this file). The corner of the bar is the one place of the page that answers about the
+ * *browser's* own selection rather than about this page's subject - the chip is the last character this device opened,
+ * whether or not a main is signed in - and it is the one control of that corner a page has to ask for (`ranking`).
  */
 const { history, load: loadHistory } = useSearchHistory()
 
-/** The account's main, written as an entry the plate and the row marks are read against (`useSearchHistory`). */
+/** The account's main, written as an entry the row under the header is read against (`useSearchHistory`). */
 function mainEntry(): SearchHistoryEntry | null {
   const main = accountMain.value
   if (!main) return null
 
-  // The realm's *name* is left as the slug on purpose: the plate prints a realm through the site's own list
+  // The realm's *name* is left as the slug on purpose: the row's entry prints a realm through the site's own list
   // (`realmLabel`), and the account stores only the slug, so there is nothing here for a language to spell
   // differently.
   return {
@@ -205,59 +203,10 @@ function mainEntry(): SearchHistoryEntry | null {
  */
 const reading = computed<SearchHistoryEntry | null>(() => history.value[0] || mainEntry())
 
-/**
- * The reader's own character in the table, which is what the plate in the bar stands for.
- *
- * It is the last character this browser was reading - the one the plate then aims its own link and its button at
- * - with one exception, and the exception is the table's own rule: a character of the reader's account that is
- * not its main has no row in the hall of fame at all (`server/utils/leaderboardExclusions`: an account appears
- * with the character it leads with), so reading one of your own alts stands for the main, which is the row that
- * account really has. A stranger's character *is* in the table - looking them up is what put them there - so the
- * plate is about them, and a reader with no account has no such exception either: whatever they last looked at
- * is what the plate shows, exactly as it always did.
- */
-const you = computed<SearchHistoryEntry | null>(() => {
-  const read = reading.value
-  const main = mainEntry()
-
-  if (!main) return read
-  if (!read) return main
-
-  return rosterKeys.value.has(searchHistoryKey(read)) ? main : read
-})
-
-/**
- * The account's own characters, keyed the way the history keys them, which is what says whether the character
- * being read is one of the reader's own - the question `you` turns on. The roster arrives with the same payload
- * the main is read from, so this costs no second request.
- */
-const rosterKeys = computed(
-  () =>
-    new Set(
-      (account.value?.characters || []).map((character) =>
-        searchHistoryKey({ region: character.region, realm: character.realmSlug, name: character.name })
-      )
-    )
-)
-
-/**
- * Answers the plate's own button: the place the reader holds, opened where it is a place.
- *
- * The plate prints three of them - the world's, the region's and the realm's, each a link of its own - and the
- * button beside the figure is the fourth way to the same rows: the reader's place in the *world's* ranking of the
- * overall rating, which is the ranking the hall of fame has always been. It is an address rather than a scroll
- * (`/leaderboards/score?rank=N`): the rows live on the ranking's own page, and a place is what turns that page to
- * the row it belongs to (`app/composables/metricLeaderboard.ts`).
- */
-function reveal(rank: number) {
-  if (!score || !(rank > 0)) return
-
-  void navigateTo({ path: localeUrl(metricLeaderboardPath(score.slug)), query: metricLeaderboardRankQuery(rank) })
-}
 // The history lives in the browser and the server has none, so it is read once the page is mounted: the first
-// render carries no character at all - no plate, no character links in the row - and both sides render the same
-// page at the same moment, so hydration has nothing to disagree about. It is the plate that fills in, never the
-// figures above it.
+// render carries no character at all - no character links in the row, and no chip about one in the corner of the
+// header - and both sides render the same page at the same moment, so hydration has nothing to disagree about. It
+// is the row's own entries that fill in, never the figures above them.
 onMounted(loadHistory)
 </script>
 
@@ -271,15 +220,15 @@ onMounted(loadHistory)
 
     <!-- The same header the character pages wear: the brand, the page's name where a character's name would be,
          the reader's own corner on the right, and, under it, the very row those pages carry - the character's six
-         views, the site's own two entries, and the search (`app/components/SiteNav.vue`). -->
-    <SiteHeader :title="t('lbTitle')" :meta="meta">
-      <!-- Nothing stands on the right of this bar: the plate of the character this reader came from is drawn
-           over the summary plates in the content below - where a reader looking for their own place among
-           everybody else looks anyway - and the corner of the bar is the reader's own group, the language and
-           the account (`app/components/HeaderTools.vue`), which every page of the site wears. The comment over
-           the plate below says why it stands there rather than here, and the fields a first visit is offered go
-           to the row below this bar rather than to its corner - they are the search, and the search has a place
-           of its own in that row. -->
+         views, the site's own two entries, and the search (`app/components/SiteNav.vue`). It is handed the overall
+         rating as its ranking, which is the table this page is the front of: that is what draws the chip about the
+         selected character in the corner, and what the chip's press finds their row in. -->
+    <SiteHeader :title="t('lbTitle')" :meta="meta" :ranking="{ metric: 'score' }">
+      <!-- Nothing stands on the right of this bar: this page offers no action of its own, and the corner of the bar
+           is the reader's own group - the character this browser selected, the language and the account
+           (`app/components/HeaderTools.vue`), which every page of the site wears. The fields a first visit is offered
+           go to the row below this bar rather than to its corner: they are the search, and the search has a place of
+           its own in that row. -->
 
       <!-- The whole row, and it is the same component a character page wears: the six views of whichever
            character this browser is reading, the site's own two entries held apart from them by the hairline,
@@ -297,10 +246,10 @@ onMounted(loadHistory)
              are the same two, and the same button, as the sheet behind the button at the row's far end
              (`app/components/CharacterSearchForm.vue`, `compact`). They are drawn exactly while this browser
              knows no character and nobody is signed in: a reader who has looked somebody up has the button, and
-             a reader who is signed in has their own main on the plate below. Below `lg` the row has room for the
+             a reader who is signed in has their own main in this row. Below `lg` the row has room for the
              search's button alone, which opens the same fields, so the fields are left out there. -->
         <template #search>
-          <span v-if="!you && !account?.user" class="hidden lg:block">
+          <span v-if="!reading && !account?.user" class="hidden lg:block">
             <CharacterSearchForm compact />
           </span>
         </template>
@@ -313,32 +262,6 @@ onMounted(loadHistory)
            figures. It leads the page, because the tables are what the site is for and this page is what stands in
            front of them. -->
       <LeaderboardFilters :current="null" :filters="false" />
-
-      <!-- The reader's own place, as the plate every ranking of the site wears: who they are, what the overall
-           rating makes of them, and their three places in it - the world's, their region's and their realm's - each
-           one a link into the ranking it names, with the button beside the figure opening the world's at the row
-           they hold in it, and the question mark opening the score's own arithmetic. It is the page's own answer
-           about the reader, so it stands over the plates about everybody else, and a reader this browser knows
-           nobody for is shown no plate at all: the way to look somebody up is the search in the row under the
-           header, not a plate of the population's. -->
-      <!-- TEMP-OFF (asked for by the site's owner, 2026-10-16): the selected-character plate is taken off
-           this page for now, exactly as it is off every ranking page (the same marker in
-           `app/components/leaderboard/MetricLeaderboard.vue`). Nothing is deleted: cutting this comment
-           out - this line and the closing one under the tag - is the whole restore, and the note at the
-           top of `app/components/leaderboard/MetricLeaderboardYou.vue` says what the plate is and what a
-           page hands it. The declarations it was drawn from are deliberately left in the script below
-           (`score`, `reveal`), because they are what it is handed when it comes back.
-
-      <MetricLeaderboardYou
-        v-if="you && score"
-        class="mt-3"
-        legend
-        :metric="score"
-        :character="you"
-        :scope="{}"
-        @reveal="reveal"
-      />
-      -->
 
       <!-- And the plates about the population: how many members the site holds and who is on it right now, the
            class most of them wear, and the leader of each figure it ranks - each of those a door into the ranking

@@ -12,6 +12,7 @@
  * table that is read from a database has no business holding itself in a process.
  */
 import type {
+  CharacterRanks,
   LeaderboardPage,
   LeaderboardPlayer,
   LeaderboardQuery,
@@ -21,6 +22,7 @@ import type {
   MetricLeaderboardPage,
   MetricLeaderboardRanks
 } from '#shared/data/leaderboardSchema'
+import { METRIC_LEADERBOARDS } from '#shared/data/leaderboardSchema'
 import {
   readGlobalStats,
   readLeaderboardPage,
@@ -116,6 +118,36 @@ export async function getMetricRanks(
   await migrateStatistics()
 
   return readMetricRanks(metric, keys)
+}
+
+/**
+ * Where one character stands in every ranking of the site, which is the same question `getMetricRanks` answers
+ * asked the other way round: that one reads a figure's ranking for the names a caller has, this one reads a name
+ * against every figure's ranking.
+ *
+ * It exists because a page of a character's figures is a page of thirteen doors, and every one of those doors is a
+ * link carrying the place its reader holds in the table it opens (`?rank=`; `CharacterRanks`). Asked one figure at
+ * a time that is thirteen requests for one page's worth of links; asked here it is one, and the endpoint in front
+ * of it caches the answer under the stamp of the data, so a character's places cost one read per revision however
+ * many readers follow them.
+ *
+ * The places are the *world's*, and only the world's: a door from a character's page opens the ranking whole (the
+ * table the site keeps), so the place the address carries is the one in that table, and a region's or a realm's
+ * place would be a place in a page the door does not open. A ranking the table does not hold them in answers
+ * `null`, which is also what a figure the site has never read for them answers - the one value a link can be
+ * written from either way.
+ */
+export async function getCharacterRanks(
+  character: Pick<LeaderboardPlayer, 'region' | 'realm' | 'name'>
+): Promise<CharacterRanks> {
+  await migrateStatistics()
+
+  // The key the table keys a row by, spelled the way every caller of the ranks read spells it.
+  const key = `${character.region}:${character.realm}:${character.name}`.toLowerCase()
+
+  return Object.fromEntries(
+    METRIC_LEADERBOARDS.map((metric) => [metric.slug, readMetricRanks(metric, [key]).players[0]?.worldRank ?? null])
+  ) as CharacterRanks
 }
 
 /**

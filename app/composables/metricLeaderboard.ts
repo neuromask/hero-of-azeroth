@@ -264,8 +264,8 @@ export function useMetricLeaderboardView(options: {
    *
    * Written out of the request itself rather than spelled field by field, so that a parameter added to the request
    * can never be forgotten here - a key that misses one field is a key that hands one question's answer to another.
-   * The plate of a character reads its own key from the same two halves for the same reason
-   * (`app/components/leaderboard/MetricLeaderboardYou.vue`).
+   * The character's own places are read under a key built the same way out of their own three segments
+   * (`app/composables/characterRanks`).
    */
   const requestKey = computed(() => JSON.stringify(request.value))
 
@@ -351,31 +351,16 @@ export function useMetricLeaderboardView(options: {
   }
 
   /**
-   * Shows the place a reader holds in *this* ranking, which is what the plate above the table offers.
-   *
-   * The place is the one in the table being drawn - the world's on a world page, the region's in a region - and it
-   * is the very number the plate prints, so the row the table turns to is the row the reader was told about. The
-   * reveal is the same mechanism a `?rank=` link uses, which is why the row is marked and scrolled to by the same
-   * code below.
-   */
-  function reveal(rank: number) {
-    if (!(rank > 0)) return
-
-    asked.value = rank
-    filters.page = metricLeaderboardPageForRank(rank)
-    writeAddress()
-  }
-
-  /**
    * Brings the row a link named into view, once the page has been drawn.
    *
    * It runs on mount rather than during the render, and the row is found by the place it holds (`data-rank`)
    * rather than by an index: the row exists by then - the page was rendered with it, on the server - so there is
    * nothing to scroll to that is not there, and no attempt to scroll before the browser has laid the table out.
    *
-   * A reveal *after* that is the same act, and is watched for the same reason: the plate's own button and a
-   * `?rank=` link end in one marked row, and a reader who pressed either of them should be looking at it. Both
-   * walks happen in the browser alone, so the server renders one table and neither can become a second render.
+   * A place that arrives *after* that is the same act, and is watched for the same reason: every door into a table
+   * that carries a place - a tile of a character's page, the chip in the header, a link somebody shared - ends in
+   * one marked row, and the reader who followed it should be looking at it. The walk happens in the browser alone,
+   * so the server renders one table and it cannot become a second render.
    */
   function revealHighlight(): void {
     const place = highlighted.value
@@ -408,7 +393,6 @@ export function useMetricLeaderboardView(options: {
     filtered,
     setFaction,
     clearFilters,
-    reveal,
     pending,
     error,
     refresh,
