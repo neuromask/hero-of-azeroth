@@ -37,7 +37,7 @@ const route = useRoute()
 const localeUrl = useLocaleUrl()
 
 const { data } = await useFetch<{
-  user: { battletag: string | null; authExpired?: boolean } | null
+  user: { battletag: string | null; authExpired?: boolean; isAdmin?: boolean } | null
   /**
    * The account's roster, which the same answer already carries. The menu reads one row of it - the main - so
    * only the fields that name it and lead to its page are asked for, rather than the whole `ProfileCharacter`
@@ -52,6 +52,16 @@ const user = computed(() => data.value?.user || null)
 
 /** Whether the account's Battle.net sign-in stopped working, which brings the way in back. */
 const authExpired = computed(() => user.value?.authExpired === true)
+
+/**
+ * Whether this account may open the admin panel, which is the one entry the menu keeps from everybody else.
+ *
+ * The flag arrives on the identity the menu already reads (`/api/profile`, `server/utils/siteSettings`), so a
+ * corner that shows the entry costs no second request - and it is the server's answer rather than the browser's,
+ * which is what makes hiding the entry a convenience instead of a lock: the panel's own data is served by an
+ * endpoint that refuses anybody the site does not list as an administrator.
+ */
+const isAdmin = computed(() => user.value?.isAdmin === true)
 
 /** The battletag without the account number the game appends, which is what a button can hold. */
 const accountName = computed(() => (user.value?.battletag || '').split('#')[0] || 'Battle.net')
@@ -139,6 +149,9 @@ watch(
 /** The settings, which are the account page carrying the drawer's own hash (`app/pages/profile.vue`). */
 const settingsUrl = computed(() => ({ path: localeUrl('/profile'), hash: '#settings' }))
 
+/** The admin panel's own address, in the language being read (`app/pages/admin.vue`). */
+const adminUrl = computed(() => localeUrl('/admin'))
+
 /** A row of the menu, and the states it has - written whole, the way the site's panes write theirs. */
 const ROW = 'flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors'
 const ROW_OFF = `${ROW} text-gray-200 hover:bg-white/10 hover:text-white`
@@ -148,6 +161,13 @@ const ROW_OUT = `${ROW} text-red-300 hover:bg-red-500/10 hover:text-red-200`
 const PANEL_ROW = 'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors'
 const PANEL_OFF = `${PANEL_ROW} text-gray-200 hover:bg-white/10 hover:text-white`
 const PANEL_OUT = `${PANEL_ROW} text-red-300 hover:bg-red-500/10 hover:text-red-200`
+/**
+ * The administrator's entry, which is the one row of the menu that is not the same for every reader: it wears
+ * the brand gold rather than the grey of a place, because it is the site's own machinery rather than a page
+ * about the character being read - and both widths draw it, so the panel is as reachable on a phone as in a bar.
+ */
+const ROW_ADMIN = `${ROW} text-wow-goldLight hover:bg-wow-gold/10 hover:text-wow-gold`
+const PANEL_ADMIN = `${PANEL_ROW} text-wow-goldLight hover:bg-wow-gold/10 hover:text-wow-gold`
 /** The hairline that says the entry under it is not another of the entries above. */
 const SEP = 'my-1 block h-px bg-white/10'
 /** The heading a group of the panel is named by, in the reader's own words. */
@@ -280,6 +300,24 @@ const SIGN_IN = 'inline-flex h-9 items-center gap-2 rounded-lg bg-[#0074e0]/30 p
         {{ t('profileSettings') }}
       </NuxtLink>
 
+      <!-- The administrator's way into the panel: the menu's one entry that is the site's own machinery rather
+           than a page about the character being read, kept behind the gold and behind the flag the server answers
+           with (`isAdmin`). It stands under its own hairline so it never reads as another account entry beside
+           the settings above it. -->
+      <template v-if="isAdmin">
+        <span :class="SEP" aria-hidden="true" />
+
+        <NuxtLink :to="adminUrl" role="menuitem" :class="ROW_ADMIN" @click="close">
+          <span :class="GLYPH">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l7.5 3v5.6c0 4.3-3 8.2-7.5 9.4-4.5-1.2-7.5-5.1-7.5-9.4V6L12 3Z" />
+              <path d="m9 12 2.2 2.2L15.5 10" />
+            </svg>
+          </span>
+          {{ t('adminTitle') }}
+        </NuxtLink>
+      </template>
+
       <span :class="SEP" aria-hidden="true" />
 
       <a href="/api/auth/logout" role="menuitem" :class="ROW_OUT" @click="close">
@@ -326,6 +364,18 @@ const SIGN_IN = 'inline-flex h-9 items-center gap-2 rounded-lg bg-[#0074e0]/30 p
         </svg>
       </span>
       {{ t('profileSettings') }}
+    </NuxtLink>
+
+    <!-- The administrator's entry of the panel, which is the bar's own row drawn a touch wider: the same flag,
+         the same gold, the same place under the settings (`isAdmin`). -->
+    <NuxtLink v-if="isAdmin" :to="adminUrl" :class="PANEL_ADMIN">
+      <span :class="GLYPH">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3l7.5 3v5.6c0 4.3-3 8.2-7.5 9.4-4.5-1.2-7.5-5.1-7.5-9.4V6L12 3Z" />
+          <path d="m9 12 2.2 2.2L15.5 10" />
+        </svg>
+      </span>
+      {{ t('adminTitle') }}
     </NuxtLink>
 
     <a href="/api/auth/logout" :class="PANEL_OUT">

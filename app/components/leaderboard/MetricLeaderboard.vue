@@ -185,11 +185,18 @@ const description = computed(() =>
   t('lbMetricDescription', { metric: metricLabel.value, scope: scopeLabel.value })
 )
 
-/** The line under the heading, which says in the page's own words what the title says in the crawler's. */
+/**
+ * The line under the heading, which says in the page's own words what the title says in the crawler's: where this
+ * ranking is drawn, and how many members stand in it.
+ *
+ * The day the table was last written is deliberately not among them. It is a fact about the site's own bookkeeping
+ * rather than about the ranking, a reader can do nothing with it, and this line is read in one glance beside the
+ * heading - where a third figure turns two facts into a wall of figures. Where the day is worth printing, it is
+ * printed over the totals of the whole population (`app/components/leaderboard/LeaderboardBreakdown.vue`).
+ */
 const meta = computed(() => {
   const parts = [scopeLabel.value]
   if (total.value) parts.push(t('lbMetricTotal', { total: formatNumber(total.value) }))
-  if (page.value?.updatedAt) parts.push(t('lbUpdated', { date: page.value.updatedAt }))
   return parts.join(' · ')
 })
 

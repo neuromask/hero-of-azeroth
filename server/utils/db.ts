@@ -485,6 +485,21 @@ CREATE TABLE IF NOT EXISTS saved_characters (
   UNIQUE (user_id, region, realm_slug, name_key)
 );
 CREATE INDEX IF NOT EXISTS idx_saved_characters_user ON saved_characters(user_id, seen_at, starred_at);
+
+/**
+ * The settings an administrator edits (see ./siteSettings): one row per *namespace*, its value held as JSON.
+ *
+ * One table rather than a column per setting, because the panel is meant to grow: a namespace is a shape the
+ * settings module alone knows, and adding one - a metric's maximum today, a page's copy tomorrow - is a line in
+ * that module rather than a migration here. Nothing joins it and nothing indexes it: the table holds a handful
+ * of rows, each read by its own key, and a site with no row at all is served from the defaults the settings
+ * module carries in front of this store (shared/data/siteSettings).
+ */
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `
 
 /**

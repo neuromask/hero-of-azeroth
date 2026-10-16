@@ -177,6 +177,15 @@ CREATE INDEX idx_leaderboard_honor_level ON leaderboard(honor_level DESC, score 
 CREATE INDEX idx_leaderboard_realm ON leaderboard(region, realm_slug);
 CREATE INDEX idx_leaderboard_class ON leaderboard(class_id);
 CREATE INDEX idx_leaderboard_user ON leaderboard(user_id);
+
+-- The settings an administrator edits (see ./server/utils/siteSettings): one row per namespace, the value held
+-- as JSON. Named here for the reason every other table is - the store's read asks for a key by name, and a table
+-- missing from this schema would leave that read failing rather than the rule it states being tested.
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `
 
 export interface NewCharacter {

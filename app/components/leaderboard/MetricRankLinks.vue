@@ -17,8 +17,12 @@
  * character who is *not in the ranking at all* (an alt that is neither its account's main nor a row of its own),
  * a member whose figure for this metric the site has never read, and a member holding a place. The first two
  * print a sentence instead of links - there is nothing to link to - and the last prints the links.
+ *
+ * Those links are chips of equal width in one row (`MetricRankLink.vue`), and the row is a grid of exactly as
+ * many columns as there are places: a scope nobody holds a place in is left out, and what the reader is left
+ * with is a line that never wraps onto a second one - which is what a row of labelled figures does the moment
+ * the column it stands in is narrow, and what it used to do in the accordion of a comparison board.
  */
-import { formatNumber } from '#shared/utils/formatNumber'
 import { metricLeaderboardPath, metricLeaderboardRankQuery } from '~/composables/metricLeaderboard'
 import type { MetricLeaderboardRank, MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
 
@@ -38,12 +42,11 @@ const props = withDefaults(
     /** True when the read failed, which is said rather than drawn as an absence of places. */
     failed?: boolean
     /**
-     * How the block is laid out: a line under a row of a comparison board, or the middle column of a plate.
+     * How the block is laid out: a block under a row of a comparison board, or the middle column of a plate.
      *
      * The links are the same three either way - the scopes and the places - and only their clothes differ: in a
-     * column of the comparison board they are small and lead a line, while in the centre of the plate they are the
-     * thing a reader looks for, so they are a little larger, centred, and their label stands over them rather than
-     * beside them.
+     * column of the comparison board the block leads a line and stands against the left edge, while in the centre
+     * of the plate it is the thing a reader looks for, so its heading and its row are centred.
      */
     variant?: 'links' | 'plate'
   }>(),
@@ -95,50 +98,53 @@ const links = computed(() => {
     }))
 })
 
-/** The place, as a reader reads it: the grouped number and the population it was won among. */
-function placeOf(rank: number, total: number): string {
-  return t('lbMetricRankOf', { rank: formatNumber(rank), total: formatNumber(total) })
-}
+/**
+ * How many columns the row of chips has, which is how many places the answer carried.
+ *
+ * One class per count rather than a computed `grid-template-columns`, because each of these is a rule Tailwind
+ * can see written in this file: a class built by interpolation is a class no build can find, and the row would
+ * quietly fall back to a single column.
+ */
+const columns = computed(() => {
+  if (links.value.length >= 3) return 'grid-cols-3'
+  return links.value.length === 2 ? 'grid-cols-2' : 'grid-cols-1'
+})
 
-/** Whether the block is the middle column of a plate, which is the larger and centred of the two shapes. */
+/** Whether the block is the middle column of a plate, which is the centred of the two shapes. */
 const plate = computed(() => props.variant === 'plate')
 </script>
 
 <template>
-  <div
-    class="flex flex-wrap items-center gap-x-2 gap-y-1"
-    :class="plate ? 'justify-center py-1 text-xs' : 'py-3 text-[12px]'"
-  >
-    <span class="font-semibold uppercase tracking-wider text-gray-500" :class="plate ? 'w-full text-center' : ''">
-      {{ t('lbMetricRanks') }}
-    </span>
+  <div class="flex flex-col gap-2" :class="plate ? 'items-center text-center' : ''">
+    <!-- The heading of the block, over the row rather than beside it: the three places are one reading at three
+         scopes, and a reader who has just opened a row is told what the row of figures under it is. -->
+    <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('lbMetricRanks') }}</p>
 
     <!-- The answer is on its way: a place is worth waiting a moment for, and the block says so rather than
          showing a dash that would read as "no place". -->
-    <span v-if="pending && !rank" class="animate-pulse text-gray-500">{{ t('lbMetricRanksLoading') }}</span>
+    <p v-if="pending && !rank" class="animate-pulse text-xs text-gray-500">{{ t('lbMetricRanksLoading') }}</p>
 
-    <span v-else-if="failed" class="text-red-400">{{ t('lbMetricRanksError') }}</span>
+    <p v-else-if="failed" class="text-xs text-red-400">{{ t('lbMetricRanksError') }}</p>
 
     <!-- Not in the ranking at all, or in it with no figure read: two different facts, and the block names the one
          it is. The history and the distribution chart stay above and below this line - nothing about them moves. -->
-    <span v-else-if="rank && !rank.participating" class="text-gray-400">{{ t('lbMetricNotRanked') }}</span>
+    <p v-else-if="rank && !rank.participating" class="text-xs text-gray-400">{{ t('lbMetricNotRanked') }}</p>
 
-    <span v-else-if="rank && rank.value === null" class="text-gray-400">{{ t('lbMetricNoFigure') }}</span>
+    <p v-else-if="rank && rank.value === null" class="text-xs text-gray-400">{{ t('lbMetricNoFigure') }}</p>
 
-    <template v-else-if="links.length">
-      <template v-for="(link, index) in links" :key="link.key">
-        <span v-if="index" class="text-gray-600" aria-hidden="true">·</span>
-        <NuxtLink
-          :to="{ path: link.to, query: link.query }"
-          class="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] font-semibold text-gray-300 transition-colors hover:border-wow-gold/60 hover:bg-wow-gold/10 hover:text-wow-goldLight focus-visible:border-wow-gold/60 focus-visible:bg-wow-gold/10 focus-visible:text-wow-goldLight focus-visible:outline-none"
-          :class="plate ? 'px-2.5 py-1' : 'px-2 py-0.5'"
-          :title="`${label} · ${link.label} · ${placeOf(link.rank, link.total)}`"
-          :aria-label="`${label} · ${link.label} · ${placeOf(link.rank, link.total)}`"
-        >
-          <span>{{ link.label }}</span>
-          <span class="tabular-nums text-wow-goldLight">[{{ formatNumber(link.rank) }}]</span>
-        </NuxtLink>
-      </template>
-    </template>
+    <!-- The places, one chip each, in a row of equal columns: the three scopes are read against each other at a
+         glance, and a scope nobody holds a place in leaves the row narrower rather than leaving a hole in it. -->
+    <div v-else-if="links.length" class="grid w-full gap-2" :class="columns">
+      <MetricRankLink
+        v-for="link in links"
+        :key="link.key"
+        :label="link.label"
+        :metric="label"
+        :rank="link.rank"
+        :total="link.total"
+        :to="link.to"
+        :query="link.query"
+      />
+    </div>
   </div>
 </template>

@@ -71,6 +71,17 @@ const {
 } = useCharacterView()
 
 /**
+ * The site's editable settings, which three of the board's rows are measured against
+ * (`#shared/data/siteSettings`, served by `server/api/settings`).
+ *
+ * Read with the rest of the board's own reads, so a page rendered on the server draws its bars at once rather
+ * than growing them in a moment later - and one request for the whole site, so the panel's form and these bars
+ * are never two answers (`app/composables/siteSettings.ts`).
+ */
+const { data: siteSettings } = await useSiteSettings()
+const maxima = computed(() => siteSettings.value?.metricMaxima ?? {})
+
+/**
  * The second character's profile, read from the endpoint behind a character page.
  *
  * The key names the character and the language, so picking another one is another read rather than the same
@@ -158,6 +169,17 @@ interface VersusFigure {
   value: number | null
   /** Whether the figure is the account's own, which the row says under its label. */
   accountWide: boolean
+  /**
+   * What there is of this figure to hold, or `null` where nobody states a size for it.
+   *
+   * Two kinds of answer arrive here and the row treats them the same way: the totals the six collections carry
+   * with their reading (`CharacterStat` in `server/utils/blizzard`: the live mount journal, the size of the pet
+   * and toy indexes, the reputation ladders), and the ceilings an administrator states for the three figures no
+   * index publishes (`#shared/data/siteSettings`). `null` is a figure with no known end, and a figure with no
+   * known end is drawn without a bar - which is what makes this the one field that decides whether the open row
+   * carries a scale at all.
+   */
+  total: number | null
 }
 
 /** One row of the board: a figure, and the same figure read for the other character. */
@@ -189,21 +211,66 @@ function metricsFor(character: CharacterData | null | undefined, wardrobe: numbe
   const count = (value?: { count?: number } | null) => (typeof value?.count === 'number' ? value.count : null)
   const figure = (value?: number | null) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
+  /**
+   * The size a reading states for itself, where it states one.
+   *
+   * The six collections arrive with their own denominator (the live mount journal, the size of the pet and toy
+   * indexes, the ladders of the reputation journal), and a reading with none is a reading without a bar rather
+   * than an empty collection - the same distinction the figure itself keeps. `unknown` rather than a shape,
+   * because the five figures beside them (`CountStat`) have no total at all and are handed here anyway.
+   */
+  function sizeOf(value: unknown): number | null {
+    if (!value || typeof value !== 'object') return null
+
+    const total = (value as { total?: unknown }).total
+    return typeof total === 'number' && total > 0 ? total : null
+  }
+
+  /**
+   * The ceiling an administrator states, for the three figures whose appetite no index publishes
+   * (`EDITABLE_METRIC_MAXIMA`, `#shared/data/siteSettings`).
+   *
+   * A metric the operator has cleared out of the panel is a metric drawn without a bar - `null` here, not a
+   * default standing in - because the panel's whole purpose is to be the one place that answer is given.
+   */
+  function stated(metric: MetricKey): number | null {
+    const value = maxima.value[metric]
+    return typeof value === 'number' && value > 0 ? value : null
+  }
+
+  /**
+   * A figure's denominator, preferring the one its own reading carries.
+   *
+   * The quests and the recipes are the two rows where both answers can exist - a reading carries a count of
+   * what a character has run or learned and no size of the log or the book behind it - so the reading's own
+   * total wins where there is one and the stated ceiling stands behind it.
+   */
+  function denominator(value: unknown, metric: MetricKey): number | null {
+    return sizeOf(value) ?? stated(metric)
+  }
+
   return [
-    { label: 'lbColScore', icon: 'trophy', value: character ? figure(character.score) : null, accountWide: !!character?.pooled },
-    { label: 'achievements', icon: 'achievments', value: count(stats?.achievements), accountWide: true },
-    { label: 'mounts', icon: 'mounts', value: count(stats?.mounts), accountWide: !!character?.pooled },
-    { label: 'toys', icon: 'toys', value: count(stats?.toys), accountWide: true },
-    { label: 'pets', icon: 'pets', value: count(stats?.pets), accountWide: true },
-    { label: 'decor', icon: 'decor', value: count(stats?.decor), accountWide: true },
-    { label: 'titles', icon: 'titles', value: count(stats?.titles), accountWide: !!stats?.titles?.accountWide },
-    { label: 'reputations', icon: 'exalted-rep', value: count(stats?.reputations), accountWide: !!character?.pooled },
-    // The one figure that arrives from an endpoint of its own: `undefined` while it is being read.
-    { label: 'transmogs', icon: 'transmogs', value: typeof wardrobe === 'number' ? wardrobe : null, accountWide: true },
-    { label: 'quests', icon: 'quests', value: count(stats?.quests), accountWide: !!stats?.quests?.accountWide },
-    { label: 'recipes', icon: 'recipes', value: count(stats?.recipes), accountWide: !!stats?.recipes?.accountWide },
-    { label: 'honorableKills', icon: 'kills', value: count(stats?.honorableKills), accountWide: !!stats?.honorableKills?.accountWide },
-    { label: 'honorLevel', icon: 'honorLevel', value: count(stats?.honorLevel), accountWide: true }
+    // The score is a figure of the site's own making (`server/utils/playerScore`): what it would take to make it
+    // whole is not something the site states, so the row is printed without a bar.
+    { label: 'lbColScore', icon: 'trophy', value: character ? figure(character.score) : null, accountWide: !!character?.pooled, total: null },
+    { label: 'achievements', icon: 'achievments', value: count(stats?.achievements), accountWide: true, total: sizeOf(stats?.achievements) },
+    { label: 'mounts', icon: 'mounts', value: count(stats?.mounts), accountWide: !!character?.pooled, total: sizeOf(stats?.mounts) },
+    { label: 'toys', icon: 'toys', value: count(stats?.toys), accountWide: true, total: sizeOf(stats?.toys) },
+    { label: 'pets', icon: 'pets', value: count(stats?.pets), accountWide: true, total: sizeOf(stats?.pets) },
+    { label: 'decor', icon: 'decor', value: count(stats?.decor), accountWide: true, total: sizeOf(stats?.decor) },
+    // The titles are the one family besides the score with no reachable end: Blizzard publishes no title index,
+    // and a bar drawn to an invented one would be a lie - so this row prints its count alone.
+    { label: 'titles', icon: 'titles', value: count(stats?.titles), accountWide: !!stats?.titles?.accountWide, total: null },
+    { label: 'reputations', icon: 'exalted-rep', value: count(stats?.reputations), accountWide: !!character?.pooled, total: sizeOf(stats?.reputations) },
+    // The one figure that arrives from an endpoint of its own: `undefined` while it is being read. Its ceiling is
+    // the operator's, because the wardrobe's own document carries a count and no size of the wardrobe.
+    { label: 'transmogs', icon: 'transmogs', value: typeof wardrobe === 'number' ? wardrobe : null, accountWide: true, total: stated('transmogs') },
+    { label: 'quests', icon: 'quests', value: count(stats?.quests), accountWide: !!stats?.quests?.accountWide, total: denominator(stats?.quests, 'quests') },
+    { label: 'recipes', icon: 'recipes', value: count(stats?.recipes), accountWide: !!stats?.recipes?.accountWide, total: denominator(stats?.recipes, 'recipes') },
+    // The two figures of the player-versus-player side are the last without an end: kills are counted forever,
+    // and an honor level is a rank of the game's own rather than a shelf with a size.
+    { label: 'honorableKills', icon: 'kills', value: count(stats?.honorableKills), accountWide: !!stats?.honorableKills?.accountWide, total: null },
+    { label: 'honorLevel', icon: 'honorLevel', value: count(stats?.honorLevel), accountWide: true, total: null }
   ]
 }
 
@@ -859,18 +926,36 @@ onBeforeUnmount(() => {
                  ranking itself - the one thing a figure in a column cannot say about the population on its own
                  (`app/components/leaderboard/MetricRankLinks.vue`). The distribution below is the population's,
                  and both columns show the same one; the places are this character's alone. -->
-            <div v-if="openMetric === metricOf(row)" class="border-t border-white/10 bg-black/20 p-2">
-              <MetricRankLinks
-                v-if="openLeaderboard"
-                :slug="openLeaderboard.slug"
-                :label="$t(openLeaderboard.labelKey)"
-                :region="region"
-                :realm="realm"
-                :name="name"
-                :rank="rankFor(currentTableKey)"
-                :pending="ranksPending"
-                :failed="!!ranksError"
+            <div v-if="openMetric === metricOf(row)" class="space-y-2 border-t border-white/10 bg-black/20 p-2">
+              <!-- How full this figure's collection is, which stands over the places and the charts because it is
+                   the one reading of the three that is about the character alone. It is drawn only where a size
+                   for the figure is known - the collections carry one, three other rows are given one by the
+                   panel, and the rest print their count with no bar (`VersusMetricScale.vue`). -->
+              <VersusMetricScale
+                v-if="typeof row.value === 'number' && typeof row.total === 'number' && row.total > 0"
+                :metric="row.label"
+                :count="row.value"
+                :total="row.total"
+                :account-wide="row.accountWide"
               />
+
+              <!-- Where this character is in the ranking of the open figure, as three links into the ranking
+                   itself - the one thing a figure in a column cannot say about the population on its own
+                   (`app/components/leaderboard/MetricRankLinks.vue`). It stands in the same dark plate the
+                   charts below are drawn in, so the open row reads as three blocks of one panel. -->
+              <div v-if="openLeaderboard" class="rounded-xl border border-white/10 bg-black/25 p-3">
+                <MetricRankLinks
+                  :slug="openLeaderboard.slug"
+                  :label="$t(openLeaderboard.labelKey)"
+                  :region="region"
+                  :realm="realm"
+                  :name="name"
+                  :rank="rankFor(currentTableKey)"
+                  :pending="ranksPending"
+                  :failed="!!ranksError"
+                />
+              </div>
+
               <MetricHistoryPanel
                 :metric="metricOf(row)"
                 :history="currentHistory"
@@ -1084,18 +1169,32 @@ onBeforeUnmount(() => {
               <!-- The same metric as the first column's, opened by the one shared `openMetric`: the second
                    character's own history, with the population's histogram and both markers beside it. The places
                    over it are their own - computed for this side of the comparison and for no other. -->
-              <div v-if="openMetric === metricOf(row)" class="border-t border-white/10 bg-black/20 p-2">
-                <MetricRankLinks
-                  v-if="openLeaderboard && target"
-                  :slug="openLeaderboard.slug"
-                  :label="$t(openLeaderboard.labelKey)"
-                  :region="target.region"
-                  :realm="target.realm"
-                  :name="target.name"
-                  :rank="rankFor(targetTableKey)"
-                  :pending="ranksPending"
-                  :failed="!!ranksError"
+              <div v-if="openMetric === metricOf(row)" class="space-y-2 border-t border-white/10 bg-black/20 p-2">
+                <!-- The second character's own fill of the same shelf, drawn exactly as the first column draws
+                     it - and from that character's figures, not this one's. -->
+                <VersusMetricScale
+                  v-if="typeof row.target.value === 'number' && typeof row.target.total === 'number' && row.target.total > 0"
+                  :metric="row.label"
+                  :count="row.target.value"
+                  :total="row.target.total"
+                  :account-wide="row.target.accountWide"
                 />
+
+                <!-- Their own places, in the same dark plate as the charts below: computed for this side of the
+                     comparison and for no other. -->
+                <div v-if="openLeaderboard && target" class="rounded-xl border border-white/10 bg-black/25 p-3">
+                  <MetricRankLinks
+                    :slug="openLeaderboard.slug"
+                    :label="$t(openLeaderboard.labelKey)"
+                    :region="target.region"
+                    :realm="target.realm"
+                    :name="target.name"
+                    :rank="rankFor(targetTableKey)"
+                    :pending="ranksPending"
+                    :failed="!!ranksError"
+                  />
+                </div>
+
                 <MetricHistoryPanel
                   :metric="metricOf(row)"
                   :history="targetHistory"

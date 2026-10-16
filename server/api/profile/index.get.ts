@@ -281,7 +281,16 @@ export default defineEventHandler(async (event) => {
        * the roster and the account's collections are the figures a dead grant freezes, and the page draws the
        * notice and the way back in with this flag rather than discovering it from a failed button.
        */
-      authExpired: user.authExpired
+      authExpired: user.authExpired,
+      /**
+       * Whether this account may open the admin panel (`server/utils/siteSettings`).
+       *
+       * It rides along with the identity for the same reason `authExpired` does: it changes what a *control*
+       * may offer rather than what the payload holds. The menu draws its entries from this flag, and the panel
+       * itself is served by an endpoint that asks the question again - a flag a browser could set is a flag, not
+       * a permission (`server/api/admin/settings`).
+       */
+      isAdmin: isAdmin(user.battletag)
     },
     characters,
     totals
