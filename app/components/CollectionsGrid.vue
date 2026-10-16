@@ -148,6 +148,16 @@ function reveal(index: number): void {
 const anchored = computed(() => list.value.length > 1)
 
 const railEl = ref<HTMLElement | null>(null)
+/**
+ * The room the rail keeps under the pinned header.
+ *
+ * The header is sticky and is the whole of what the rail has to clear, so the measurement alone would put the
+ * rail's top edge exactly at the header's bottom edge - flush, which on a sub-page reads as one block: the
+ * header's tabs and the rail's chips touch at their rims. This is what parts them, and it is deliberately the
+ * same measure a group keeps above itself when a chip scrolls to it, so the two read as one margin.
+ */
+const STICKY_GAP = 16
+
 const stickyTop = ref(0)
 const anchorOffset = ref(128)
 const activeSection = ref(0)
@@ -157,7 +167,7 @@ let headerObserver: ResizeObserver | null = null
 
 function measure(): void {
   const header = document.querySelector('header')
-  stickyTop.value = header ? Math.round(header.getBoundingClientRect().height) : 0
+  stickyTop.value = header ? Math.round(header.getBoundingClientRect().height) + STICKY_GAP : 0
   anchorOffset.value = stickyTop.value + 12
 }
 
@@ -343,13 +353,13 @@ function placeholderHeight(section: CollectionSection): string {
     <!-- The shelf itself: the column of groups the anchors walk. `min-w-0` is what lets a row
          of tiles shrink rather than widen the column, and the column takes the room the page
          leaves the shelf rather than a width of its own. -->
-    <div class="min-w-0 flex-1 space-y-5">
+    <div class="hoa-stagger min-w-0 flex-1 space-y-5">
       <section
         v-for="(section, index) in list"
         :key="section.id"
         :ref="(element) => setSection(index, element as Element | null)"
         :data-section="index"
-        class="hoa-panel hoa-section"
+        class="hoa-panel hoa-section hoa-enter-frost"
       >
         <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h3 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">

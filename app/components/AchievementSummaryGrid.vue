@@ -24,11 +24,11 @@ const localeUrl = useLocaleUrl()
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl space-y-6">
+  <div class="hoa-stagger mx-auto max-w-6xl space-y-6">
     <!-- The running total: what the character has earned of everything it could, drawn as one bar
          over the whole log - the brand gold a section's own heading carries, while the categories below
          keep the emerald their own group bars are drawn in. -->
-    <section class="hoa-panel p-4 sm:p-5">
+    <section class="hoa-panel hoa-enter-frost p-4 sm:p-5">
       <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
           {{ $t('achievementsOverall') }}
@@ -49,13 +49,16 @@ const localeUrl = useLocaleUrl()
     </section>
 
     <!-- The categories, as tiles: one frosted block per category, its own count and its own bar in the
-         achievements' emerald, each a link into that category's shelf. -->
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+         achievements' emerald, each a link into that category's shelf. They arrive one after another
+         (`hoa-stagger` on the grid, `hoa-enter-frost` on each tile), and they drift rather than fade:
+         a tile is glass, and a fade over a `backdrop-filter` surface samples the tile instead of the page
+         (`app/assets/css/main.css`). -->
+    <div class="hoa-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <NuxtLink
         v-for="row in props.summary.categories"
         :key="row.category"
         :to="localeUrl(`${props.path}/${row.category}`)"
-        class="hoa-panel hoa-panel-interactive group flex flex-col gap-3 p-4"
+        class="hoa-panel hoa-panel-interactive hoa-enter-frost group flex flex-col gap-3 p-4"
       >
         <div class="flex items-start justify-between gap-2">
           <h3 class="text-sm font-bold uppercase tracking-wider text-white sm:text-[15px]">

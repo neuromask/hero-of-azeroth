@@ -130,11 +130,11 @@ const ROW = 'flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm'
 </script>
 
 <template>
-  <div class="space-y-3" :class="pending ? 'opacity-70' : ''" :aria-busy="pending ? 'true' : undefined">
-    <div class="grid gap-3 lg:grid-cols-3">
+  <div class="hoa-stagger space-y-3" :class="pending ? 'opacity-70' : ''" :aria-busy="pending ? 'true' : undefined">
+    <div class="hoa-stagger hoa-enter-frost grid gap-3 lg:grid-cols-3">
       <!-- Where the population lives. Every row is a link into the overall rating *of that realm*, which is what
            makes this a hub: the front door answers "who is where" and hands over the table of that where. -->
-      <section class="hoa-panel p-3.5 sm:p-4">
+      <section class="hoa-panel hoa-enter-frost p-3.5 sm:p-4">
         <p :class="HEADING">{{ t('lbBreakRealms') }}</p>
 
         <ul v-if="realms.length" class="mt-2 space-y-0.5">
@@ -160,7 +160,7 @@ const ROW = 'flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm'
       </section>
 
       <!-- What the population plays, in the colour the game's own UI gives each class. -->
-      <section class="hoa-panel p-3.5 sm:p-4">
+      <section class="hoa-panel hoa-enter-frost p-3.5 sm:p-4">
         <p :class="HEADING">{{ t('lbBreakClasses') }}</p>
 
         <ul class="mt-2 space-y-0.5">
@@ -178,7 +178,7 @@ const ROW = 'flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm'
 
       <!-- Which side they play for, as one bar and its legend: three facts that are only interesting against each
            other, so they are drawn as one thing rather than three rows. -->
-      <section class="hoa-panel p-3.5 sm:p-4">
+      <section class="hoa-panel hoa-enter-frost p-3.5 sm:p-4">
         <p :class="HEADING">{{ t('lbBreakFactions') }}</p>
 
         <div class="mt-3 flex h-2.5 overflow-hidden rounded-full bg-white/5" role="img"
@@ -205,7 +205,7 @@ const ROW = 'flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm'
 
     <!-- And what all of them have gathered between them, with the day the table behind it was last written: the
          figures a collection site is worth visiting for, and the honesty of saying how fresh they are. -->
-    <section v-if="gathered.length" class="hoa-panel p-3.5 sm:p-4">
+    <section v-if="gathered.length" class="hoa-panel hoa-enter-frost p-3.5 sm:p-4">
       <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p :class="HEADING">{{ t('lbBreakGathered') }}</p>
         <p v-if="updatedAt" class="text-[11px] text-gray-500">{{ t('lbUpdated', { date: updatedAt }) }}</p>

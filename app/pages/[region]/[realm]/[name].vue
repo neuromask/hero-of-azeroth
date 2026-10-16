@@ -269,6 +269,20 @@ if (error.value) {
 }
 
 /**
+ * The two message keys the plate is given, chosen by the *answer* rather than by the page.
+ *
+ * A character nobody holds is a reader's own mistake and is answered with the site's search, while a read the
+ * site could not complete is the site's - a rate limit, an outage - and is answered with the read again. Which
+ * of the two it was is exactly what the status says, so it is decided here and the plate reads the status it
+ * was handed (`SiteMissing.vue`).
+ */
+const missingCopy = computed(() =>
+  missingStatus(error.value) === 404
+    ? { title: 'notFoundTitle', body: 'notFoundBody' }
+    : { title: 'notFoundErrorTitle', body: 'notFoundErrorBody' }
+)
+
+/**
  * The character page is a profile: the card is its preview image, the class and the
  * statistics describe the character to a search engine, and a page with nothing to
  * show turns itself into a `noindex` response. The shared half of the head – the
@@ -739,20 +753,29 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative min-h-screen bg-wow-dark text-white flex flex-col justify-between selection:bg-wow-gold selection:text-black">
+  <!-- A character the site could not read is not the shell: there is nobody to draw a header for, and no
+       views to put in a row under it. So that page is the site's own answer to "not here" - the frame and the
+       plate an address naming no page is given (`app/components/SiteMissing.vue`, which `app/error.vue` draws
+       for the router's own 404s), carrying the status this read answered with: a character nobody holds, a
+       reader asking too fast, a profile Blizzard would not answer for. -->
+  <SiteMissing
+    v-if="missing"
+    :status="missingStatus(error)"
+    :title="missingCopy.title"
+    :body="missingCopy.body"
+    :address="route.path"
+  />
+
+  <div v-else class="relative min-h-screen bg-wow-dark text-white flex flex-col justify-between selection:bg-wow-gold selection:text-black">
     <!-- The wait for the profile is the site-wide preloader's to draw (see `PagePreloader.vue`): the
          page keeps the room the profile will take, and the wheel over it is the root's own, so this
          read looks like every other wait on the site. -->
     <div v-if="pending" class="flex-1" />
 
-    <div v-else-if="error || !character" class="flex-1 flex flex-col items-center justify-center p-4">
-      <p class="text-red-400 text-lg font-semibold mb-4">{{ $t('notFound') }}</p>
-      <NuxtLink :to="localeUrl('/')" class="px-6 py-2 bg-wow-gold text-black font-semibold rounded-lg hover:bg-wow-goldLight transition-colors">
-        {{ $t('backToSearch') }}
-      </NuxtLink>
-    </div>
-
-    <template v-else>
+    <!-- The shell itself, for a character that was read: `v-else-if="character"` is what narrows it for the
+         compiler, and it is also the honest condition - the two branches above are the wait and the miss, so a
+         page that reaches this one has somebody to draw. -->
+    <template v-else-if="character">
       <!-- The background: the class artwork, fixed so it holds still while the page moves over it,
            darkened the way the rest of the site darkens its own - a flat scrim and a vignette - so
            the pages read as one site. The layers themselves are shared with the hall of fame

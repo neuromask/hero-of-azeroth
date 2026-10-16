@@ -3,9 +3,11 @@
    for the headings and the names, 800 for the figures a page leads with. The files live in
    `public/fonts/gilroy`, which is the one directory a deployment always ships: `npm run deploy`
    uploads `.output` alone and Nitro copies `public/` into it, so the URL below resolves the same way
-   from the checkout as it does from the build (`nuxt.config.ts` preloads the two weights a first
-   paint is set in). `font-display: swap` is what keeps a face that is slow to arrive from blocking
-   the page: the fallback paints at once and Gilroy takes over the moment it lands. */
+   from the checkout as it does from the build. `font-display: swap` is what keeps a face that is slow
+   to arrive from blocking the page: the fallback paints at once and Gilroy takes over the moment it
+   lands - and the three weights a first paint is actually set in (400, 700 and 800) are preloaded
+   (`nuxt.config.ts`), so on a warm cache there is no swap to see at all. What a reader is shown in the
+   meantime is the face declared under these four, which measures exactly what Gilroy measures. */
 @font-face {
   font-family: 'Gilroy';
   src: url('/fonts/gilroy/Gilroy-Medium.woff2') format('woff2');
@@ -36,6 +38,73 @@
   font-weight: 800;
   font-style: normal;
   font-display: swap;
+}
+
+/* The face a reader is shown while Gilroy is still on its way - which, on a cold cache, is the first frame of
+   every page: the browser paints the fallback at once and swaps the real face in when it lands. That swap is
+   only invisible if the two *measure* the same, so this is a system face scaled and shifted until it occupies
+   the box Gilroy would have occupied, and it is what stops a line of text from being re-broken and a paragraph
+   from moving the blocks under it the moment the real face arrives.
+
+   The four descriptors are the whole of the trick, and each one answers a different part of the shift:
+
+     - `size-adjust` scales the fallback's glyphs (and their advances) until a run of text comes out the width
+       Gilroy's would - Arial is about five per cent narrower, which is why every value below is above 100%;
+     - `ascent-override` / `descent-override` place the baseline where Gilroy places it inside the line box,
+       which is what a reader sees as text sitting a pixel or two high or low;
+     - `line-gap-override` is Gilroy's own line gap, which is none.
+
+   The numbers are ratios of the two fonts' own tables rather than guesses: `node scripts/font-metrics.mjs`
+   derives them from the files in `public/fonts/gilroy` and prints this very block, so a face that is replaced
+   or re-cut is a re-run rather than an estimate. The `local()` list is the fallback itself - Arial where there
+   is one, Helvetica on a Mac, Liberation Sans on Linux - and a machine with none of them simply keeps walking
+   the stack below, exactly as it did before this block existed.
+
+   `font-display: swap` is kept rather than `optional`: a first-time reader is owed the site's own typeface, and
+   with the metrics matched the swap no longer moves anything, so there is nothing left for `optional` to fix.
+   (It would cost the typeface on every first visit instead.) */
+@font-face {
+  font-family: 'Gilroy Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Liberation Sans');
+  font-weight: 400;
+  font-style: normal;
+  size-adjust: 104.99%;
+  ascent-override: 88.49%;
+  descent-override: 23.62%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Gilroy Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Liberation Sans');
+  font-weight: 600;
+  font-style: normal;
+  size-adjust: 105.68%;
+  ascent-override: 88.76%;
+  descent-override: 24.13%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Gilroy Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Liberation Sans');
+  font-weight: 700;
+  font-style: normal;
+  size-adjust: 102.51%;
+  ascent-override: 92.28%;
+  descent-override: 25.66%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Gilroy Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Liberation Sans');
+  font-weight: 800;
+  font-style: normal;
+  size-adjust: 103.15%;
+  ascent-override: 92.58%;
+  descent-override: 26.17%;
+  line-gap-override: 0%;
 }
 
 @tailwind base;
@@ -592,6 +661,166 @@
   .hoa-scroll-x::-webkit-scrollbar-thumb:hover {
     background-color: rgba(248, 183, 0, 0.6);
   }
+
+  /* --- How a block arrives -------------------------------------------------------------------------
+     One family of classes for the few hundred milliseconds in which a block comes into being, so that
+     the whole site moves the same way rather than every pane inventing its own duration. The motion is
+     a short drift - twenty-four pixels, or whatever distance `--hoa-enter-from` names - over a third of
+     a second on an ease-out curve, and it says "this is new" rather than asking to be watched: a longer
+     or a larger one is felt as a wait, and a list of thirteen of them is felt as two seconds.
+     The one block the site allows more is a table, which arrives from further below over four hundred
+     milliseconds - `.hoa-enter-table` at the end of this block says why.
+
+     Everything below is `transform` and `opacity` - the two properties a compositor can move without
+     laying the page out again - and none of it is a `transition`. That is the distinction the cards of
+     the site's feeds were cut on (`.hoa-panel-feed` below): a *transition* moves a block through every
+     subpixel offset along the way and the type it carries is rasterized again at each of them, which
+     reads as shimmering, while a running `transform` *animation* is promoted to a layer of its own, so
+     the block is rasterized once and moved as a picture. `backwards` fill is the other half of it: the
+     frame before the start is the hidden one, the frame after the end is the block's own, so the
+     transform is gone the moment the animation is and the layer goes with it - which is also why
+     nothing here needs `will-change`, and must not reach for it: `will-change: opacity` is a Backdrop
+     Root trigger for exactly the same reason `opacity` is (see the note on the pinned bar above).
+
+     TWO ARRIVALS, because of that very rule: `opacity` makes a Backdrop Root, so a block whose own
+     glass has to go on sampling the page behind it - a `.hoa-panel`, a `.hoa-plate`, a `.hoa-pop` -
+     cannot be faded at all. Its frost would sample the block instead of the page for the length of the
+     fade and pop back at the end; it drifts, it does not fade. So `.hoa-enter` fades and drifts and is
+     for content - rows, chips, plates that carry no glass of their own - while `.hoa-enter-frost`
+     drifts alone and is for anything wearing the glass, or holding it. */
+
+  /* The cascade: a list whose children arrive one after another rather than in one frame. It is put on
+     the *list*, and the child carries the class that says how it moves - so a list of glass and a list
+     of plain rows cascade the same way. The delays are spent on the first four children and then shared:
+     a thirteen-row board would otherwise take most of a second to appear, and past the fifth row a
+     reader is scanning rather than reading. */
+  .hoa-stagger > :nth-child(1) {
+    animation-delay: 0ms;
+  }
+
+  .hoa-stagger > :nth-child(2) {
+    animation-delay: 50ms;
+  }
+
+  .hoa-stagger > :nth-child(3) {
+    animation-delay: 100ms;
+  }
+
+  .hoa-stagger > :nth-child(4) {
+    animation-delay: 150ms;
+  }
+
+  .hoa-stagger > :nth-child(n + 5) {
+    animation-delay: 200ms;
+  }
+
+  @keyframes hoa-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--hoa-enter-from, 24px), 0);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes hoa-enter-frost {
+    from {
+      transform: translate3d(0, var(--hoa-enter-from, 24px), 0);
+    }
+
+    to {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes hoa-leave {
+    from {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+
+    to {
+      opacity: 0;
+      transform: translate3d(0, var(--hoa-leave-to, -16px), 0);
+    }
+  }
+
+  @keyframes hoa-leave-frost {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+
+    to {
+      transform: translate3d(0, var(--hoa-leave-to, -16px), 0);
+    }
+  }
+
+  .hoa-enter {
+    animation: hoa-enter var(--hoa-enter-duration, 340ms) var(--hoa-enter-ease, cubic-bezier(0.16, 1, 0.3, 1)) backwards;
+  }
+
+  .hoa-enter-frost {
+    animation: hoa-enter-frost var(--hoa-enter-duration, 340ms) var(--hoa-enter-ease, cubic-bezier(0.16, 1, 0.3, 1)) backwards;
+  }
+
+  .hoa-leave {
+    animation: hoa-leave var(--hoa-leave-duration, 230ms) ease-in forwards;
+  }
+
+  .hoa-leave-frost {
+    animation: hoa-leave-frost var(--hoa-leave-duration, 230ms) ease-in forwards;
+  }
+
+  /* The tables - the site's rankings and the hall of fame's own - arrive from further below and take a little
+     longer about it, because a table is the one block a reader came to a page *for*: the frame is already
+     standing and the answer lands in it, so four hundred milliseconds of travel read as the rows settling
+     rather than as a wait. That is the whole difference from `.hoa-enter-frost`, and it is a class of its own
+     rather than a tint of `--hoa-enter-from` because the distance and the duration belong together - a drift
+     this long on the site's own third of a second would be a snap rather than an arrival.
+
+     It drifts alone, like everything that wears the glass: the block it is put on is the pane the rows stand
+     in (`.hoa-panel`), and a fade over a `backdrop-filter` surface is the one thing this family may not do. */
+  .hoa-enter-table {
+    --hoa-enter-from: 40px;
+    animation: hoa-enter-frost var(--hoa-enter-table-duration, 400ms) var(--hoa-enter-ease, cubic-bezier(0.16, 1, 0.3, 1)) backwards;
+  }
+
+  /* The arrival a block's *contents* may take where the block itself is the glass.
+     A table is the case: its pane is a `.hoa-panel`, so the pane may not be faded (see the rule above) - but
+     the rows inside it are not glass, and the frame's frost is a sibling layer of the panel rather than a part
+     of them, so `opacity` on the rows costs the frost nothing. The frame drifts into place and its rows fade
+     into place inside it: two motions, one arrival, and neither of them is a fade of a `backdrop-filter`
+     surface. It has no drift of its own on purpose - a block whose height is its contents cannot have those
+     contents translated, or they would hang out of the frame they are measured by. */
+  @keyframes hoa-enter-content {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  .hoa-enter-content {
+    animation: hoa-enter-content var(--hoa-enter-duration, 340ms) var(--hoa-enter-ease, cubic-bezier(0.16, 1, 0.3, 1)) backwards;
+  }
+
+  /* A reader whose system is set not to animate things is answered without a single keyframe: every
+     block is drawn where the animation was going to leave it, which is where it lives anyway. */
+  @media (prefers-reduced-motion: reduce) {
+    .hoa-enter,
+    .hoa-enter-frost,
+    .hoa-enter-table,
+    .hoa-enter-content,
+    .hoa-leave,
+    .hoa-leave-frost {
+      animation: none;
+    }
+  }
 }
 
 /* A group of a collections shelf is scrolled to by the chip bar above it, and the whole page reads
@@ -604,5 +833,5 @@ html {
 body {
   background-color: #080a0f;
   color: #ffffff;
-  font-family: 'Gilroy', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: 'Gilroy', 'Gilroy Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }

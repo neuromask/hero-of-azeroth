@@ -198,8 +198,16 @@ const missing = ref<Record<string, true>>({})
 </script>
 
 <template>
-  <div class="hoa-panel" :class="pending ? 'opacity-70' : ''" :aria-busy="pending ? 'true' : undefined">
-    <div class="hoa-scroll-x overflow-x-auto rounded-xl">
+  <!-- The table arrives from below (`hoa-enter-table`, `app/assets/css/main.css`): a ranking is what a reader came
+       to this page for, and the frame around it is already standing when the answer lands, so the pane climbs the
+       last forty pixels into place over four hundred milliseconds. It is the drift alone, never a fade - the pane
+       is the site's glass, and an `opacity` on it would make it a Backdrop Root and hand its frost the table
+       instead of the page. -->
+  <div class="hoa-panel hoa-enter-table" :class="pending ? 'opacity-70' : ''" :aria-busy="pending ? 'true' : undefined">
+    <!-- The rows fade in as the pane drifts in (`hoa-enter-content`): the frame is the glass and may not be
+         faded, but this box inside it is not glass, and the pane's frost is a sibling layer of the pane rather
+         than a part of this one - so the table arrives twice over, once as a frame and once as its rows. -->
+    <div class="hoa-scroll-x hoa-enter-content overflow-x-auto rounded-xl">
       <!-- The widths are the table's, not its content's (`table-fixed`): the place is a fixed slice of the left edge,
            the player takes a little more than the rest, and the three columns after it - the guild, the realm and the
            figure - share what is left equally. A column that grew with the longest name in it would move every other

@@ -111,7 +111,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root">
+  <!-- The sheet's own direction, declared once on the block and inherited by whatever the `Transition`
+       under it animates: a sheet that drops out of a row arrives from above rather than rising out of the
+       page, so the distance is negative here. It also says *how* it may move - drift alone, never a fade -
+       because the sheet is the site's glass (`.hoa-pop`): an `opacity` on a `backdrop-filter` surface
+       makes it a Backdrop Root, so its frost would sample the sheet instead of the page for the length of
+       the fade and pop back at the end (`app/assets/css/main.css`). -->
+  <div ref="root" class="[--hoa-enter-from:-12px] [--hoa-leave-to:-12px]">
     <button
       ref="trigger"
       type="button"
@@ -136,12 +142,8 @@ onBeforeUnmount(() => {
          and it is only in the document while it is out (`v-if` rather than a hidden pane), so a shut
          search leaves no field for a keyboard to walk into. -->
     <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="-translate-y-3 opacity-0"
-      enter-to-class="translate-y-0 opacity-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="translate-y-0 opacity-100"
-      leave-to-class="-translate-y-3 opacity-0"
+      enter-active-class="hoa-enter-frost"
+      leave-active-class="hoa-leave-frost"
     >
       <div
         v-if="open"

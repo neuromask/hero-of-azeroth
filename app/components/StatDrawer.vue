@@ -3,6 +3,12 @@
 import { formatNumber } from '#shared/utils/formatNumber'
 // The profile the shell fetched, which already carries five of the six figures (`useCharacterView`).
 import { useCharacterView } from '~/composables/characterView'
+// Where a tile of the drawer leads: the ranking of the very figure it prints, over the whole population. The
+// address is built by the composable every metric page is addressed by (`metricLeaderboardPath`), which is the
+// same call a character page's own tiles make - so the two halves of the page open the same table, and a figure
+// the site ranks nowhere cannot be linked to because it cannot be named.
+import { metricLeaderboardPath } from '~/composables/metricLeaderboard'
+import type { MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
 
 /**
  * The drawer of six figures that hangs under the summary plates of a character page.
@@ -28,6 +34,7 @@ import { useCharacterView } from '~/composables/characterView'
  */
 const { character, region, realm, name } = useCharacterView()
 const { t } = useI18n()
+const localeUrl = useLocaleUrl()
 
 /** Whether the tray is out, which the label on the panel toggles. */
 const open = ref(false)
@@ -93,6 +100,8 @@ interface DrawerFigure {
   label: string
   /** The glyph the set draws for it, by file name (`app/assets/icons`, read by `AppIcon`). */
   icon: string
+  /** The ranking of this very figure, which the tile opens (`app/composables/metricLeaderboard`). */
+  slug: MetricLeaderboardSlug
   /** The figure itself, or `null` for one that is not there to print. */
   count: number | null
   /** Whether the figure is the account's own, which the tile says underneath it. */
@@ -110,25 +119,41 @@ const figures = computed<DrawerFigure[]>(() => {
   const count = (value?: { count?: number } | null) => (typeof value?.count === 'number' ? value.count : null)
 
   return [
-    { label: 'titles', icon: 'titles', count: count(stats.titles), accountWide: !!stats.titles?.accountWide },
-    { label: 'quests', icon: 'quests', count: count(stats.quests), accountWide: !!stats.quests?.accountWide },
-    { label: 'recipes', icon: 'recipes', count: count(stats.recipes), accountWide: !!stats.recipes?.accountWide },
+    { label: 'titles', icon: 'titles', slug: 'titles', count: count(stats.titles), accountWide: !!stats.titles?.accountWide },
+    { label: 'quests', icon: 'quests', slug: 'quests', count: count(stats.quests), accountWide: !!stats.quests?.accountWide },
+    { label: 'recipes', icon: 'recipes', slug: 'recipes', count: count(stats.recipes), accountWide: !!stats.recipes?.accountWide },
     {
       // The wardrobe is the account's and the endpoint says so: the figure is the same on every character.
       label: 'transmogs',
       icon: 'transmogs',
+      slug: 'transmogs',
       count: transmogs.value === undefined ? null : transmogs.value,
       accountWide: true
     },
     {
       label: 'honorableKills',
       icon: 'kills',
+      slug: 'honorable-kills',
       count: count(stats.honorableKills),
       accountWide: !!stats.honorableKills?.accountWide
     },
-    { label: 'honorLevel', icon: 'honorLevel', count: count(stats.honorLevel), accountWide: true }
+    { label: 'honorLevel', icon: 'honorLevel', slug: 'honor-level', count: count(stats.honorLevel), accountWide: true }
   ]
 })
+
+/**
+ * Where a figure leads: the ranking of that very figure, over everybody the site has read.
+ *
+ * The same reading the tiles beside the character make, and the same scope (`tileUrl` in
+ * `app/pages/[region]/[realm]/[name]/index.vue`): the figure under the reader's eye is a column of a table the
+ * site keeps, and the table is one press behind it - whole, rather than narrowed to the realm the character
+ * happens to play on, because the ranking is the population's and the filters that narrow it are on the page. The
+ * drawer is where the six figures *without* a bar live, so this is what turns the other half of the page's
+ * figures into doors as well - a title is a ranking, a quest is a ranking, a kill is a ranking.
+ */
+function figureUrl(slug: MetricLeaderboardSlug): string {
+  return localeUrl(metricLeaderboardPath(slug))
+}
 </script>
 
 <template>
@@ -187,10 +212,16 @@ const figures = computed<DrawerFigure[]>(() => {
           :class="open ? 'translate-y-0' : 'translate-y-2'"
         >
           <div class="grid grid-cols-2 gap-2 sm:gap-3">
-            <div
+            <!-- Every figure is a door into its own ranking, whole - the same press the tiles beside the
+                 character are (`figureUrl`). A tile the reader can act on is owed the two
+                 things the site's own links wear: the pointer's answer (the brand gold on the rim, the way
+                 `.hoa-panel-interactive` lights a plate) and a `title` for the keyboard and the hover. -->
+            <NuxtLink
               v-for="figure in figures"
               :key="figure.label"
-              class="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-center transition-colors hover:border-white/20 hover:bg-white/[0.07]"
+              :to="figureUrl(figure.slug)"
+              class="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-center transition-colors hover:border-wow-gold/40 hover:bg-white/[0.07] focus-visible:border-wow-gold/60 focus-visible:outline-none"
+              :title="`${t(figure.label)} — ${t('rankOpenTitle')}`"
             >
               <!-- The label the plate above wears, down to the size and the colour. -->
               <p class="text-xs text-gray-200 uppercase tracking-wider font-semibold">
@@ -222,7 +253,7 @@ const figures = computed<DrawerFigure[]>(() => {
               >
                 {{ figure.accountWide ? t('accountWide') : t('perCharacter') }}
               </p>
-            </div>
+            </NuxtLink>
           </div>
         </div>
       </div>

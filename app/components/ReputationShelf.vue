@@ -150,6 +150,16 @@ function labelOf(group: ReputationGroup): string {
 }
 
 const railEl = ref<HTMLElement | null>(null)
+/**
+ * The room the rail keeps under the pinned header.
+ *
+ * The header is sticky and is the whole of what the rail has to clear, so the measurement alone would put the
+ * rail's top edge exactly at the header's bottom edge - flush, which on a sub-page reads as one block: the
+ * header's tabs and the rail's chips touch at their rims. This is what parts them, and it is deliberately the
+ * same measure a group keeps above itself when a chip scrolls to it, so the two read as one margin.
+ */
+const STICKY_GAP = 16
+
 const stickyTop = ref(0)
 const anchorOffset = ref(128)
 const activeGroup = ref(0)
@@ -163,7 +173,7 @@ const anchored = computed(() => groups.value.length > 1)
 
 function measure(): void {
   const header = document.querySelector('header')
-  stickyTop.value = header ? Math.round(header.getBoundingClientRect().height) : 0
+  stickyTop.value = header ? Math.round(header.getBoundingClientRect().height) + STICKY_GAP : 0
   anchorOffset.value = stickyTop.value + 12
 }
 
@@ -320,7 +330,7 @@ const LEGEND = [
            they can raise, and the two switches that narrow the list without touching a count. Its bar is the
            brand gold every section's own total is drawn in, while the groups below keep the shelves'
            emerald. -->
-      <section class="hoa-panel mb-6 p-4 sm:p-5">
+      <section class="hoa-panel hoa-enter-frost mb-6 p-4 sm:p-5">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h2 class="text-lg font-bold text-white sm:text-xl">{{ $t('reputationsOverall') }}</h2>
           <span class="whitespace-nowrap text-sm font-bold tabular-nums text-wow-goldLight">
@@ -546,14 +556,16 @@ const LEGEND = [
           </nav>
         </div>
 
-        <!-- The journal: the column of panels the rail walks. -->
-        <div class="min-w-0 flex-1 space-y-5">
+        <!-- The journal: the column of panels the rail walks. They arrive one after another
+             (`hoa-stagger` on the column, `hoa-enter-frost` on each panel): the panels are the site's
+             glass, so they drift rather than fade (`app/assets/css/main.css`). -->
+        <div class="hoa-stagger min-w-0 flex-1 space-y-5">
           <section
             v-for="(entry, index) in groups"
             :key="entry.group.id"
             :ref="(element) => setGroup(index, element as Element | null)"
             :data-group="index"
-            class="hoa-panel hoa-section"
+            class="hoa-panel hoa-section hoa-enter-frost"
           >
             <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h3 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">

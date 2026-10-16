@@ -140,8 +140,10 @@ const cards = computed<Card[]>(() => {
         : DASH
     },
     {
+      // The king of collections: four figures added up rather than one ranking of its own, which is why the
+      // plate wears the crown (`king.svg` in `app/assets/icons`) rather than the mounts' own mark.
       key: 'collector',
-      icon: 'mounts',
+      icon: 'king',
       label: t('lbStatCollector'),
       value: leader ? formatNumber(leader.value) : DASH,
       hint: leader ? `${t('lbStatItems')} · ${nameOf(leader.player)}` : DASH,
@@ -168,7 +170,7 @@ const cards = computed<Card[]>(() => {
        before any of them is read as words. Below that they come two to a row, which leaves a phone with a plate it
        can read rather than a grid of truncated words. -->
   <div
-    class="grid grid-cols-2 gap-3 lg:grid-cols-5"
+    class="hoa-stagger grid grid-cols-2 gap-3 lg:grid-cols-5"
     :class="pending ? 'opacity-70' : ''"
     :aria-busy="pending ? 'true' : undefined"
   >
@@ -177,7 +179,7 @@ const cards = computed<Card[]>(() => {
       v-for="card in cards"
       :key="card.key"
       :href="card.href"
-      class="hoa-panel flex min-w-0 flex-col p-3.5 sm:p-4"
+      class="hoa-panel hoa-enter-frost flex min-w-0 flex-col p-3.5 sm:p-4"
       :class="card.href ? 'hoa-panel-interactive' : ''"
     >
       <!-- The plate's title row: the glyph the plate is known by, then the words. The glyph is twice

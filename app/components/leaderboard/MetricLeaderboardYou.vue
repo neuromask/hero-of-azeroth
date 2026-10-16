@@ -3,6 +3,13 @@
  * The character this browser has selected, drawn above a metric leaderboard: who they are, what they hold for the
  * figure the table ranks, and where they stand among the world, their region and their realm.
  *
+ * TEMP-OFF (2026-10-16): this plate is not mounted anywhere at the moment - it was taken off the front door and
+ * off every ranking page at the site owner's request, and the two places that drew it say so where they stood
+ * (`app/pages/index.vue`, `app/components/leaderboard/MetricLeaderboard.vue`, both marked with the same
+ * `TEMP-OFF`). Nothing here is dead code and nothing was removed: the component is kept whole, with its props,
+ * its request and its press, so that bringing it back is deleting two comment markers rather than rebuilding a
+ * plate. It is left here - documented, tested by the build - precisely because "for now" is the whole reason.
+ *
  * It is the plate the whole site wears - the hall of fame's own front door draws it too, about the overall rating -
  * wearing this ranking's question. The front door's plate
  * answers "where do I stand by score"; the ranking of one figure has to answer the same thing *for that figure* -

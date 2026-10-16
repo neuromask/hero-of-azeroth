@@ -17,7 +17,7 @@ import { metricLeaderboardPath } from '~/composables/metricLeaderboard'
 // string: a tile added for a figure the site ranks nowhere would not compile.
 import type { MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
 
-const { character, region, realm, name } = useCharacterView()
+const { character } = useCharacterView()
 const { t } = useI18n()
 const localeUrl = useLocaleUrl()
 
@@ -105,23 +105,24 @@ const tileColumns = computed<StatTile[][]>(() => {
 })
 
 /**
- * Where a tile leads: the ranking of the figure it prints, on this character's own realm.
+ * Where a tile leads: the ranking of the figure it prints, over the whole population.
  *
  * The tile shows one figure of one character, and the table behind it is the site's ranking of that very figure -
  * the same figure the hall of fame has a column for and the comparison board a row for, read from the same rows
- * (`METRIC_LEADERBOARDS` in `#shared/data/leaderboardSchema`). So pressing "Mounts 1 266" opens the mount ranking
- * of the realm the character plays on, where the plate at the top of the page holds *their* place among the world,
- * the region and that realm, with a press that walks the table to their row.
+ * (`METRIC_LEADERBOARDS` in `#shared/data/leaderboardSchema`). So pressing "Mounts 1 266" opens the mount ranking,
+ * and the number under the reader's eye is the ranking's own figure.
  *
- * The realm rather than the world, because the page pressed from is a character's own: the reader is asking about
- * where they stand, and the realm is the ranking they are in the middle of. The plate's own "World" link is one
- * press further when the answer they want is a wider one.
+ * The world rather than the character's realm or region: what a tile is a door into is the *table*, and the table
+ * the site keeps is the whole population. A realm-scoped page is a handful of rows - the site has read a few
+ * characters on most realms - so it answers "who else is here" rather than "where do I stand among everybody", and
+ * a reader who wants their own corner of it narrows it from the filters that page carries (which are the same two
+ * scopes the plate at the top of it links to).
  *
  * A figure whose place the site cannot work out without asking the table something extra - the score is a column of
  * figures rather than a statistic of the profile - is not a tile, so every tile here names a ranking that exists.
  */
 function tileUrl(key: MetricLeaderboardSlug) {
-  return localeUrl(metricLeaderboardPath(key, { region, realm }))
+  return localeUrl(metricLeaderboardPath(key))
 }
 </script>
 
@@ -154,12 +155,12 @@ function tileUrl(key: MetricLeaderboardSlug) {
          at a breakpoint while `vw` does not, so a viewport-based gap keeps widening and squeezes
          the boxes on large screens. -->
     <div class="relative grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-[36%] items-center">
-      <div v-for="(column, columnIndex) in tileColumns" :key="columnIndex" class="space-y-4">
+      <div v-for="(column, columnIndex) in tileColumns" :key="columnIndex" class="hoa-stagger space-y-4">
         <NuxtLink
           v-for="tile in column"
           :key="tile.key"
           :to="tileUrl(tile.key)"
-          class="hoa-panel hoa-panel-interactive block p-3 sm:p-4"
+          class="hoa-panel hoa-panel-interactive hoa-enter-frost block p-3 sm:p-4"
         >
           <!-- Two columns of two rows. The first row carries the glyph, the label and the big
                number, which share one line so their centres line up. The second row carries the
@@ -169,8 +170,9 @@ function tileUrl(key: MetricLeaderboardSlug) {
                label at both breakpoints) and sits in a square box, which is the 1:1 `viewBox` every
                icon file is drawn on, so nothing is stretched.
 
-               The whole tile is a link into the ranking of the figure it prints, on this character's own realm
-               (`tileUrl`): the number under the reader's eye is the ranking's own figure, so the table is one
+               The whole tile is a link into the ranking of the figure it prints (`tileUrl`) - the world's, with
+               every filter open, because the table the site keeps is the population's and a realm of it is a
+               handful of rows: the number under the reader's eye is the ranking's own figure, so the table is one
                press away rather than a trip through a menu. It is a link rather than a button because it goes
                somewhere, and it keeps the frame the statistics above it wear - the panel is `block` here, since a
                link is inline by default and would otherwise lay its own grid out as one. -->
@@ -217,13 +219,22 @@ function tileUrl(key: MetricLeaderboardSlug) {
       <div class="hoa-panel hoa-panel-interactive relative z-10 flex w-full items-center justify-between gap-3 px-4 py-2.5 sm:gap-6 sm:px-5 sm:py-3">
         <!-- The overall rating leads the row, the way it leads the table: the one figure that sums up
              everything beside it. -->
-        <div class="text-center">
-          <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('lbColScore') }}</span>
+        <!-- The overall rating, as the door into its own ranking: the score is the one figure of this plate the
+             site keeps a table of (`tileUrl('score')` - the hall of fame's own, over the whole population, like
+             every other tile of the page). The label warms on the hover rather than the plate lighting up whole,
+             because the two figures beside it lead nowhere - and the pointer is not put on the plate itself, whose
+             rim is shared by all three. -->
+        <NuxtLink
+          :to="tileUrl('score')"
+          class="group block text-center"
+          :title="`${$t('lbColScore')} — ${$t('rankOpenTitle')}`"
+        >
+          <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold transition-colors group-hover:text-white">{{ $t('lbColScore') }}</span>
           <span class="text-2xl sm:text-3xl font-extrabold text-wow-goldLight inline-flex items-center justify-center gap-2 whitespace-nowrap">
             <AppIcon name="trophy" class="h-[0.85em] w-[0.85em]" />
             {{ formatNumber(totalScore) }}
           </span>
-        </div>
+        </NuxtLink>
         <div class="h-8 w-[1px] bg-white/15"></div>
         <div class="text-center">
           <span class="text-xs text-gray-200 uppercase tracking-wider block font-semibold">{{ $t('itemLevel') }}</span>

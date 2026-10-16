@@ -31,8 +31,20 @@ const open = ref(false)
 /** The tab, the caret and the menu, which is what a click has to land outside of to shut it. */
 const root = ref<HTMLElement | null>(null)
 
-/** Whether the summary is what is being read, which is the tab the link lights. */
-const onSummary = computed(() => /\/collections\/?$/.test(route.path))
+/**
+ * Whether this character's own collections summary is what is being read, which is the tab the link lights.
+ *
+ * The tab's own address is compared with the one being read, not the word a path happens to end in - the same
+ * reading `AchievementMenu.vue` makes for the same reason, where a path ending in `achievements` lit a
+ * character's tab on the *ranking* of achievement points. No ranking collides with `collections` today; the
+ * test is written the same way in both menus so that one never can.
+ */
+const onSummary = computed(() => samePage(route.path, localeUrl(props.path)))
+
+/** Whether two addresses name one page: the same path, give or take a trailing slash. */
+function samePage(read: string, linked: string): boolean {
+  return read.replace(/\/+$/, '') === linked.replace(/\/+$/, '')
+}
 
 /** Whether `kind` is the shelf being read, which is the entry the menu lights. */
 function onShelf(kind: string): boolean {

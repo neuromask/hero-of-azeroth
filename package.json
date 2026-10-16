@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "preview": "nuxt preview --port 3100",
     "postinstall": "nuxt prepare",
+    "derive:font-metrics": "node scripts/font-metrics.mjs",
     "refresh:achievements": "node scripts/refresh-achievement-points.mjs",
     "refresh:achievements-atlas": "node scripts/refresh-collections.mjs --only=achievements",
     "refresh:achievement-meta": "node scripts/refresh-achievement-meta.mjs",

@@ -335,6 +335,13 @@ usePageSeo({
       <!-- The character this browser has selected, with their value for this figure and their three places: the
            plate every ranking wears, wearing this table's question, and the press that walks the table to their row
            (`app/components/leaderboard/MetricLeaderboardYou.vue`). -->
+      <!-- TEMP-OFF (asked for by the site's owner, 2026-10-16): the selected-character plate is taken off
+           every ranking page for now - it is off the front door by the same marker
+           (`app/pages/index.vue`). Nothing is deleted: cutting this comment out - this line and the closing
+           one under the tag - is the whole restore, and the note at the top of the component says what the
+           plate is and what a page hands it. The table's own mark on the reader's row does not depend on it:
+           that is `selectedKey`, which the table is still given.
+
       <MetricLeaderboardYou
         v-if="reading"
         class="mt-3"
@@ -343,6 +350,7 @@ usePageSeo({
         :scope="scope"
         @reveal="reveal"
       />
+      -->
 
       <!-- A place a link asked for that the ranking no longer holds: the site says so rather than pretending
            the link landed where it meant to. The rows below are the ranking around where it would have been. -->
@@ -368,8 +376,15 @@ usePageSeo({
       </div>
 
       <!-- Nobody has a figure yet at this scope, which is a fact about the site's own readings rather than a
-           failure: the way out is the rest of the ranking rather than a retry. -->
-      <div v-else-if="!rows.length" class="hoa-panel mt-3 rounded-2xl p-8 text-center">
+           failure: the way out is the rest of the ranking rather than a retry.
+
+           It waits for the read to *settle* (`!pending`), and that is the whole of why the guard is here:
+           moving to another ranking - or to another page of one - empties the rows for the moment the next
+           answer is on its way (`useMetricLeaderboardView` fetches under a key per question, so a new question
+           is a new, empty answer), and a reader was being told, in those ten milliseconds, that nobody holds a
+           figure yet - about a table they had not been shown. A wait is drawn as the table it is going to be
+           (`pending` dims it), never as a verdict on an answer that has not arrived. -->
+      <div v-else-if="!pending && !rows.length" class="hoa-panel mt-3 rounded-2xl p-8 text-center">
         <p class="text-sm text-gray-300">{{ t('lbMetricEmpty', { metric: metricLabel }) }}</p>
         <p class="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-gray-500">{{ t('lbMetricEmptyHint') }}</p>
         <NuxtLink v-if="region" :to="worldPath" class="hoa-tab hoa-liquid-glass mt-4 inline-flex">

@@ -184,7 +184,10 @@ function accentOf(item: ActivityItem) {
     <!-- The timeline: a rail down the left that every card hangs from, each event a node on it.
          The rail fades out at the bottom so the list reads as ongoing rather than cut off. Only
          the events the chosen filter keeps are drawn, newest first. -->
-    <ol v-else-if="filtered.length" class="relative min-w-0">
+    <!-- The entries arrive one after another, the node on the rail travelling with its card
+         (`hoa-stagger` on the list, `hoa-enter-frost` on each entry): an entry holds the site's glass, so it
+         drifts and is never faded (`app/assets/css/main.css`). -->
+    <ol v-else-if="filtered.length" class="hoa-stagger relative min-w-0">
       <span
         class="pointer-events-none absolute bottom-6 left-[26px] top-2 w-px bg-gradient-to-b from-wow-gold/50 via-white/10 to-transparent"
         aria-hidden="true"
@@ -193,7 +196,7 @@ function accentOf(item: ActivityItem) {
       <li
         v-for="item in rendered"
         :key="`${item.id}-${item.completedAt}`"
-        class="relative pb-5 pl-16 last:pb-0"
+        class="hoa-enter-frost relative pb-5 pl-16 last:pb-0"
       >
         <!-- The node on the rail, coloured by the kind of event. -->
         <span

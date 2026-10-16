@@ -875,11 +875,14 @@ onBeforeUnmount(() => {
              column does not jump when the card arrives. -->
         <div v-else class="h-14 animate-pulse rounded-xl bg-white/[0.04]" />
 
-        <ul class="mt-4 space-y-1.5">
+        <!-- The rows arrive one after another rather than in one frame: `hoa-stagger` on the list, `hoa-enter`
+             on each row (`app/assets/css/main.css`). A row is a plain box rather than glass of its own, which
+             is what lets it be faded at all - a plate drawn from the site's glass drifts without fading. -->
+        <ul class="hoa-stagger mt-4 space-y-1.5">
           <li
             v-for="row in comparison"
             :key="row.key"
-            class="overflow-hidden rounded-xl border transition-colors"
+            class="hoa-enter overflow-hidden rounded-xl border transition-colors"
             :class="winnerOf(row) === 'current' ? 'border-emerald-400/30 bg-emerald-400/[0.07]' : 'border-white/10 bg-white/[0.03]'"
           >
             <button
@@ -926,46 +929,55 @@ onBeforeUnmount(() => {
                  ranking itself - the one thing a figure in a column cannot say about the population on its own
                  (`app/components/leaderboard/MetricRankLinks.vue`). The distribution below is the population's,
                  and both columns show the same one; the places are this character's alone. -->
-            <div v-if="openMetric === metricOf(row)" class="space-y-2 border-t border-white/10 bg-black/20 p-2">
-              <!-- How full this figure's collection is, which stands over the places and the charts because it is
-                   the one reading of the three that is about the character alone. It is drawn only where a size
-                   for the figure is known - the collections carry one, three other rows are given one by the
-                   panel, and the rest print their count with no bar (`VersusMetricScale.vue`). -->
-              <VersusMetricScale
-                v-if="typeof row.value === 'number' && typeof row.total === 'number' && row.total > 0"
-                :metric="row.label"
-                :count="row.value"
-                :total="row.total"
-                :account-wide="row.accountWide"
-              />
+            <!-- The open row arrives and leaves rather than appearing and vanishing, in the site's own two
+                 classes (`app/assets/css/main.css`). The panel is content standing inside the column's glass
+                 rather than glass of its own, so it is one of the blocks that may be faded: the frost it
+                 stands in belongs to the section and is not inside this subtree. -->
+            <Transition
+              enter-active-class="hoa-enter"
+              leave-active-class="hoa-leave"
+            >
+              <div v-if="openMetric === metricOf(row)" class="space-y-2 border-t border-white/10 bg-black/20 p-2">
+                <!-- How full this figure's collection is, which stands over the places and the charts because it is
+                     the one reading of the three that is about the character alone. It is drawn only where a size
+                     for the figure is known - the collections carry one, three other rows are given one by the
+                     panel, and the rest print their count with no bar (`VersusMetricScale.vue`). -->
+                <VersusMetricScale
+                  v-if="typeof row.value === 'number' && typeof row.total === 'number' && row.total > 0"
+                  :metric="row.label"
+                  :count="row.value"
+                  :total="row.total"
+                  :account-wide="row.accountWide"
+                />
 
-              <!-- Where this character is in the ranking of the open figure, as three links into the ranking
-                   itself - the one thing a figure in a column cannot say about the population on its own
-                   (`app/components/leaderboard/MetricRankLinks.vue`). It stands in the same dark plate the
-                   charts below are drawn in, so the open row reads as three blocks of one panel. -->
-              <div v-if="openLeaderboard" class="rounded-xl border border-white/10 bg-black/25 p-3">
-                <MetricRankLinks
-                  :slug="openLeaderboard.slug"
-                  :label="$t(openLeaderboard.labelKey)"
-                  :region="region"
-                  :realm="realm"
-                  :name="name"
-                  :rank="rankFor(currentTableKey)"
-                  :pending="ranksPending"
-                  :failed="!!ranksError"
+                <!-- Where this character is in the ranking of the open figure, as three links into the ranking
+                     itself - the one thing a figure in a column cannot say about the population on its own
+                     (`app/components/leaderboard/MetricRankLinks.vue`). It stands in the same dark plate the
+                     charts below are drawn in, so the open row reads as three blocks of one panel. -->
+                <div v-if="openLeaderboard" class="rounded-xl border border-white/10 bg-black/25 p-3">
+                  <MetricRankLinks
+                    :slug="openLeaderboard.slug"
+                    :label="$t(openLeaderboard.labelKey)"
+                    :region="region"
+                    :realm="realm"
+                    :name="name"
+                    :rank="rankFor(currentTableKey)"
+                    :pending="ranksPending"
+                    :failed="!!ranksError"
+                  />
+                </div>
+
+                <MetricHistoryPanel
+                  :metric="metricOf(row)"
+                  :history="currentHistory"
+                  :pending="currentHistoryPending"
+                  :failed="!!currentHistoryError"
+                  :distribution="distribution"
+                  :players="panelPlayers"
+                  :highlight="currentTableKey"
                 />
               </div>
-
-              <MetricHistoryPanel
-                :metric="metricOf(row)"
-                :history="currentHistory"
-                :pending="currentHistoryPending"
-                :failed="!!currentHistoryError"
-                :distribution="distribution"
-                :players="panelPlayers"
-                :highlight="currentTableKey"
-              />
-            </div>
+            </Transition>
           </li>
         </ul>
       </section>
@@ -1122,11 +1134,13 @@ onBeforeUnmount(() => {
             />
           </div>
 
-          <ul class="mt-4 space-y-1.5">
+          <!-- The rows arrive one after another here too, by the same two classes the first column's list wears:
+               two columns of a comparison are two lists of the same length, and they should read as one board. -->
+          <ul class="hoa-stagger mt-4 space-y-1.5">
             <li
               v-for="row in comparison"
               :key="row.key"
-              class="overflow-hidden rounded-xl border transition-colors"
+              class="hoa-enter overflow-hidden rounded-xl border transition-colors"
               :class="winnerOf(row) === 'target' ? 'border-emerald-400/30 bg-emerald-400/[0.07]' : 'border-white/10 bg-white/[0.03]'"
             >
               <button
@@ -1169,42 +1183,49 @@ onBeforeUnmount(() => {
               <!-- The same metric as the first column's, opened by the one shared `openMetric`: the second
                    character's own history, with the population's histogram and both markers beside it. The places
                    over it are their own - computed for this side of the comparison and for no other. -->
-              <div v-if="openMetric === metricOf(row)" class="space-y-2 border-t border-white/10 bg-black/20 p-2">
-                <!-- The second character's own fill of the same shelf, drawn exactly as the first column draws
-                     it - and from that character's figures, not this one's. -->
-                <VersusMetricScale
-                  v-if="typeof row.target.value === 'number' && typeof row.target.total === 'number' && row.target.total > 0"
-                  :metric="row.label"
-                  :count="row.target.value"
-                  :total="row.target.total"
-                  :account-wide="row.target.accountWide"
-                />
+              <!-- The same arrival as the first column's panel, and for the same reason: this side is one of
+                   two readings of one row, so the two panels move alike. -->
+              <Transition
+                enter-active-class="hoa-enter"
+                leave-active-class="hoa-leave"
+              >
+                <div v-if="openMetric === metricOf(row)" class="space-y-2 border-t border-white/10 bg-black/20 p-2">
+                  <!-- The second character's own fill of the same shelf, drawn exactly as the first column draws
+                       it - and from that character's figures, not this one's. -->
+                  <VersusMetricScale
+                    v-if="typeof row.target.value === 'number' && typeof row.target.total === 'number' && row.target.total > 0"
+                    :metric="row.label"
+                    :count="row.target.value"
+                    :total="row.target.total"
+                    :account-wide="row.target.accountWide"
+                  />
 
-                <!-- Their own places, in the same dark plate as the charts below: computed for this side of the
-                     comparison and for no other. -->
-                <div v-if="openLeaderboard && target" class="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <MetricRankLinks
-                    :slug="openLeaderboard.slug"
-                    :label="$t(openLeaderboard.labelKey)"
-                    :region="target.region"
-                    :realm="target.realm"
-                    :name="target.name"
-                    :rank="rankFor(targetTableKey)"
-                    :pending="ranksPending"
-                    :failed="!!ranksError"
+                  <!-- Their own places, in the same dark plate as the charts below: computed for this side of the
+                       comparison and for no other. -->
+                  <div v-if="openLeaderboard && target" class="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <MetricRankLinks
+                      :slug="openLeaderboard.slug"
+                      :label="$t(openLeaderboard.labelKey)"
+                      :region="target.region"
+                      :realm="target.realm"
+                      :name="target.name"
+                      :rank="rankFor(targetTableKey)"
+                      :pending="ranksPending"
+                      :failed="!!ranksError"
+                    />
+                  </div>
+
+                  <MetricHistoryPanel
+                    :metric="metricOf(row)"
+                    :history="targetHistory"
+                    :pending="targetHistoryPending"
+                    :failed="!!targetHistoryError"
+                    :distribution="distribution"
+                    :players="panelPlayers"
+                    :highlight="targetTableKey"
                   />
                 </div>
-
-                <MetricHistoryPanel
-                  :metric="metricOf(row)"
-                  :history="targetHistory"
-                  :pending="targetHistoryPending"
-                  :failed="!!targetHistoryError"
-                  :distribution="distribution"
-                  :players="panelPlayers"
-                  :highlight="targetTableKey"
-                />
-              </div>
+              </Transition>
             </li>
           </ul>
         </template>

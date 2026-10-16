@@ -321,6 +321,14 @@ onMounted(loadHistory)
            about the reader, so it stands over the plates about everybody else, and a reader this browser knows
            nobody for is shown no plate at all: the way to look somebody up is the search in the row under the
            header, not a plate of the population's. -->
+      <!-- TEMP-OFF (asked for by the site's owner, 2026-10-16): the selected-character plate is taken off
+           this page for now, exactly as it is off every ranking page (the same marker in
+           `app/components/leaderboard/MetricLeaderboard.vue`). Nothing is deleted: cutting this comment
+           out - this line and the closing one under the tag - is the whole restore, and the note at the
+           top of `app/components/leaderboard/MetricLeaderboardYou.vue` says what the plate is and what a
+           page hands it. The declarations it was drawn from are deliberately left in the script below
+           (`score`, `reveal`), because they are what it is handed when it comes back.
+
       <MetricLeaderboardYou
         v-if="you && score"
         class="mt-3"
@@ -330,6 +338,7 @@ onMounted(loadHistory)
         :scope="{}"
         @reveal="reveal"
       />
+      -->
 
       <!-- And the plates about the population: how many members the site holds and who is on it right now, the
            class most of them wear, and the leader of each figure it ranks - each of those a door into the ranking

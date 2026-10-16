@@ -508,20 +508,17 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
         </NuxtLink>
 
         <!-- The comparison, as the second half of that entry: the character read against somebody else. It is
-             drawn against the name (`-ml-px` merges the shared rim) so the two read as one control, and it
-             carries no word of its own - the label and the tooltip say what the glyph means, and the glyph is
-             the two arrows pointing opposite ways, the one thing in this row that says what it does rather than
-             where it goes. Its box is the collections caret's own - the same padding, the same sixteen-pixel
-             glyph, the same hairline of a rim, which is what makes the two icon buttons of the row one width -
-             and `shrink-0` is what keeps it that width in a row that has run out of room, where the name beside
-             it truncates instead. -->
+             drawn against the name (`-ml-px` merges the shared rim) so the two read as one control, and it carries
+             the word after the glyph rather than instead of it: the two arrows pointing opposite ways are the one
+             thing in this row that says what the entry *does* rather than where it goes, and the word says it out
+             loud for the reader who does not read glyphs. `shrink-0` is what keeps the word whole in a row that
+             has run out of room, where the name beside it truncates instead - and the accessible name is the word
+             itself, so no label has to be added on top of it. -->
         <NuxtLink
           :to="links.compare"
-          class="hoa-tab hoa-liquid-glass -ml-px shrink-0 rounded-l-none px-3"
+          class="hoa-tab hoa-liquid-glass -ml-px shrink-0 rounded-l-none"
           :class="{ 'hoa-tab-active': active === 'compare' }"
           :aria-current="active === 'compare' ? 'page' : undefined"
-          :aria-label="t('tabVs')"
-          :title="t('tabVs')"
         >
           <svg
             class="h-4 w-4 shrink-0"
@@ -535,6 +532,7 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
           >
             <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
           </svg>
+          <span class="whitespace-nowrap">{{ t('tabVs') }}</span>
         </NuxtLink>
       </div>
 

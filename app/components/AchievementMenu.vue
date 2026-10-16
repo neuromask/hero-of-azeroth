@@ -32,8 +32,22 @@ const open = ref(false)
 /** The tab, the caret and the menu, which is what a click has to land outside of to shut it. */
 const root = ref<HTMLElement | null>(null)
 
-/** Whether the summary is what is being read, which is the tab the link lights. */
-const onSummary = computed(() => /\/achievements\/?$/.test(route.path))
+/**
+ * Whether this character's own achievements summary is what is being read, which is the tab the link lights.
+ *
+ * The test is the tab's whole address rather than the word it ends in. The site also keeps a *ranking* of
+ * achievement points - `/leaderboards/achievements` - and a path that merely ended in `achievements` lit this
+ * tab up on it: the row then claimed a table about everybody was "this character's achievements", and the
+ * reader was pointed at the wrong entry of the row. An address is compared with the address the tab itself
+ * opens, so they can only agree when they name the same page; a trailing slash is not a different page, and
+ * both sides are built in the language being read, so the two spellings of one page still agree.
+ */
+const onSummary = computed(() => samePage(route.path, localeUrl(props.path)))
+
+/** Whether two addresses name one page: the same path, give or take a trailing slash. */
+function samePage(read: string, linked: string): boolean {
+  return read.replace(/\/+$/, '') === linked.replace(/\/+$/, '')
+}
 
 /** Whether `category` is the shelf being read, which is the entry the menu lights. */
 function onCategory(category: string): boolean {
