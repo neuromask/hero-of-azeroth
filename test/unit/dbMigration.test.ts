@@ -103,6 +103,36 @@ describe('migrateCharacterOwnership', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM characters WHERE user_id IS NULL').get()).toMatchObject({ n: 1 })
   })
 
+  it('carries a column the added-columns pass has just put on the table', () => {
+    // The order `migrate` runs in: the added columns first, the rebuild after (`server/utils/db`). By the time
+    // the table is rebuilt it therefore holds columns the older build never wrote - the item level is one - and
+    // a rebuilt table that names every old column but not that one is a copy that fails outright. That is how a
+    // database predating guests kept a `user_id` it could not do without, and no guest could be filed into it.
+    const db = oldDatabase()
+    db.exec('ALTER TABLE characters ADD COLUMN ilvl REAL')
+    db.exec('UPDATE characters SET ilvl = 320 WHERE id = 11')
+
+    migrateCharacterOwnership(db)
+
+    const character = db.prepare('SELECT user_id, ilvl FROM characters WHERE id = 11').get() as {
+      user_id: number
+      ilvl: number | null
+    }
+    expect(character.user_id).toBe(7)
+    expect(character.ilvl).toBe(320)
+
+    const owner = (db.prepare('PRAGMA table_info(characters)').all() as unknown as { name: string; notnull: number }[])
+      .find((column) => column.name === 'user_id')
+    expect(owner?.notnull).toBe(0)
+
+    // And a guest may now be written, which is the whole point of the rebuild.
+    db.prepare(
+      `INSERT INTO characters (user_id, region, realm_slug, name, name_key, display_name, last_seen_at)
+       VALUES (NULL, 'eu', 'gordunni', 'Stranger', 'stranger', 'Stranger', 1700000002)`
+    ).run()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM characters WHERE user_id IS NULL').get()).toMatchObject({ n: 1 })
+  })
+
   it('holds one row per guest address, and the account constraint as it was', () => {
     const db = oldDatabase()
     migrateCharacterOwnership(db)

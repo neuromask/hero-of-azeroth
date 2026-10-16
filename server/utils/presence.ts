@@ -12,19 +12,26 @@
  * while an account whose tab was closed loses it within five minutes. The dot is a courtesy, not a claim
  * about where somebody is sitting.
  *
- * What it answers is the *mains*: the one character per account the table draws (see
- * `./leaderboardExclusions`), keyed the way the table keys a row - `leaderboardKey` here and
- * `searchHistoryKey` in the browser write the same string, which is what lets a row and a key be compared
- * at all.
+ * What it answers is the rows of the table: the one character per account the hall of fame draws. That identity
+ * is the table's own - the account's main, or the strongest character it has until one is named
+ * (`./leaderboardRows`) - so the dot is read from the very rows a reader is looking at rather than worked out
+ * again here. Reading `characters.is_main` instead, as this once did, marked nobody for an account that had
+ * never named a main: its row is in the table all the same, and the dot on it never lit.
  *
- * The read is memoised for half a minute, the way the exclusions beside it are: every reader of the page
+ * The read is memoised for half a minute: every reader of the page
  * asks for presence, and a query per reader for a fact that moves once a minute is a query nobody needs to
  * pay. The memo is short enough that the dot a reader sees was stamped, at worst, half a minute ago.
  *
- * Like the exclusions, this is a small, self-contained reach into SQLite: a process that cannot read the
- * database marks nobody, which is the quiet answer rather than a broken page.
+ * It is a small, self-contained reach into SQLite: a process that cannot read the
+ * database marks nobody, which is the quiet answer rather than a broken page. A table that has not been built
+ * yet - the first moments of a process, before the startup pass has written it - is the same quiet answer, and
+ * it heals the moment the table exists.
  */
 import { leaderboardKey } from './leaderboardExclusions'
+// The clock the heartbeat's stamp is written with, imported rather than taken from the auto-imported global:
+// every other module here reads it this way, and a bare name that is missing fails silently inside the `try`
+// below - which is exactly how a presence read comes to mark nobody without saying so.
+import { nowSec } from './db'
 
 /** How long an account is read as being on the site after its last beat. */
 export const PRESENCE_WINDOW_SECONDS = 5 * 60
@@ -33,6 +40,15 @@ export const PRESENCE_WINDOW_SECONDS = 5 * 60
 const CACHE_MS = 30 * 1000
 
 let cached: { keys: Set<string>; at: number } | null = null
+
+/**
+ * Forgets the memo, which is what a test that swaps the database under these modules needs
+ * (`test/helpers/memoryDb.ts`): the set is keyed on the clock rather than on a revision, so nothing else would
+ * make it stale.
+ */
+export function clearPresenceCache(): void {
+  cached = null
+}
 
 /**
  * Stamps an account as having been seen now, which is the whole of what a heartbeat writes.
@@ -64,12 +80,14 @@ export function onlineLeaderboardKeys(): Set<string> {
   const keys = new Set<string>()
 
   try {
+    // The rows the table draws, and the account behind each of them: a main and each of its alts are one
+    // account, so the address a reader is looking at is the one the row carries (`./leaderboardRows`).
     const rows = useDb()
       .prepare(
-        `SELECT c.region, c.realm_slug, c.name_key
-           FROM characters c
-           JOIN users u ON u.id = c.user_id
-          WHERE c.is_main = 1 AND u.last_seen_at IS NOT NULL AND u.last_seen_at >= ?`
+        `SELECT l.region, l.realm_slug, l.name_key
+           FROM leaderboard l
+           JOIN users u ON u.id = l.user_id
+          WHERE l.is_account = 1 AND u.last_seen_at IS NOT NULL AND u.last_seen_at >= ?`
       )
       .all(nowSec() - PRESENCE_WINDOW_SECONDS) as { region: string; realm_slug: string; name_key: string }[]
 

@@ -26,6 +26,12 @@ function setEnv(key: string, value: string | undefined): void {
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'hoa-paths-'))
+
+  // The environment is put back before every case, not only after it: `dataDirectory()` reads `NUXT_DATA_DIR`
+  // at call time, so a test file that points the site's data somewhere for its own reasons must not decide what
+  // this one sees. Without this the cases below pass or fail on which files happened to run beside them.
+  touched.add('NUXT_DATA_DIR')
+  delete process.env.NUXT_DATA_DIR
 })
 
 afterEach(() => {

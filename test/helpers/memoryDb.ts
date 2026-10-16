@@ -13,13 +13,18 @@
  * up here as a failing query rather than a silent pass, which is the point of writing them down.
  */
 import { DatabaseSync } from 'node:sqlite'
+import { clearPresenceCache } from '../../server/utils/presence'
 import { bumpStatisticsRevision } from '../../server/utils/statisticsPopulation'
 
 const SCHEMA = `
 CREATE TABLE users (
   id INTEGER PRIMARY KEY,
   hide_from_fame INTEGER NOT NULL DEFAULT 0,
-  auth_expired INTEGER NOT NULL DEFAULT 0
+  auth_expired INTEGER NOT NULL DEFAULT 0,
+  -- When the account was last seen on the site, which is the whole of what the hall of fame's online dot is
+  -- read from (see ./server/utils/presence). Named here for the same reason every other column is: the read
+  -- that asks for it must find it, or a test of the dot would pass by marking nobody.
+  last_seen_at INTEGER
 );
 
 CREATE TABLE characters (
@@ -284,9 +289,11 @@ export function createMemoryDb(): MemoryDb {
  * One of them cannot be cleared by hand, and is cleared here: a memo of the statistics is keyed on a revision
  * the app's own writes bump (`server/utils/statisticsPopulation`), while a test writes its rows through the
  * helpers below. Handing the modules a different database is what makes everything they remember of the
- * previous one stale, so the revision is moved at the same moment.
+ * previous one stale, so the revision is moved at the same moment. The same goes for the presence memo, which
+ * is keyed on the clock rather than on a revision and has no other way to be told.
  */
 export function installUseDb(db: DatabaseSync): void {
   ;(globalThis as Record<string, unknown>).useDb = () => db
   bumpStatisticsRevision()
+  clearPresenceCache()
 }

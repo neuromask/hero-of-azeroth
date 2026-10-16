@@ -449,8 +449,6 @@ export function migrateCharacterOwnership(connection: DatabaseSync): void {
   // Nothing to do: no table at all (a fresh database, created by the schema above) or one already rebuilt.
   if (!owner || owner.notnull === 0) return
 
-  const names = columns.map((column) => column.name).join(', ')
-
   connection.exec('PRAGMA foreign_keys = OFF')
 
   try {
@@ -467,6 +465,12 @@ export function migrateCharacterOwnership(connection: DatabaseSync): void {
       display_name TEXT,
       class_id INTEGER,
       level INTEGER,
+      -- The item level the character wears, which this build keeps on the character rather than on its readings
+      -- (the added-columns list adds it before this runs, so an older table has it by now). It has to be named
+      -- here: the copy below writes every column the old table has, and a rebuilt table without one of them is a
+      -- copy that fails outright - which is how a database that predates guests was left with a user_id it
+      -- could not do without, and no guest could ever be filed into it.
+      ilvl REAL,
       faction TEXT,
       avatar TEXT,
       profession_1 TEXT,
@@ -478,6 +482,23 @@ export function migrateCharacterOwnership(connection: DatabaseSync): void {
       UNIQUE (user_id, region, realm_slug, name_key)
     )`)
 
+    // Only the columns both tables have. `ADDED_COLUMNS` runs before this, so a column this build knows and the
+    // old table has just been added and must be carried; a column the rebuilt table has never heard of must not
+    // be the reason the whole rebuild is abandoned - a migration may never be why a site comes up without its
+    // history. What cannot be carried is named rather than dropped in silence.
+    const rebuilt = new Set(
+      (connection.prepare('PRAGMA table_info(characters_migration)').all() as unknown as { name: string }[]).map(
+        (column) => column.name
+      )
+    )
+    const carried = columns.map((column) => column.name).filter((name) => rebuilt.has(name))
+    const left = columns.map((column) => column.name).filter((name) => !rebuilt.has(name))
+
+    if (left.length) {
+      console.warn(`[db] the rebuild of characters cannot carry ${left.join(', ')}`)
+    }
+
+    const names = carried.join(', ')
     connection.exec(`INSERT INTO characters_migration (${names}) SELECT ${names} FROM characters`)
     connection.exec('DROP TABLE characters')
     connection.exec('ALTER TABLE characters_migration RENAME TO characters')
