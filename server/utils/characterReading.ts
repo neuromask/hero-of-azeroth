@@ -353,8 +353,13 @@ export type ProfileReading = Partial<Omit<CharacterData, 'stats'>> & { stats?: P
  * two readers of a profile file the second they read it; the migration that moves the hall of fame's own table
  * into the database (`./statisticsMigration`) files the day that table recorded instead, because a reading taken
  * days ago must not be filed as one taken now - a history would then start with a point that never happened.
+ *
+ * It answers whether it *filed a point*: `true` when the figures moved the day's own row, and `false` when the
+ * reading said exactly what was already on file. Only a caller that counts something - the background pass
+ * (`syncDueCharacters` in `./accountSync`, whose diagnostics print how much of a batch really moved) - has any
+ * use for the flag, and every other caller ignores it as it always has.
  */
-export function fileDailyReading(characterId: number, profile: ProfileReading, readAt?: number): void {
+export function fileDailyReading(characterId: number, profile: ProfileReading, readAt?: number): boolean {
   const db = useDb()
   const moment = readAt ?? nowSec()
 
@@ -425,7 +430,7 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
     // moves the row without moving a figure (`refreshRowOfMember`).
     if (Object.keys(next).every((key) => next[key] === latest[key])) {
       refreshRowOfMember(characterId)
-      return
+      return false
     }
   }
 
@@ -467,7 +472,7 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
   // was taken, and a day the site has read since already says more than the row being moved.
   if (existing && existing.taken_at > moment) {
     refreshRowOfMember(characterId)
-    return
+    return false
   }
 
   // Sixteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list - and the two
@@ -517,6 +522,8 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
   // And the row itself, when the character is nobody's - which is the same call whether or not a point was
   // filed above, because the row is not made of the point alone.
   refreshRowOfMember(characterId)
+
+  return true
 }
 
 /**

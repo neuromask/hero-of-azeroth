@@ -1,5 +1,8 @@
 import { readMountJournal, refreshMountJournal, resolveArmoryBackground } from './armory'
 import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
+// The process's own counters and log, written beside every call this module makes and read by the admin
+// panel's diagnostics (`server/utils/adminDiagnostics`). A plain import, like the rest of this file's.
+import { recordBlizzardCall, recordDiagnostic, recordToleratedAbsence } from './adminDiagnostics'
 // Imported rather than auto-imported: the environment in front of the frozen runtime config is a rule of this
 // module's own (`server/utils/runtimeEnv`), and a plain import keeps it working under the unit tests, which
 // have no Nitro globals to install.
@@ -24,12 +27,75 @@ const BLIZZARD_TIMEOUT_MS = 15_000
  *
  * The host varies - the game data API, the OAuth token, the account profile - but the need for a bound does
  * not, and a call added here cannot forget it.
+ *
+ * It is also the one place the *counters* live (`server/utils/adminDiagnostics`): how many calls this process
+ * made, how many failed and how, and how long each took. The instrumentation is deliberately invisible to the
+ * caller - the answer is handed back untouched and a failure is re-thrown exactly as it arrived, so nothing
+ * about the site's own error handling, retries or caching can be moved by a panel watching it.
  */
 export function callBlizzard<T>(url: string, options: Record<string, unknown> = {}): Promise<T> {
   // Typed by the caller rather than by `$fetch`'s inference off the request: every call below names the shape
   // it expects, and this hands that answer back unchanged.
-  return $fetch(url, { timeout: BLIZZARD_TIMEOUT_MS, ...options }) as Promise<T>
+  const startedAtMs = Date.now()
+  const category = endpointCategory(url)
+
+  return ($fetch(url, { timeout: BLIZZARD_TIMEOUT_MS, ...options }) as Promise<T>).then(
+    (answer) => {
+      recordBlizzardCall({ ok: true, durationMs: Date.now() - startedAtMs, category })
+      return answer
+    },
+    (error: unknown) => {
+      const status = upstreamStatus(error)
+      const timeout = isTimeout(error)
+      recordBlizzardCall({ ok: false, durationMs: Date.now() - startedAtMs, status, timeout, category })
+
+      // A 404 is Blizzard answering honestly about a character that is not there, so it is not a diagnostic:
+      // filing one per mistyped name would bury the failures that say something is wrong with the site.
+      if (status !== 404) {
+        const refused = status === 401 || status === 403
+
+        recordDiagnostic({
+          level: timeout || status >= 500 || refused ? 'error' : 'warn',
+          category: 'blizzard',
+          // A refused credential is the one failure that belongs to whoever runs the site rather than to a
+          // reader, so it says so instead of looking like an outage or a missing character.
+          message: refused
+            ? 'Blizzard refused the site’s credentials'
+            : timeout
+              ? 'Blizzard call ran past its deadline'
+              : 'Blizzard call failed',
+          status: status || undefined
+        })
+      }
+
+      throw error
+    }
+  )
 }
+
+/**
+ * What a call was *of*, from the shape of its address - and never from the address itself.
+ *
+ * The panel's breakdown answers "sixty of those failures were collection documents" without the panel ever
+ * holding a URL, a realm or a name: the category is a word out of a closed list, derived here and thrown away
+ * with the URL (see `BLIZZARD_CATEGORIES` in `#shared/data/adminDiagnostics`).
+ */
+function endpointCategory(url: string): string {
+  if (url.includes('/oauth/token')) return 'token'
+  if (url.includes('/realm/index')) return 'realms'
+  if (url.includes('/data/wow/')) return 'index'
+  if (url.includes('/character-media')) return 'media'
+  if (url.includes('/collections/')) return 'collections'
+  if (url.includes('/reputations')) return 'reputations'
+  if (url.includes('/mythic-keystone-profile')) return 'mythic-keystone'
+  if (url.includes('/pvp-summary')) return 'pvp'
+  if (url.includes('/titles')) return 'titles'
+  if (url.includes('/quests/completed')) return 'quests'
+  if (url.includes('/professions')) return 'professions'
+  if (url.includes('/profile/wow/character/')) return 'profile'
+  return 'other'
+}
+
 
 /** Blizzard's own status for a call, whatever shape the failure reached us in. */
 function upstreamStatus(err: unknown): number {
@@ -86,7 +152,15 @@ function upstreamFailure(err: unknown, what = 'character'): never {
   if (status === 401 || status === 403) {
     // The site's own credentials were refused. Nothing about the reader, and nothing about a character - the
     // one failure that belongs to whoever runs the site, and says so instead of looking like an outage.
-    throw createError({ statusCode: 502, statusMessage: 'The site could not authenticate with the Blizzard API' })
+    //
+    // The `reason` rides along because the retry policy has to tell this apart from a timeout: a rejected token
+    // is not a bad moment to try again in five minutes (see `classifySyncFailure` in `./syncRetry`). It says
+    // only *which kind* of failure it was, and carries nothing of the upstream answer.
+    throw createError({
+      statusCode: 502,
+      statusMessage: 'The site could not authenticate with the Blizzard API',
+      data: { reason: 'auth' }
+    })
   }
 
   if (status >= 500) {
@@ -460,6 +534,21 @@ async function fetchCharacterProfile(
     // out of the second pass as a 503, which is how a timeout came to look like an outage.
     throw summary.reason
   }
+
+  /**
+   * Every document beside the summary is *optional*, and its absence is expected rather than exceptional.
+   *
+   * Blizzard answers `404` for a character's Mythic+ history when they have never run a key, and a collection
+   * document can be refused on its own without the character being wrong. The read tolerates all twelve of them
+   * (`status === 'fulfilled'` below, and a figure that cannot be read is carried forward rather than zeroed), and
+   * until now the panel could not tell that wave of expected 404s apart from a character that does not exist: one
+   * missing character is *twelve* failed requests - the profile read fans out over a dozen documents and Blizzard
+   * refuses every one of them - and the reported incident showed a hundred and thirty-two failures of which most
+   * were exactly this. They are filed here, once per read, as what they are - tolerated - while remaining counted
+   * as the failed requests they also were.
+   */
+  const optional = [media, mounts, pets, toys, decor, reps, mplus, totals, titles, quests, professions, pvp]
+  for (const result of optional) if (result.status === 'rejected') recordToleratedAbsence()
 
   const charData = summary.value
   const mediaData = media.status === 'fulfilled' ? media.value : null

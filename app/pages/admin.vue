@@ -19,11 +19,19 @@
  */
 definePageMeta({ alias: '/ru/admin' })
 
-import backdrop from '~/assets/img/bg-01.webp'
+// The hall of fame's own backdrop, so the panel stands on the picture the site is known by rather than on a
+// second one of its own (`app/pages/index.vue`, `app/components/SiteDocument.vue`).
+import backdrop from '~/assets/img/hf-bg_01.webp'
 import { EDITABLE_METRIC_MAXIMA } from '#shared/data/siteSettings'
 import type { MetricKey } from '#shared/data/historySchema'
+// The shape the panel draws, shared with the endpoint that builds it (`server/api/admin/diagnostics`), so a
+// figure added on one side is a type error on the other rather than a card that prints nothing.
+import type { AdminDiagnostics, DiagnosticEntry } from '#shared/data/adminDiagnostics'
+// The site's own spelling of a number and of a size: the panel prints figures the rest of the site prints.
+import { formatBytes } from '#shared/utils/format-bytes'
+import { formatNumber } from '#shared/utils/formatNumber'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const localeUrl = useLocaleUrl()
 
 /**
@@ -130,10 +138,429 @@ async function save() {
     saving.value = false
   }
 }
+
+/**
+ * The dashboard half: what the running process says about itself, read from one read-only endpoint.
+ *
+ * It is fetched in the browser rather than awaited in the page, because it is the one thing here that has to
+ * move while the page is open: the panel refreshes it every twenty seconds, and stops the moment the tab is
+ * hidden (`visibilitychange`) so a panel left open in a background tab costs the server nothing. Two asks that
+ * land together share one request (`inFlight`) rather than making two, and the endpoint behind them answers from
+ * its own short cache, so a page that is watched is still one query a window (`server/api/admin/diagnostics`).
+ *
+ * Nothing here is measured: every figure is what the server counted, and a figure the server cannot measure is
+ * drawn as `—` rather than as a zero.
+ */
+const diagnostics = ref<AdminDiagnostics | null>(null)
+const diagnosticsLoading = ref(false)
+const diagnosticsFailed = ref(false)
+/** When this browser last heard from the endpoint, in milliseconds - the panel's own clock, not the server's. */
+const diagnosticsUpdatedAt = ref<number | null>(null)
+
+/** How often the panel asks, while it is the tab being looked at. */
+const POLL_MS = 20_000
+
+/** The request in flight, if any: a second ask joins it rather than making a second one. */
+let inFlight: Promise<void> | null = null
+let poller: ReturnType<typeof setInterval> | null = null
+
+async function loadDiagnostics(): Promise<void> {
+  if (!isAdmin.value) return
+  if (inFlight) return inFlight
+
+  diagnosticsLoading.value = true
+
+  const request = (async () => {
+    try {
+      diagnostics.value = await $fetch<AdminDiagnostics>('/api/admin/diagnostics')
+      diagnosticsUpdatedAt.value = Date.now()
+      diagnosticsFailed.value = false
+    } catch {
+      // A failed refresh is said out loud and the last answer is kept: a panel that blanked itself because one
+      // poll missed would be less useful than one that says "this is what I last saw".
+      diagnosticsFailed.value = true
+    } finally {
+      diagnosticsLoading.value = false
+      inFlight = null
+    }
+  })()
+
+  inFlight = request
+  return request
+}
+
+function startPolling(): void {
+  if (poller) return
+  poller = setInterval(() => {
+    // The timer is left running and does nothing while the tab is hidden, so a return to the tab is immediate
+    // (`onVisibility` asks once, at once) rather than up to twenty seconds away.
+    if (!document.hidden) void loadDiagnostics()
+  }, POLL_MS)
+}
+
+function stopPolling(): void {
+  if (!poller) return
+  clearInterval(poller)
+  poller = null
+}
+
+function onVisibility(): void {
+  if (document.hidden) {
+    stopPolling()
+    return
+  }
+
+  void loadDiagnostics()
+  startPolling()
+}
+
+onMounted(() => {
+  if (!isAdmin.value) return
+
+  void loadDiagnostics()
+  startPolling()
+  document.addEventListener('visibilitychange', onVisibility)
+})
+
+onBeforeUnmount(() => {
+  stopPolling()
+  document.removeEventListener('visibilitychange', onVisibility)
+})
+
+/** The language the figures are spelled in, so a Russian panel prints `1 234` and an English one `1,234`. */
+const timeFormat = computed(
+  () => new Intl.DateTimeFormat(locale.value === 'ru' ? 'ru-RU' : 'en-GB', { timeStyle: 'medium' })
+)
+
+/**
+ * A counted figure, or a dash where nothing was counted.
+ *
+ * The spelling is the site's own (`#shared/utils/formatNumber`: grouped by a plain space, the same figure on
+ * both languages), so the panel a Russian administrator reads and the board every reader sees cannot disagree
+ * about what a number looks like. A dash is what a figure the server does not have prints - never a zero, which
+ * would read as "counted, and it was nothing".
+ */
+function num(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? formatNumber(value) : '—'
+}
+
+/**
+ * A size in bytes with its unit, from the one implementation of that rule (`#shared/utils/format-bytes`).
+ *
+ * It is a one-line wrapper rather than an alias so that the panel reads as the rest of the page does, and so
+ * that the rule itself is testable without a component (see `test/unit/formatBytes.test.ts`).
+ */
+function bytes(value: number | null | undefined): string {
+  return formatBytes(value)
+}
+
+/** A span of seconds as the two largest parts of it: `3h 12m`, `4m 05s`, `9s`. */
+function duration(seconds: number | null | undefined): string {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return '—'
+
+  const total = Math.max(0, Math.round(seconds))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const rest = total % 60
+
+  if (hours) return `${hours}h ${String(minutes).padStart(2, '0')}m`
+  if (minutes) return `${minutes}m ${String(rest).padStart(2, '0')}s`
+  return `${rest}s`
+}
+
+/** A moment in seconds since the epoch, as this browser's own clock prints it. */
+function clock(seconds: number | null | undefined): string {
+  if (typeof seconds !== 'number' || !seconds) return t('adminNever')
+  return timeFormat.value.format(new Date(seconds * 1000))
+}
+
+/** Milliseconds, which the panel prints with their unit like every other figure. */
+function milliseconds(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${num(value)} ms` : '—'
+}
+
+/**
+ * The safe identity of a logged failure, as one line: which character, which step, how many attempts, and when
+ * it will be tried again.
+ *
+ * It is drawn from the entry's own `context`, which the server fills with a character id, a region, a realm slug
+ * and a stage word - and nothing else. A log that cannot say *which* row failed is a log an operator has to
+ * reproduce a failure to understand; a log that says more than this is a log with a token in it.
+ */
+function entryContext(entry: DiagnosticEntry): string {
+  const context = entry.context
+  if (!context) return ''
+
+  return [
+    context.characterId ? `#${context.characterId}` : '',
+    context.region && context.realm ? `${context.region}/${context.realm}` : '',
+    context.stage || '',
+    context.attempts ? `${t('adminErrorsAttempts')} ${context.attempts}` : '',
+    context.nextAttemptAt ? `${t('adminErrorsNextAttempt')} ${clock(context.nextAttemptAt)}` : ''
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/** Whether the panel has heard from the endpoint at all, and whether the last ask failed. */
+const connection = computed<'loading' | 'online' | 'offline'>(() => {
+  if (diagnosticsFailed.value) return 'offline'
+  if (!diagnostics.value) return 'loading'
+  return 'online'
+})
+
+const connectionLabel = computed(() => {
+  if (connection.value === 'online') return t('adminDiagOnline')
+  if (connection.value === 'offline') return t('adminDiagOffline')
+  return t('adminDiagLoading')
+})
+
+const connectionClasses = computed(() => {
+  if (connection.value === 'online') return 'text-emerald-300'
+  if (connection.value === 'offline') return 'text-red-300'
+  return 'text-gray-400'
+})
+
+const lastUpdatedLabel = computed(() =>
+  diagnosticsUpdatedAt.value ? timeFormat.value.format(new Date(diagnosticsUpdatedAt.value)) : t('adminNever')
+)
+
+/** A row of a detail section: a translated label and an already-formatted figure. */
+interface DetailRow {
+  label: string
+  value: string
+}
+
+/** The six cards of the overview, each a figure with the fact under it that makes it readable. */
+const cards = computed(() => {
+  const data = diagnostics.value
+  const memory = data?.system.memory
+
+  return [
+    {
+      key: 'memory',
+      title: t('adminCardProcessMemory'),
+      value: bytes(memory?.rssBytes),
+      note: `${t('adminRowHeapUsed')} ${bytes(memory?.heapUsedBytes)}`
+    },
+    {
+      key: 'sqlite',
+      title: t('adminCardSqlite'),
+      value: bytes(data?.database.files.db.bytes),
+      note: `${t('adminRowWalFile')} ${bytes(data?.database.files.wal.bytes)}`
+    },
+    {
+      key: 'leaderboard',
+      title: t('adminCardLeaderboard'),
+      value: num(data?.database.rows.leaderboard),
+      note: t('adminRowMembers')
+    },
+    {
+      key: 'sync',
+      title: t('adminCardSync'),
+      value: data?.sync.running ? t('adminSyncRunning') : t('adminSyncIdle'),
+      note: `${t('adminRowSyncPasses')} ${num(data?.sync.passes)}`
+    },
+    {
+      key: 'blizzard',
+      title: t('adminCardBlizzard'),
+      value: num(data?.blizzardApi.ok),
+      note: `${t('adminBlizzardFailed')} ${num(data?.blizzardApi.failed)} · 429 ${num(data?.blizzardApi.rateLimited)}`
+    },
+    {
+      key: 'uptime',
+      title: t('adminCardUptime'),
+      value: duration(data?.system.uptimeSeconds),
+      note: `${t('adminRowNode')} ${data?.system.node ?? '—'}`
+    }
+  ]
+})
+
+const systemRows = computed<DetailRow[]>(() => {
+  const data = diagnostics.value
+  const memory = data?.system.memory
+
+  return [
+    { label: t('adminRowUptime'), value: duration(data?.system.uptimeSeconds) },
+    { label: t('adminRowNode'), value: data?.system.node ?? '—' },
+    { label: t('adminRowMemoryRss'), value: bytes(memory?.rssBytes) },
+    { label: t('adminRowPeakRss'), value: bytes(memory?.peakRssBytes) },
+    { label: t('adminRowHeapUsed'), value: bytes(memory?.heapUsedBytes) },
+    { label: t('adminRowHeapTotal'), value: bytes(memory?.heapTotalBytes) },
+    { label: t('adminRowExternal'), value: bytes(memory?.externalBytes) },
+    { label: t('adminRowArrayBuffers'), value: bytes(memory?.arrayBuffersBytes) },
+    { label: t('adminRowBuildMs'), value: milliseconds(data?.durationMs) }
+  ]
+})
+
+/**
+ * The last hour of RSS as bars, scaled between the lowest and the highest reading of the window.
+ *
+ * A single number cannot say whether a process is holding its memory or growing into it, and the question an
+ * operator actually has is the second one - so the panel draws what it sampled (one reading per diagnostics
+ * window, twelve fixed slots) rather than leaving them to be compared by eye. No chart library: the bars *are*
+ * the data, and a page that pulled one in for twelve rectangles would be a page that stopped being a panel.
+ */
+const memoryTrend = computed(() => {
+  const samples = diagnostics.value?.system.memory.samples ?? []
+  if (samples.length < 2) return []
+
+  const values = samples.map((sample) => sample.rssBytes)
+  const lowest = Math.min(...values)
+  const span = Math.max(1, Math.max(...values) - lowest)
+
+  return samples.map((sample) => ({
+    at: sample.at,
+    rssBytes: sample.rssBytes,
+    // 15%..100%, so the smallest reading is still a visible bar rather than a line.
+    height: 15 + Math.round(((sample.rssBytes - lowest) / span) * 85)
+  }))
+})
+
+const syncRows = computed<DetailRow[]>(() => {
+  const state = diagnostics.value?.sync
+
+  const source =
+    state?.source === 'timer'
+      ? t('adminSyncSourceTimer')
+      : state?.source === 'on-demand'
+        ? t('adminSyncSourceOnDemand')
+        : '—'
+
+  const lastError = state?.lastErrorCategory
+    ? `${state.lastErrorCategory} · ${clock(state.lastErrorAt)}`
+    : t('adminNever')
+
+  const manual = state?.manual.count
+    ? `${num(state.manual.count)} · ${state.manual.lastOutcome ?? '—'} · ${clock(state.manual.lastAt)}`
+    : num(0)
+
+  return [
+    { label: t('adminRowSyncState'), value: state?.running ? t('adminSyncRunning') : t('adminSyncIdle') },
+    { label: t('adminRowSyncSource'), value: source },
+    { label: t('adminRowSyncLastStart'), value: clock(state?.lastStartAt) },
+    { label: t('adminRowSyncLastFinish'), value: clock(state?.lastFinishAt) },
+    { label: t('adminRowSyncDuration'), value: milliseconds(state?.lastDurationMs) },
+    // The timer, next to the passes it produced: the pair is what says whether a quiet pass counter is a timer
+    // that did not fire or a pass that refused its ticks.
+    { label: t('adminRowSyncInterval'), value: milliseconds(state?.intervalMs) },
+    { label: t('adminRowSyncTicks'), value: num(state?.timerTicks) },
+    { label: t('adminRowSyncTicksSkipped'), value: num(state?.timerSkipped) },
+    { label: t('adminRowSyncLastTick'), value: clock(state?.lastTickAt) },
+    { label: t('adminRowSyncChecked'), value: num(state?.checked) },
+    { label: t('adminRowSyncUpdated'), value: num(state?.updated) },
+    { label: t('adminRowSyncSkipped'), value: num(state?.skipped) },
+    { label: t('adminRowSyncErrors'), value: num(state?.errors) },
+    { label: t('adminRowSyncPasses'), value: num(state?.passes) },
+    // What the retry state is holding back, which is neither an error nor a skip: those characters were not
+    // looked at at all.
+    { label: t('adminRowSyncParked'), value: num(state?.parked) },
+    { label: t('adminRowSyncNextRetry'), value: clock(state?.nextRetryAt) },
+    { label: t('adminRowSyncManual'), value: manual },
+    { label: t('adminRowSyncLastError'), value: lastError }
+  ]
+})
+
+const blizzardRows = computed<DetailRow[]>(() => {
+  const data = diagnostics.value?.blizzardApi
+
+  return [
+    { label: t('adminBlizzardTotal'), value: num(data?.total) },
+    { label: t('adminBlizzardOk'), value: num(data?.ok) },
+    { label: t('adminBlizzardFailed'), value: num(data?.failed) },
+    { label: t('adminBlizzard429'), value: num(data?.rateLimited) },
+    { label: t('adminBlizzardTimeouts'), value: num(data?.timeouts) },
+    { label: t('adminBlizzard5xx'), value: num(data?.serverErrors) },
+    { label: t('adminBlizzardTolerated'), value: num(data?.toleratedAbsences) },
+    { label: t('adminBlizzardLastCall'), value: clock(data?.lastCallAt) },
+    { label: t('adminBlizzardLastOk'), value: clock(data?.lastOkAt) },
+    { label: t('adminBlizzardLastMs'), value: milliseconds(data?.lastMs) },
+    { label: t('adminBlizzardAvg'), value: milliseconds(data?.averageMs) }
+  ]
+})
+
+/** The database's own lines; the table counts are drawn as their own grid beside them. */
+const databaseRows = computed<DetailRow[]>(() => {
+  const data = diagnostics.value
+  const files = data?.database.files
+
+  const fileLine = [files?.db, files?.wal, files?.shm]
+    .map((file) => `${file?.name ?? '—'} ${file?.error ? t('adminFileUnreadable') : bytes(file?.bytes)}`)
+    .join(' · ')
+
+  return [
+    { label: t('adminRowFiles'), value: fileLine },
+    { label: t('adminRowGuests'), value: num(data?.database.guests) },
+    { label: t('adminRowAccountCharacters'), value: num(data?.database.accountCharacters) },
+    { label: t('adminRowHiddenFromFame'), value: num(data?.database.hiddenFromFame) },
+    { label: t('adminRowLastStatsRead'), value: clock(data?.database.lastStatsReadAt) },
+    { label: t('adminRowLastSnapshot'), value: clock(data?.database.lastSnapshotAt) }
+  ]
+})
+
+/** The table counts, keyed by the table's own name - an identifier, and the one thing here not translated. */
+const tableCounts = computed(() => Object.entries(diagnostics.value?.database.rows ?? {}))
+
+/**
+ * The two maintenance actions, each its own POST to its own endpoint.
+ *
+ * They are the only things on this page that write besides the settings form, so they are drawn as such: a
+ * button that stands down while it runs (a second press cannot start a second run), a result that says what
+ * happened rather than that something did, and an explicit confirmation in front of the database step, which is
+ * the one action here that touches the file the whole site reads from.
+ */
+const refreshForm = reactive({ region: 'eu', realm: '', name: '' })
+
+/** What the character refresh is doing, and what it answered. */
+const refreshState = ref<'idle' | 'running' | 'updated' | 'unchanged' | 'busy' | 'failed'>('idle')
+
+const refreshRunnable = computed(
+  () => Boolean(refreshForm.realm.trim() && refreshForm.name.trim()) && refreshState.value !== 'running'
+)
+
+async function runCharacterRefresh(): Promise<void> {
+  if (!refreshRunnable.value) return
+
+  refreshState.value = 'running'
+  try {
+    const answer = await $fetch<{ status: 'updated' | 'unchanged' }>('/api/admin/character-refresh', {
+      method: 'POST',
+      body: { region: refreshForm.region, realm: refreshForm.realm.trim(), name: refreshForm.name.trim() }
+    })
+
+    refreshState.value = answer.status
+    await loadDiagnostics()
+  } catch (error) {
+    // The three answers the endpoint can give besides success, told apart: another operation holds the slot
+    // (`409`), or the read itself failed - which the endpoint has already mapped to the site's own status.
+    refreshState.value = Number((error as { statusCode?: number })?.statusCode) === 409 ? 'busy' : 'failed'
+  }
+}
+
+/** Whether the database step is waiting for its confirmation. */
+const optimizeConfirming = ref(false)
+const optimizeState = ref<'idle' | 'running' | 'ok' | 'failed'>('idle')
+
+async function runOptimize(): Promise<void> {
+  if (optimizeState.value === 'running') return
+
+  optimizeConfirming.value = false
+  optimizeState.value = 'running'
+
+  try {
+    await $fetch('/api/admin/optimize', { method: 'POST' })
+    optimizeState.value = 'ok'
+    await loadDiagnostics()
+  } catch {
+    optimizeState.value = 'failed'
+  }
+}
 </script>
 
 <template>
-  <div class="relative min-h-screen">
+  <div
+    class="relative flex min-h-screen flex-col justify-between bg-wow-dark text-white selection:bg-wow-gold selection:text-black"
+  >
     <SiteBackdrop :image="backdrop" />
 
     <SiteHeader :title="t('adminTitle')" :meta="t('adminMeta')" />
@@ -158,7 +585,346 @@ async function save() {
         </NuxtLink>
       </div>
 
-      <div v-else class="mx-auto max-w-3xl space-y-6">
+      <div v-else class="mx-auto max-w-5xl space-y-6">
+        <!-- The top row: the panel's name, whether the diagnostics endpoint is answering, when it last did, and
+             the one control that asks it again. The status is drawn rather than implied - a panel that cannot say
+             whether it is current is a panel an operator has to guess about. -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 class="text-lg font-bold text-white sm:text-xl">{{ t('adminDashboardTitle') }}</h1>
+
+          <span class="hoa-panel inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold">
+            <span class="h-1.5 w-1.5 rounded-full bg-current" :class="connectionClasses" aria-hidden="true" />
+            <span :class="connectionClasses">{{ connectionLabel }}</span>
+          </span>
+
+          <span class="text-[11px] text-gray-400">
+            {{ t('adminUpdatedAt') }}: <span class="tabular-nums text-gray-300">{{ lastUpdatedLabel }}</span>
+          </span>
+
+          <button
+            type="button"
+            class="hoa-tab hoa-liquid-glass ml-auto inline-flex px-3 py-1.5 text-xs font-semibold"
+            :disabled="diagnosticsLoading"
+            @click="loadDiagnostics"
+          >
+            {{ diagnosticsLoading ? t('adminLoading') : t('adminRefresh') }}
+          </button>
+        </div>
+
+        <p v-if="diagnosticsFailed" class="text-[11px] font-semibold text-amber-300">
+          {{ t('adminStale') }}
+        </p>
+
+        <!-- The overview: six figures, and under each the fact that makes it readable. Nothing here is a total
+             the server cannot measure - a figure it does not have is a dash, never a zero. -->
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div v-for="card in cards" :key="card.key" class="hoa-panel rounded-xl p-3.5">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{{ card.title }}</p>
+            <p class="mt-1 text-xl font-bold tabular-nums text-wow-goldLight">{{ card.value }}</p>
+            <p class="mt-0.5 truncate text-[11px] text-gray-500" :title="card.note">{{ card.note }}</p>
+          </div>
+        </div>
+
+        <!-- The measured half: the runtime, and the file the whole site reads from. -->
+        <div class="grid gap-4 lg:grid-cols-2">
+          <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+              {{ t('adminSystemTitle') }}
+            </h2>
+
+            <dl class="mt-3">
+              <div
+                v-for="row in systemRows"
+                :key="row.label"
+                class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1.5 last:border-0"
+              >
+                <dt class="text-xs text-gray-400">{{ row.label }}</dt>
+                <dd class="truncate text-xs font-semibold tabular-nums text-gray-100">{{ row.value }}</dd>
+              </div>
+            </dl>
+
+            <!-- The trend, drawn from the fixed slots the server sampled - one reading per diagnostics window,
+                 newest last. A single number cannot say whether the process is holding its memory or growing
+                 into it, and that is the question an operator actually has. -->
+            <div v-if="memoryTrend.length" class="mt-3">
+              <p class="text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminMemoryTrend') }}</p>
+              <div class="mt-1 flex h-10 items-end gap-0.5">
+                <span
+                  v-for="sample in memoryTrend"
+                  :key="sample.at"
+                  class="min-w-0 flex-1 rounded-t bg-wow-gold/50"
+                  :style="{ height: `${sample.height}%` }"
+                  :title="`${clock(sample.at)} · ${bytes(sample.rssBytes)}`"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+              {{ t('adminDatabaseTitle') }}
+            </h2>
+
+            <dl class="mt-3">
+              <div
+                v-for="row in databaseRows"
+                :key="row.label"
+                class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-white/5 py-1.5 last:border-0"
+              >
+                <dt class="text-xs text-gray-400">{{ row.label }}</dt>
+                <dd class="text-left text-xs font-semibold tabular-nums text-gray-100 sm:text-right">{{ row.value }}</dd>
+              </div>
+            </dl>
+
+            <!-- The tables, drawn as a dense grid of their own: the names are identifiers rather than copy, so
+                 they are printed as the database spells them. -->
+            <ul class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3">
+              <li v-for="[table, count] in tableCounts" :key="table" class="flex items-baseline justify-between gap-2">
+                <span class="truncate font-mono text-[11px] text-gray-500">{{ table }}</span>
+                <span class="text-[11px] font-semibold tabular-nums text-gray-300">{{ num(count) }}</span>
+              </li>
+            </ul>
+          </section>
+        </div>
+        <!-- What the background pass actually did: not a queue length, because there is no queue - the pass
+             reads its batch and the next tick takes the next one. -->
+        <div class="grid gap-4 lg:grid-cols-2">
+          <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+              {{ t('adminSyncTitle') }}
+            </h2>
+            <p class="mt-1 text-[11px] leading-relaxed text-gray-500">{{ t('adminSyncHint') }}</p>
+
+            <dl class="mt-3">
+              <div
+                v-for="row in syncRows"
+                :key="row.label"
+                class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1.5 last:border-0"
+              >
+                <dt class="text-xs text-gray-400">{{ row.label }}</dt>
+                <dd class="truncate text-xs font-semibold tabular-nums text-gray-100">{{ row.value }}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+              {{ t('adminBlizzardTitle') }}
+            </h2>
+            <!-- The counters cover this process and nothing else. Deliberately not called "quota": nothing here
+                 can read what is left of a limit, only what was asked for. -->
+            <p class="mt-1 text-[11px] leading-relaxed text-gray-500">{{ t('adminBlizzardExplain') }}</p>
+
+            <dl class="mt-3">
+              <div
+                v-for="row in blizzardRows"
+                :key="row.label"
+                class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1.5 last:border-0"
+              >
+                <dt class="text-xs text-gray-400">{{ row.label }}</dt>
+                <dd class="truncate text-xs font-semibold tabular-nums text-gray-100">{{ row.value }}</dd>
+              </div>
+            </dl>
+
+            <!-- What those calls *were*, cut by the kind of endpoint: the whole point of it is that "132 failed"
+                 becomes "most of them were collection documents a read tolerates". A category is a word out of a
+                 closed list, derived from the shape of the address and never from the address itself. -->
+            <template v-if="diagnostics?.blizzardApi.byCategory.length">
+              <p class="mt-3 text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminBlizzardByCategory') }}</p>
+              <ul class="mt-1 space-y-0.5">
+                <li
+                  v-for="row in diagnostics.blizzardApi.byCategory"
+                  :key="row.category"
+                  class="flex items-baseline justify-between gap-2 text-[11px]"
+                >
+                  <span class="min-w-0 truncate font-mono text-gray-400">{{ row.category }}</span>
+                  <span class="shrink-0 tabular-nums text-gray-300">
+                    {{ num(row.calls) }}
+                    <span class="text-gray-600">·</span>
+                    <span :class="row.failed ? 'text-red-300' : 'text-gray-500'">{{ num(row.failed) }}</span>
+                    <span class="text-gray-600">·</span>
+                    {{ milliseconds(row.averageMs) }}
+                  </span>
+                </li>
+              </ul>
+            </template>
+
+            <template v-if="diagnostics?.blizzardApi.byStatus.length">
+              <p class="mt-3 text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminBlizzardByStatus') }}</p>
+              <ul class="mt-1 flex flex-wrap gap-1.5">
+                <li
+                  v-for="row in diagnostics.blizzardApi.byStatus"
+                  :key="row.status"
+                  class="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 text-[10px] tabular-nums text-gray-300"
+                >
+                  {{ row.status || t('adminBlizzardStatusNone') }} × {{ num(row.calls) }}
+                </li>
+              </ul>
+            </template>
+          </section>
+        </div>
+
+        <!-- The last twenty entries of the in-process log: a note, a worry or a failure, with the category
+             that says which part of the site filed it. The buffer is bounded and dies with the process. -->
+        <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+            {{ t('adminErrorsTitle') }}
+          </h2>
+          <p class="mt-1 text-[11px] leading-relaxed text-gray-500">{{ t('adminErrorsExplain') }}</p>
+
+          <p v-if="!diagnostics?.errors.length" class="mt-3 text-xs text-gray-500">{{ t('adminErrorsEmpty') }}</p>
+
+          <ul v-else class="mt-3 space-y-1">
+            <li
+              v-for="(entry, index) in diagnostics.errors.slice(0, 20)"
+              :key="`${entry.at}-${index}`"
+              class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5"
+            >
+              <span class="text-[11px] tabular-nums text-gray-500" :title="clock(entry.at)">
+                {{ clock(entry.lastAt) }}
+              </span>
+              <span
+                class="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                :class="
+                  entry.level === 'error'
+                    ? 'bg-red-500/15 text-red-300'
+                    : entry.level === 'warn'
+                      ? 'bg-amber-500/15 text-amber-300'
+                      : 'bg-white/10 text-gray-300'
+                "
+              >
+                {{ entry.level }}
+              </span>
+              <span class="font-mono text-[10px] uppercase text-gray-400">{{ entry.category }}</span>
+              <span v-if="entry.status" class="text-[10px] tabular-nums text-gray-500">{{ entry.status }}</span>
+              <!-- A repeated failure is one line with a count, so a broken character cannot fill the log. -->
+              <span
+                v-if="entry.count > 1"
+                class="rounded bg-white/10 px-1 text-[10px] font-bold tabular-nums text-gray-200"
+                :title="t('adminErrorsRepeats')"
+              >
+                ×{{ entry.count }}
+              </span>
+              <span class="min-w-0 flex-1 basis-full break-words text-xs text-gray-200 sm:basis-auto">
+                {{ entry.message }}
+              </span>
+              <!-- Which character it was, which step failed, and when it will be tried again: the four facts an
+                   operator needs to act, and none of them a token, a URL or a BattleTag. -->
+              <span v-if="entryContext(entry)" class="basis-full font-mono text-[10px] text-gray-500">
+                {{ entryContext(entry) }}
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- The dangerous half, kept apart from everything above it: each action is its own request, checked on
+             the server, and only one of them may run at a time. -->
+        <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">{{ t('adminToolsTitle') }}</h2>
+          <p class="mt-1 text-[11px] leading-relaxed text-gray-500">{{ t('adminToolsHint') }}</p>
+
+          <div class="mt-4 grid gap-4 sm:grid-cols-2">
+            <!-- One character, named. The site's own reader does the work, so its cache, its cooldown and its
+                 history rules all apply - and the character must already be one the site holds. -->
+            <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <p class="text-xs font-bold text-white">{{ t('adminRefreshCharacterTitle') }}</p>
+              <p class="mt-0.5 text-[11px] leading-relaxed text-gray-500">{{ t('adminRefreshCharacterHint') }}</p>
+
+              <div class="mt-2 flex flex-wrap gap-2">
+                <select
+                  v-model="refreshForm.region"
+                  class="rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 text-xs font-semibold text-white outline-none focus:border-wow-gold/60"
+                >
+                  <option value="eu">EU</option>
+                  <option value="us">US</option>
+                </select>
+                <input
+                  v-model="refreshForm.realm"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  :placeholder="t('adminRefreshCharacterRealm')"
+                  class="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 text-xs text-gray-100 outline-none placeholder:text-gray-600 focus:border-wow-gold/60"
+                >
+                <input
+                  v-model="refreshForm.name"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  :placeholder="t('adminRefreshCharacterName')"
+                  class="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 text-xs text-gray-100 outline-none placeholder:text-gray-600 focus:border-wow-gold/60"
+                >
+              </div>
+
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs font-semibold"
+                  :disabled="!refreshRunnable"
+                  @click="runCharacterRefresh"
+                >
+                  {{ refreshState === 'running' ? t('adminRefreshCharacterRunning') : t('adminRefreshCharacterRun') }}
+                </button>
+
+                <p v-if="refreshState === 'updated'" class="text-[11px] font-semibold text-emerald-400">
+                  {{ t('adminRefreshCharacterOk') }}
+                </p>
+                <p v-else-if="refreshState === 'unchanged'" class="text-[11px] font-semibold text-gray-400">
+                  {{ t('adminRefreshCharacterUnchanged') }}
+                </p>
+                <p v-else-if="refreshState === 'busy'" class="text-[11px] font-semibold text-amber-300">
+                  {{ t('adminRefreshCharacterBusy') }}
+                </p>
+                <p v-else-if="refreshState === 'failed'" class="text-[11px] font-semibold text-red-400">
+                  {{ t('adminRefreshCharacterFailed') }}
+                </p>
+              </div>
+            </div>
+
+            <!-- SQLite's own light maintenance: one pragma, on request, behind a confirmation. -->
+            <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <p class="text-xs font-bold text-white">{{ t('adminOptimizeTitle') }}</p>
+              <p class="mt-0.5 text-[11px] leading-relaxed text-gray-500">{{ t('adminOptimizeHint') }}</p>
+
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  v-if="!optimizeConfirming"
+                  type="button"
+                  class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs font-semibold"
+                  :disabled="optimizeState === 'running'"
+                  @click="optimizeConfirming = true"
+                >
+                  {{ optimizeState === 'running' ? t('adminOptimizeRunning') : t('adminOptimizeRun') }}
+                </button>
+
+                <template v-else>
+                  <button
+                    type="button"
+                    class="hoa-tab hoa-liquid-glass hoa-tab-active px-3 py-1.5 text-xs font-semibold"
+                    @click="runOptimize"
+                  >
+                    {{ t('adminConfirm') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs font-semibold"
+                    @click="optimizeConfirming = false"
+                  >
+                    {{ t('adminCancel') }}
+                  </button>
+                </template>
+
+                <p v-if="optimizeState === 'ok'" class="text-[11px] font-semibold text-emerald-400">
+                  {{ t('adminOptimizeOk') }}
+                </p>
+                <p v-else-if="optimizeState === 'failed'" class="text-[11px] font-semibold text-red-400">
+                  {{ t('adminOptimizeFailed') }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- The maxima the comparison board measures a row against. Only the figures whose size nobody publishes,
              and only those: a collection's total arrives with its own reading and is never stated here. -->
         <section class="hoa-panel rounded-2xl p-4 sm:p-5">
@@ -252,7 +1018,12 @@ async function save() {
       </div>
     </main>
 
-    <SiteFooter />
+    <!-- The same sign-off every page of the site carries, in the same place and the same size: the footer is
+         the page's last row rather than a block of its own, and the flex column above is what holds it at the
+         bottom of a short panel (`flex-1` on the main) exactly as the front page and the documents do. -->
+    <footer class="relative container mx-auto px-4 pb-2 text-xs">
+      <SiteFooter />
+    </footer>
   </div>
 </template>
 

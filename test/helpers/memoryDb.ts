@@ -47,10 +47,18 @@ CREATE TABLE characters (
   -- The guild the character belongs to, which is a fact about the character rather than a figure of its readings
   -- (see ./server/utils/db). Named here for the reason every other column is: a read that asks for it must find it.
   guild TEXT,
+  -- The two professions a full read carries, written beside the rest of what a character *is*.
+  profession_1 TEXT,
+  profession_2 TEXT,
   is_main INTEGER NOT NULL DEFAULT 0,
   last_seen_at INTEGER NOT NULL DEFAULT 0,
   first_seen_at INTEGER,
-  stats_read_at INTEGER
+  stats_read_at INTEGER,
+  -- The background pass's retry state (see ./server/utils/syncRetry): the columns its query now asks about, so
+  -- a test of "a parked character is not selected" is exercised through the very SQL the site runs.
+  sync_failures INTEGER NOT NULL DEFAULT 0,
+  sync_retry_at INTEGER,
+  sync_error TEXT
 );
 CREATE UNIQUE INDEX idx_characters_guest ON characters(region, realm_slug, name_key) WHERE user_id IS NULL;
 

@@ -9,8 +9,10 @@
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
 
-  // Started, not awaited: the reply is the promise of work, not the work.
-  void syncDueCharacters(5, (getQuery(event).locale as string) || 'en_US', user.id).catch(() => {})
+  // Started, not awaited: the reply is the promise of work, not the work. The pass takes the claim the timer
+  // also takes (`runSyncPass`), so a page asking while the timer is mid-pass adds nothing to the queue - there
+  // is no queue - and simply leaves the pass that is already running to do it.
+  void runSyncPass('on-demand', 5, (getQuery(event).locale as string) || 'en_US', user.id)
 
   return { started: true }
 })

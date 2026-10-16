@@ -28,6 +28,15 @@ export interface SwrCache<T> {
    * fetched, not when it was asked for, which is exactly the difference a caller cannot see otherwise.
    */
   fetchedAt(key: string): number | null
+  /**
+   * Forgets the value on hand for `key`, so the next caller pays for a fresh one.
+   *
+   * Only the *stored* value goes: a fetch already in flight is left alone, because the two callers waiting on
+   * it are waiting for the same answer and cancelling it would be a third request for the same document. Which
+   * is also why this is a per-key operation and not a `clear()`: the caches are separate per endpoint, and a
+   * wipe of one of them is a burst of Blizzard reads nobody asked for.
+   */
+  invalidate(key: string): void
 }
 
 export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<T> {
@@ -86,6 +95,10 @@ export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<
   cache.fetchedAt = (key) => {
     const cached = values.get(key)
     return cached ? Math.floor(cached.at / 1000) : null
+  }
+
+  cache.invalidate = (key) => {
+    values.delete(key)
   }
 
   return cache

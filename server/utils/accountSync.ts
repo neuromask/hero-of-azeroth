@@ -7,6 +7,17 @@
  * whole answer to a gateway timeout: a thirty-alt account costs one request at sign-in, not thirty.
  */
 import type { BlizzardRegion } from './params'
+// What one pass did, as the admin panel's diagnostics read it (`#shared/data/adminDiagnostics`).
+import type { SyncPassCounters } from '#shared/data/adminDiagnostics'
+// The process's own log and pass state: the background pass is one of the places that already handles a
+// failure, so it is one of the places that files one (`server/utils/adminDiagnostics`).
+import { recordDiagnostic, recordSyncError, beginSyncPass, finishSyncPass } from './adminDiagnostics'
+// How long a character that failed is left alone - the thing that stops the same unreadable five from taking
+// every pass for ever (`./syncRetry`).
+import { clearCharacterSyncFailure, parkCharacterSyncFailure } from './syncRetry'
+// The reading's own shape, so the outcome the background pass counts can say what the profile was without
+// repeating `CharacterData`'s thirty fields here.
+import type { CharacterData } from './blizzard'
 import { fileDailyReading } from './characterReading'
 import { fileAccountReading } from './accountPool'
 import { dropGuestRow } from './leaderboardRows'
@@ -211,7 +222,13 @@ export interface CharacterRow {
 }
 
 /** A character being read in full, shared so two passes over the same alt wait once. */
-const pendingRefreshes = new Map<number, ReturnType<typeof doRefreshCharacterStats>>()
+const pendingRefreshes = new Map<number, Promise<CharacterRefresh>>()
+
+/** A read and whether it moved the stored figures, which is what the background pass counts. */
+export interface CharacterRefresh {
+  profile: CharacterData & { professions: string[]; readAt: number }
+  updated: boolean
+}
 
 /**
  * Reads one character live and writes what it says: the row's own fields and one snapshot.
@@ -222,10 +239,11 @@ const pendingRefreshes = new Map<number, ReturnType<typeof doRefreshCharacterSta
  * same character twice in an afternoon leaves one new row only when the figures actually moved
  * (`server/utils/characterReading`), which is what keeps the history a log of change.
  *
- * Returns the profile, so the endpoint can hand the page the same document the site's public
- * character reader would.
+ * It answers the profile *and* whether the reading moved a figure, because the pass that counts what it did -
+ * the diagnostics behind the admin panel - needs the second half and the endpoints that read a character
+ * need only the first (`refreshCharacterStats` below unwraps it).
  */
-export function refreshCharacterStats(row: CharacterRow, locale = 'en_US') {
+export function refreshCharacterStatsWithOutcome(row: CharacterRow, locale = 'en_US'): Promise<CharacterRefresh> {
   const running = pendingRefreshes.get(row.id)
   if (running) return running
 
@@ -237,7 +255,64 @@ export function refreshCharacterStats(row: CharacterRow, locale = 'en_US') {
   return read
 }
 
-async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
+/**
+ * The same read for a caller that only wants the document, which is every reader of a character's own page
+ * (`server/api/profile/character/[id]`). Returns the profile, so those endpoints cannot tell the two apart.
+ */
+export function refreshCharacterStats(row: CharacterRow, locale = 'en_US') {
+  return refreshCharacterStatsWithOutcome(row, locale).then((read) => read.profile)
+}
+
+async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US'): Promise<CharacterRefresh> {
+  try {
+    return await readCharacterStats(row, locale)
+  } catch (error) {
+    /**
+     * The character failed, and this is where both halves of that are known: which character it was, and why the
+     * site would not answer for it.
+     *
+     * Two things are written here and neither hides the failure. The retry state is remembered on the row, so the
+     * background pass stops spending its batch on a character Blizzard has already refused (see `./syncRetry` for
+     * the policy and the incident) - and one line is filed for the panel, with the identity of the character, the
+     * step that failed, the status, and how long it will be left alone. That line is what turns "five failed"
+     * into "five failed, and here is which and why" without an operator having to reproduce it.
+     *
+     * Nothing here changes the answer: the error is thrown exactly as it arrived, the character's readings are
+     * untouched, and `stats_read_at` is not moved - a failed read is not a read.
+     */
+    try {
+      const verdict = parkCharacterSyncFailure(row.id, error)
+
+      recordDiagnostic({
+        level: verdict.code === 'auth' ? 'error' : 'warn',
+        category: 'sync',
+        message: `character read failed (${verdict.code})`,
+        status: verdict.status || undefined,
+        context: {
+          characterId: row.id,
+          region: row.region,
+          realm: row.realm_slug,
+          stage: 'profile',
+          attempts: verdict.attempts,
+          nextAttemptAt: verdict.nextAttemptAt
+        }
+      })
+    } catch {
+      // A failure to record the failure must never replace the failure itself.
+    }
+
+    throw error
+  }
+}
+
+/**
+ * One full read of a character, with nothing around it but the read itself.
+ *
+ * Split out so that the retry state can wrap it in one place: every path that reads a character in full -
+ * the background pass, the profile page's own click, an administrator's manual refresh - goes through
+ * `doRefreshCharacterStats`, and therefore through the same "a failure is remembered, a success is forgotten".
+ */
+async function readCharacterStats(row: CharacterRow, locale = 'en_US'): Promise<CharacterRefresh> {
   const profile = await getCharacter(row.realm_slug, row.name_key, row.region, locale)
   // The portrait is not on the summary and the professions are a document of their own, so both are
   // read here - where a character is read in full - and kept on the row the tiles draw from.
@@ -285,9 +360,10 @@ async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
   }
 
   // The reading's own point, filed by the one function that knows how (`fileDailyReading`): the same call a
-  // character page makes when it reads a profile in full, so the two can never file a point differently -
-  // or leave one of them unfiled.
-  fileDailyReading(row.id, profile)
+  // character page makes when it reads a profile in full, so the two can never file a point differently - or
+  // leave one of them unfiled. The answer says whether the figures actually moved, which is the half of the
+  // pass's own report that cannot be read off the row afterwards.
+  const updated = fileDailyReading(row.id, profile)
 
   // What this character adds to the account's pool, both folded in as ids: its own mount journal
   // (a mount can belong to a side or a race, and it only ever appears in the journal of a character
@@ -331,7 +407,14 @@ async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
   // without a second request for the same character. `readAt` is the moment the read was stored,
   // which the tile prints as its own update time: the client's clock is not the authority on when
   // Blizzard was last asked.
-  return { ...profile, professions, readAt: now }
+  //
+  // A read that worked is also the moment the character's failures are forgotten: whatever it was - a rename
+  // Blizzard had not finished publishing, a season's private profile made public again, a bad quarter of an
+  // hour - the address answers now, and the retry state has no business shortening its next pass because of
+  // something that has stopped being true (`./syncRetry`).
+  clearCharacterSyncFailure(row.id)
+
+  return { profile: { ...profile, professions, readAt: now }, updated }
 }
 
 /** A character a stats read is due for, with the account it belongs to. */
@@ -351,11 +434,11 @@ interface DueCharacter extends CharacterRow {
  * A character Blizzard will not answer for is left for the next pass; nothing here throws upward,
  * because a background refresh that fails is a stale row, not a broken site.
  */
-export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: number): Promise<number> {
+export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: number): Promise<SyncPassCounters> {
   let due: DueCharacter[]
   try {
     const scope = userId ? 'AND c.user_id = ?' : ''
-    const params: unknown[] = [nowSec() - 86400]
+    const params: unknown[] = [nowSec() - 86400, nowSec()]
     if (userId) params.push(userId)
     params.push(limit)
 
@@ -367,6 +450,12 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
                   SELECT 1 FROM snapshots s
                    WHERE s.character_id = c.id AND s.taken_at > ?
                 )
+                -- And the characters the retry state has parked are left out entirely, which is the whole point
+                -- of it: a character Blizzard has just refused gains no reading, so without this it stayed due
+                -- for ever, took a slot in every batch (the order below is fixed), and hid every character
+                -- behind it. It is not "skipped" - it is not looked at, and the panel counts it apart
+                -- (see syncRetry, and "parked" in the diagnostics).
+                AND (c.sync_retry_at IS NULL OR c.sync_retry_at <= ?)
                 -- The accounts' characters only: a guest's reading is taken when somebody opens the page, and
                 -- a background pass that refreshed strangers would spend the site's Blizzard quota on nobody's
                 -- roster. Guests are also the ones this pass cannot finish for - there is no account to hand the
@@ -378,17 +467,28 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
       )
       .all(...(params as any[])) as unknown as DueCharacter[]
   } catch {
-    return 0
+    // The query itself failed, which is a fact about the database rather than about Blizzard: the pass
+    // reports nothing read, and the reason is filed for the panel (`./adminDiagnostics`).
+    recordDiagnostic({ level: 'error', category: 'database', message: 'due-character query failed' })
+    recordSyncError('database')
+    return { checked: 0, updated: 0, skipped: 0, errors: 0 }
   }
 
-  let done = 0
+  const counters: SyncPassCounters = { checked: due.length, updated: 0, skipped: 0, errors: 0 }
 
   for (const row of due) {
     try {
-      await refreshCharacterStats(row, locale)
-      done += 1
+      // The read says whether the figures moved: a character that was re-read and said exactly what the site
+      // already had is a *skip*, not an update, and the pass reports the two apart.
+      const read = await refreshCharacterStatsWithOutcome(row, locale)
+      if (read.updated) counters.updated += 1
+      else counters.skipped += 1
     } catch {
-      // Retried on the next pass; one character that cannot be read never stops the batch.
+      // Counted, and nothing else: the failure was already filed with the identity of the character that caused
+      // it and the time it will be tried again (`doRefreshCharacterStats`), and a second generic line here would
+      // only be a second copy of it. One character that cannot be read never stops the batch - and, with the
+      // retry state, it no longer *is* the batch either.
+      counters.errors += 1
     }
   }
 
@@ -396,5 +496,33 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
   // left to do once the pass ends: a pass over a hundred alts files the account's point a hundred times, and
   // every one of those but the last says what the point before it said (`fileAccountReading`).
 
-  return done
+  return counters
+}
+
+/**
+ * Runs one pass under the claim both callers share, so the timer and the profile page's own ask cannot overlap.
+ *
+ * The claim (`beginSyncPass`) is what makes this the single entry point: a caller that finds a pass already
+ * running is answered `null` and does nothing, which is exactly right for a timer tick and for a page that
+ * simply wanted its roster filled behind it. The pass's state and counters are kept by the diagnostics module
+ * (`./adminDiagnostics`), which is the only place that remembers them - nothing here writes a status row.
+ */
+export async function runSyncPass(
+  source: 'timer' | 'on-demand',
+  limit = 5,
+  locale = 'en_US',
+  userId?: number
+): Promise<SyncPassCounters | null> {
+  if (!beginSyncPass(source)) return null
+
+  try {
+    const counters = await syncDueCharacters(limit, locale, userId)
+    finishSyncPass(source, counters)
+    return counters
+  } catch {
+    recordSyncError('sync')
+    recordDiagnostic({ level: 'error', category: 'sync', message: 'background sync pass failed' })
+    finishSyncPass(source, { checked: 0, updated: 0, skipped: 0, errors: 1 })
+    return null
+  }
 }

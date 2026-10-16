@@ -14,6 +14,8 @@
  * (`rebuildPopulation` in `server/utils/leaderboardRows`): a page read while this runs is answered from the table
  * as it was, never from half of it.
  */
+import { recordDiagnostic } from '../utils/adminDiagnostics'
+
 export default defineNitroPlugin(() => {
   migrateStatistics()
     .then((moved) => {
@@ -22,6 +24,7 @@ export default defineNitroPlugin(() => {
       // notice it. Nothing was deleted, so a build that understands the file can still be rolled back to.
       if (moved.error) {
         console.error(`[statistics] the old table was not moved: ${moved.error}`)
+        recordDiagnostic({ level: 'warn', category: 'migration', message: `old statistics table not moved: ${moved.error}` })
       }
 
       if (moved.characters || moved.accounts) {
@@ -46,5 +49,10 @@ export default defineNitroPlugin(() => {
       console.warn(
         `[statistics] the migration was left for the next start: ${error instanceof Error ? error.message : String(error)}`
       )
+      recordDiagnostic({
+        level: 'error',
+        category: 'migration',
+        message: `statistics migration failed: ${error instanceof Error ? error.message : String(error)}`
+      })
     })
 })

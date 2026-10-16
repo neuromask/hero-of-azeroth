@@ -24,5 +24,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'That character is not on your account' })
   }
 
-  return await refreshCharacterStats(row, locale)
+  try {
+    return await refreshCharacterStats(row, locale)
+  } catch (error) {
+    // A read an account asked for and Blizzard would not answer is one of the failures the panel's log exists
+    // for: it is the same read the background pass makes, just asked for by a person (`server/utils/adminDiagnostics`).
+    recordDiagnostic({
+      level: 'warn',
+      category: 'sync',
+      message: 'account character read failed',
+      status: Number((error as { statusCode?: number })?.statusCode || 0) || undefined
+    })
+    throw error
+  }
 })

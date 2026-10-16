@@ -261,6 +261,23 @@ CREATE TABLE IF NOT EXISTS characters (
    * moment, and it is written only where a character is actually read.
    */
   stats_read_at INTEGER,
+  /**
+   * The retry state of the background pass, and the smallest thing that stops it repeating itself for ever.
+   *
+   * A character Blizzard will not answer for never gains a reading, so it stays *due*, and the pass selects its
+   * batch in a fixed order - which is how one unreadable character came to occupy a slot on every pass and hide
+   * every character behind it (see ./syncRetry for the policy and the incident it comes from).
+   *
+   *   sync_failures  how many reads in a row have failed (0 = healthy, and the ordinary case)
+   *   sync_retry_at  when the next attempt is allowed, in seconds since the epoch (NULL = now)
+   *   sync_error     the safe code of the last failure - "missing", "timeout", "auth" - and never a message
+   *
+   * Three columns rather than a table because the question the pass asks is one predicate on the row it already
+   * selects, and because a restart must not forget it: the process is one, and its memory is not the truth.
+   */
+  sync_failures INTEGER NOT NULL DEFAULT 0,
+  sync_retry_at INTEGER,
+  sync_error TEXT,
   UNIQUE (user_id, region, realm_slug, name_key)
 );
 CREATE INDEX IF NOT EXISTS idx_characters_user ON characters(user_id);
@@ -517,6 +534,12 @@ const ADDED_COLUMNS = [
   'ALTER TABLE characters ADD COLUMN stats_read_at INTEGER',
   // The day the site first met a character, which the hall of fame's table prints and no later lookup can tell.
   'ALTER TABLE characters ADD COLUMN first_seen_at INTEGER',
+  // The retry state of the background pass: how many reads in a row have failed, when the next is allowed, and
+  // the safe code of the last one (see ./syncRetry). Without it a character Blizzard will not answer for takes a
+  // slot in every pass for ever.
+  'ALTER TABLE characters ADD COLUMN sync_failures INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE characters ADD COLUMN sync_retry_at INTEGER',
+  'ALTER TABLE characters ADD COLUMN sync_error TEXT',
   // The item level a character was wearing, which is a fact about the character rather than a figure of its
   // readings: the site draws no history of it, and a row of the table reads it beside the level.
   'ALTER TABLE characters ADD COLUMN ilvl REAL',
@@ -621,6 +644,9 @@ export function migrateCharacterOwnership(connection: DatabaseSync): void {
       last_seen_at INTEGER NOT NULL,
       first_seen_at INTEGER,
       stats_read_at INTEGER,
+      sync_failures INTEGER NOT NULL DEFAULT 0,
+      sync_retry_at INTEGER,
+      sync_error TEXT,
       UNIQUE (user_id, region, realm_slug, name_key)
     )`)
 

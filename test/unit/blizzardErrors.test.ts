@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryDb, installUseDb } from '../helpers/memoryDb'
 
 /** How the stub refuses the summary: an HTTP status, a deadline, or a connection that never answered. */
-let refusal: { status: number; retryAfter?: string; timeout?: boolean; dead?: boolean } | null = null
+let refusal: { status: number; retryAfter?: string; timeout?: boolean; dead?: boolean; optional?: boolean } | null = null
 
 /** What ofetch throws for an HTTP refusal: a `FetchError` carrying the status, the response and the URL. */
 function refused(status: number, retryAfter?: string) {
@@ -76,9 +76,14 @@ beforeEach(() => {
     Object.assign(new Error(input?.statusMessage || 'error'), input)
 
   ;(globalThis as Record<string, unknown>).$fetch = async (url: string) => {
-    const isSummary = /\/profile\/wow\/character\/[^/]+\/[^/?]+\?namespace/.test(url)
+    // Every document of a character's profile lives under the same path, and Blizzard answers `404` for all of
+    // them when the character is not there - which is what makes one missing character twelve failed requests
+    // (see the note in `server/utils/blizzard`, under `recordToleratedAbsence`). `optional` narrows the refusal
+    // to the one document that is allowed to be missing without the read failing.
+    const isCharacterDocument = url.includes('/profile/wow/character/')
+    const isOptionalDocument = url.includes('/mythic-keystone-profile')
 
-    if (refusal && isSummary) {
+    if (refusal && (refusal.optional ? isOptionalDocument : isCharacterDocument)) {
       if (refusal.dead) throw dead()
       if (refusal.timeout) throw timedOut()
       throw refused(refusal.status, refusal.retryAfter)
@@ -184,5 +189,55 @@ describe('after a failed read', () => {
     vi.advanceTimersByTime(20_000)
     const recovered = await getCharacter('gordunni', 'recovering', 'eu', 'en_US', true)
     expect(recovered.name).toBe('Refused')
+  })
+})
+
+describe('what the counters say a read cost', () => {
+  it('is one failure per document when the character itself is missing', async () => {
+    const { getCharacter } = await load()
+
+    refusal = { status: 404 }
+    await expect(getCharacter('gordunni', 'gone', 'eu', 'en_US')).rejects.toMatchObject({ statusCode: 404 })
+
+    const { readDiagnosticBuffers } = await import('../../server/utils/adminDiagnostics')
+    const report = readDiagnosticBuffers().blizzardApi
+
+    // The arithmetic behind "132 failed of 186": one character read fans out over twelve character documents, and
+    // every one of them is a failed request when the character is not there. The read is *one* failure; the
+    // counter counts requests, which is why the two numbers must be read with the breakdown beside them.
+    expect(report.failed).toBe(12)
+    expect(report.byStatus.find((row) => row.status === 404)?.calls).toBe(12)
+    // Nothing is counted twice and nothing is lost: every request is a failure or an answer.
+    expect(report.failed + report.ok).toBe(report.total)
+    expect(report.ok).toBeGreaterThan(0) // the token, and the index documents the stub answers
+    expect(report.byCategory.find((row) => row.category === 'profile')?.failed).toBe(1)
+    expect(report.byCategory.find((row) => row.category === 'collections')?.failed).toBe(4)
+    // Nothing was tolerated: the read failed, so no document of it was forgiven.
+    expect(report.toleratedAbsences).toBe(0)
+  })
+
+  it('is one tolerated absence when an optional document is the only thing missing', async () => {
+    const { getCharacter } = await load()
+
+    // A character with no Mythic+ history: Blizzard answers 404 for that one document, and the read is fine.
+    refusal = { status: 404, optional: true }
+    const profile = await getCharacter('gordunni', 'no-keys', 'eu', 'en_US')
+
+    expect(profile.name).toBe('Refused')
+
+    const { readDiagnosticBuffers } = await import('../../server/utils/adminDiagnostics')
+    const report = readDiagnosticBuffers().blizzardApi
+
+    // The request still failed and is still counted as a failure - and it is *also* counted as what it is: an
+    // absence the read was built to survive, so an operator does not have to act on it.
+    expect(report.failed).toBe(1)
+    expect(report.toleratedAbsences).toBe(1)
+    expect(report.byCategory.find((row) => row.category === 'mythic-keystone')).toMatchObject({
+      calls: 1,
+      ok: 0,
+      failed: 1
+    })
+    // And what has to be acted on is the difference, which is nothing.
+    expect(report.failed - report.toleratedAbsences).toBe(0)
   })
 })
