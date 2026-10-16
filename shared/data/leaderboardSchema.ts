@@ -12,6 +12,10 @@
  * class instance, because a record has to survive being written to a database row, cached by Nitro and
  * serialised into an HTML payload.
  */
+// The names of the figures themselves, which the history and distribution endpoints speak: a metric
+// leaderboard ranks one of those very figures, so its slug table is typed against them rather than against
+// strings of its own (`METRIC_LEADERBOARDS` below).
+import type { MetricKey } from './historySchema'
 
 /**
  * The side a character plays for, as the profile API reports it (`faction.type`) and lowercased.
@@ -33,7 +37,7 @@ export type LeaderboardFaction = 'alliance' | 'horde' | 'neutral'
  *
  * The item level is deliberately not among them: it is what a character *wears* rather than what it has
  * gathered, and a reader meets it beside the level under a row's name (`metaLine` in
- * `app/components/leaderboard/LeaderboardTable.vue`) rather than as a column of its own.
+ * `app/components/leaderboard/MetricLeaderboardTable.vue`) rather than as a figure of its own.
  */
 export type LeaderboardSort =
   | 'total'
@@ -47,10 +51,267 @@ export type LeaderboardSort =
   | 'mplus'
 
 /**
- * Every sort the endpoint accepts, which is what a query string is checked against.
+ * The figures a reader can open a leaderboard *of*, one page each (`/leaderboards/<slug>`).
  *
- * The order is the order the table draws its columns in, which is what an address that names several of them
- * spells them in (`leaderboardColumnsFromQuery` in `app/composables/leaderboardView.ts`).
+ * This is the second, wider list, and it is a list of its own rather than part of `LeaderboardSort` above on
+ * purpose. `LeaderboardSort` is how the hall of fame's own read may be ordered - nine presets over one table of
+ * everything - while a *metric leaderboard* is a ranking of one single figure, read from a page of its own with
+ * the world, a region or a realm in front of it. The two are different questions - "who has gathered the most, all
+ * of it at once" against "who is first at this one thing, here" - so the list of ranked figures is written out
+ * here rather than derived from the sorts: the five figures the hall of fame's read has no order for (`titles`,
+ * `quests`, `recipes`, `transmogs`, `honorLevel`) are exactly the ones this list earns, and a preset the read adds
+ * tomorrow does not silently become a page of its own.
+ *
+ * The slugs are the addresses, and they are the one spelling a reader, a crawler and a link share: a slug is
+ * never a database column (`METRIC_LEADERBOARDS` carries the column beside it) and never reaches SQL as it
+ * stands, so a hand-typed address cannot name a field the table does not have.
+ */
+export type MetricLeaderboardSlug =
+  | 'score'
+  | 'achievements'
+  | 'mounts'
+  | 'toys'
+  | 'pets'
+  | 'decor'
+  | 'titles'
+  | 'reputations'
+  | 'transmogs'
+  | 'quests'
+  | 'recipes'
+  | 'honorable-kills'
+  | 'honor-level'
+
+/**
+ * One metric leaderboard: its address, the figure it ranks, the row's own column and the words it is drawn in.
+ *
+ * * `metric` is the name the history and distribution endpoints speak (`#shared/data/historySchema`), so the
+ *   figure a page ranks is the very same figure the comparison board draws a chart of - a slug naming a
+ *   figure the site has no chart for would not compile.
+ * * `column` is the column of the materialised `leaderboard` row the ranking is read from. It is written down
+ *   here, in the one whitelist, precisely so a caller's slug is never interpolated into a query: the server
+ *   looks the column up by slug and interpolates *that* (`metricOrder` in `server/utils/leaderboardRows`).
+ * * `index` is the index the page is *read* through, and it is the same argument one step further: the order a
+ *   ranking is drawn in is the index's own, and a page that named it leaves SQLite nothing to decide about the
+ *   plan. The planner's own choice for a scoped page - `gordunni`, or a whole region - is to filter by the realm
+ *   index and then *sort* what is left, which at two hundred thousand members is 190 ms against 4 ms
+ *   (`test/bench` measures both). The name is checked against the schema the database is built from
+ *   (`LEADERBOARD_ORDER_INDEXES` in `server/utils/db`).
+ * * `labelKey` is the message key the page's heading, the column header and the rank links print the figure
+ *   with - the same keys the comparison board and the tiles already use, so one figure has one name.
+ * * `icon` is a glyph of `app/assets/icons`, drawn by `AppIcon` the way every other figure of the site is.
+ */
+export interface MetricLeaderboard {
+  slug: MetricLeaderboardSlug
+  metric: MetricKey
+  column: string
+  index: string
+  labelKey: string
+  icon: string
+}
+
+/**
+ * Every metric leaderboard the site serves, in the order the comparison board reads its rows.
+ *
+ * The order is the order of `CharacterVersus.vue`'s thirteen figures rather than alphabetical, because these
+ * are the same thirteen rows - a reader who has scrolled the board down to `Recipes` finds the same neighbours
+ * here, and a figure added to the board is added in one place rather than two.
+ *
+ * `honorable-kills` and `honor-level` read the snake_case columns the snapshots were written with
+ * (`honorable_kills`, `honor_level`), which is the one place the two spellings meet.
+ */
+export const METRIC_LEADERBOARDS: readonly MetricLeaderboard[] = [
+  { slug: 'score', metric: 'score', column: 'score', index: 'idx_leaderboard_total', labelKey: 'lbColScore', icon: 'trophy' },
+  {
+    slug: 'achievements',
+    metric: 'achievements',
+    column: 'achievements',
+    index: 'idx_leaderboard_achievements',
+    labelKey: 'achievements',
+    icon: 'achievments'
+  },
+  { slug: 'mounts', metric: 'mounts', column: 'mounts', index: 'idx_leaderboard_mounts', labelKey: 'mounts', icon: 'mounts' },
+  { slug: 'toys', metric: 'toys', column: 'toys', index: 'idx_leaderboard_toys', labelKey: 'toys', icon: 'toys' },
+  { slug: 'pets', metric: 'pets', column: 'pets', index: 'idx_leaderboard_pets', labelKey: 'pets', icon: 'pets' },
+  { slug: 'decor', metric: 'decor', column: 'decor', index: 'idx_leaderboard_decor', labelKey: 'decor', icon: 'decor' },
+  { slug: 'titles', metric: 'titles', column: 'titles', index: 'idx_leaderboard_titles', labelKey: 'titles', icon: 'titles' },
+  {
+    slug: 'reputations',
+    metric: 'reputations',
+    column: 'reputations',
+    index: 'idx_leaderboard_reputations',
+    labelKey: 'reputations',
+    icon: 'exalted-rep'
+  },
+  {
+    slug: 'transmogs',
+    metric: 'transmogs',
+    column: 'transmogs',
+    index: 'idx_leaderboard_transmogs',
+    labelKey: 'transmogs',
+    icon: 'transmogs'
+  },
+  { slug: 'quests', metric: 'quests', column: 'quests', index: 'idx_leaderboard_quests', labelKey: 'quests', icon: 'quests' },
+  { slug: 'recipes', metric: 'recipes', column: 'recipes', index: 'idx_leaderboard_recipes', labelKey: 'recipes', icon: 'recipes' },
+  {
+    slug: 'honorable-kills',
+    metric: 'honorableKills',
+    column: 'honorable_kills',
+    index: 'idx_leaderboard_kills',
+    labelKey: 'honorableKills',
+    icon: 'kills'
+  },
+  {
+    slug: 'honor-level',
+    metric: 'honorLevel',
+    column: 'honor_level',
+    index: 'idx_leaderboard_honor_level',
+    labelKey: 'honorLevel',
+    icon: 'honorLevel'
+  }
+]
+
+/** Every slug the endpoint and the pages accept, which is what an address segment is checked against. */
+export const METRIC_LEADERBOARD_SLUGS: readonly MetricLeaderboardSlug[] = METRIC_LEADERBOARDS.map(
+  (entry) => entry.slug
+)
+
+/** The metric leaderboard a slug names, or `null` for an address this build does not serve. */
+export function metricLeaderboardOf(slug: unknown): MetricLeaderboard | null {
+  if (typeof slug !== 'string') return null
+  return METRIC_LEADERBOARDS.find((entry) => entry.slug === slug) ?? null
+}
+
+/**
+ * The figure one row holds for one metric, read in one place so the page, the rank links and the API answer the
+ * same number for the same member.
+ *
+ * `null` is returned for the one thing a figure can be at two levels: a metric whose field in a row is itself
+ * unknown (the five below the collections) reads as "no figure", while every other figure is a number by the
+ * time a row exists - a collection nobody has read is a nought, and the rating is computed at write time.
+ *
+ * The map is written key by key rather than indexed off a string, so the compiler is what says that every metric
+ * a slug can name has a field to be read from.
+ */
+export function metricFigureOf(player: LeaderboardPlayer, metric: MetricKey): number | null {
+  const figures: Record<MetricKey, number | null> = {
+    score: player.score,
+    mPlusScore: player.mPlusScore,
+    achievements: player.achievements,
+    mounts: player.mounts,
+    pets: player.pets,
+    toys: player.toys,
+    decor: player.decor,
+    reputations: player.reputations,
+    titles: player.titles,
+    quests: player.quests,
+    recipes: player.recipes,
+    transmogs: player.transmogs,
+    honorableKills: player.honorableKills,
+    honorLevel: player.honorLevel
+  }
+
+  const value = figures[metric]
+  return typeof value === 'number' ? value : null
+}
+
+/**
+ * The scope a metric leaderboard page is drawn for: the whole world, one region, or one realm inside it.
+ *
+ * A realm is only a realm *within* a region - `gordunni` exists in EU and a realm of the same slug may exist
+ * in US - so a realm is never read on its own: it travels with the region that identifies it, and the SQL
+ * keeps the two together (`whereClause` in `server/utils/leaderboardRows`). A region with no realm is that
+ * region's own ranking, and no region at all is the world.
+ */
+export interface MetricLeaderboardScope {
+  /** A Blizzard region code (`eu`, `us`), or absent for the whole world. */
+  region?: string
+  /** A realm slug, meaningful together with its region. */
+  realm?: string
+}
+
+/** What a caller may ask a metric leaderboard for. */
+export interface MetricLeaderboardQuery extends MetricLeaderboardScope {
+  /** One-based. */
+  page?: number
+  perPage?: number
+}
+
+/**
+ * One page of one metric leaderboard.
+ *
+ * `scope` is echoed back so a page can print *which* ranking it is drawing, and so the reveal a link asked for
+ * (`?rank=`) can be judged against the population it was read in.
+ */
+export interface MetricLeaderboardPage {
+  slug: MetricLeaderboardSlug
+  scope: MetricLeaderboardScope
+  players: LeaderboardPlayer[]
+  total: number
+  page: number
+  perPage: number
+  pages: number
+  /**
+   * The realms this ranking holds members in, with how many each holds - which is what the realm menu of the
+   * filter bar offers.
+   *
+   * It is the ranking's own facet rather than the population's (`LeaderboardStats.realmsFacet`): a realm nobody
+   * has been read for *this* figure in would be a menu row leading to an empty table, and the bar's own rule is
+   * that it never offers a choice that empties the page. It is read within the region the page is scoped to (or
+   * across the world, when the address names no region), so a realm picked from the menu stays in the region the
+   * reader is looking at.
+   */
+  realms: LeaderboardRealmFacet[]
+  /** When the data behind the answer was last written, so a reader can judge how fresh it is. */
+  updatedAt: string
+}
+
+/**
+ * One place of one character in one ranking: their position, and how many they hold it among.
+ *
+ * `rank` is `null` for a character that is not in the ranking at all, and that is deliberately one answer to
+ * two situations: a character outside the population (an alt that is neither its account's main nor a guest
+ * row of its own) and a member whose figure for this metric has never been read are both *unplaced*.
+ * `participating` and `value` are what tell the two apart where a caller needs to.
+ */
+export interface MetricLeaderboardRank {
+  /** The character, keyed the way the table keys a row: `region:realm:name`, lowercased. */
+  key: string
+  /** Whether the character is a member of the leaderboard's population at all. */
+  participating: boolean
+  /**
+   * The row the table draws for this character, or nothing at all for one it does not hold.
+   *
+   * It is the same record a page of the ranking serves (`server/utils/leaderboardRows`), so a plate that prints a
+   * character's portrait, class, guild or realm beside their place is printing what the table below prints -
+   * rather than a second, browser-remembered copy of them that could disagree.
+   */
+  player?: LeaderboardPlayer
+  /** The figure the character holds for this metric, or `null` when the site has never read one. */
+  value: number | null
+  /** Their place in the world ranking, one-based, or `null` when they hold none. */
+  worldRank: number | null
+  /** Their place within their own region, or `null`. */
+  regionRank: number | null
+  /** Their place within their own realm (inside its region), or `null`. */
+  realmRank: number | null
+  /** How many members hold a figure for this metric in the world ranking. */
+  worldTotal: number
+  /** How many hold one in the character's own region. */
+  regionTotal: number
+  /** How many hold one in the character's own realm. */
+  realmTotal: number
+}
+
+/** What the ranks endpoint answers: one place per character a caller named, for one metric. */
+export interface MetricLeaderboardRanks {
+  slug: MetricLeaderboardSlug
+  players: MetricLeaderboardRank[]
+  /** When the data behind the answer was last written, so a reader can judge how fresh it is. */
+  updatedAt: string
+}
+
+/**
+ * Every sort the endpoint accepts, which is what a query string is checked against.
  */
 export const LEADERBOARD_SORTS: readonly LeaderboardSort[] = [
   'total',
@@ -63,6 +324,15 @@ export const LEADERBOARD_SORTS: readonly LeaderboardSort[] = [
   'kills',
   'mplus'
 ]
+
+/**
+ * How many rows a page of any of the site's tables holds.
+ *
+ * One number for every ranking of the site, because a page of one and a page of another are the same page to a
+ * reader - and because a *place* in a ranking is turned into a page with it (`metricLeaderboardPageForRank`), so a
+ * place and a page have to be counted the same number of rows at a time.
+ */
+export const LEADERBOARD_PER_PAGE = 25
 
 /**
  * The level the current expansion ends at: the one fact about levelling the table needs.
@@ -113,6 +383,16 @@ export interface LeaderboardPlayer {
    * monogram in the class colour instead.
    */
   avatar?: string
+  /**
+   * The guild the character belongs to, as the profile named it, or absent when the site has never read one.
+   *
+   * It is not a figure the table ranks by: it is a line a row prints under a name (the metric leaderboards'
+   * own `Guild` column), which is why it is optional and why a row without one prints a dash rather than an
+   * empty cell - "no guild" and "nobody has read one" are two answers, and the site only ever knows the
+   * second. The name travels on the profile the site already reads for everything else, so it costs no
+   * Blizzard call of its own (`server/utils/profileFeed`).
+   */
+  guild?: string
   /**
    * Whether the row belongs to an account on the site - the character an account signed in with and leads
    * with - rather than being a character somebody looked up once.
@@ -168,6 +448,20 @@ export interface LeaderboardPlayer {
    * silently re-ranks a file of records behind the reader's back.
    */
   score: number
+  /**
+   * The five figures a metric leaderboard of its own may rank, and the only fields of a row that are allowed to
+   * be *unknown*: `null` is a member the site has no reading of for that figure, where the six collections above
+   * are always a number (a collection nobody has read is a nought, which is what the table has always held).
+   *
+   * The distinction matters in exactly one place - the ranking of one of them (`/leaderboards/<slug>`) - where a
+   * member holding no figure must not be placed as though they held none, and where a *real* zero (an account
+   * whose own totals say it has no titles) must be placed like any other figure.
+   */
+  titles: number | null
+  quests: number | null
+  recipes: number | null
+  transmogs: number | null
+  honorLevel: number | null
   /** The day the profile was last seen, `YYYY-MM-DD`. */
   updatedAt: string
   /** The day the site first met the character, `YYYY-MM-DD`. */
@@ -186,11 +480,30 @@ export interface LeaderboardLeader {
   value: number
 }
 
+/** One realm of a facet: where it is, how it is named, and how many members of the population it holds. */
+export interface LeaderboardRealmFacet {
+  region: string
+  realm: string
+  realmName: string
+  count: number
+}
+
+/** One side of a facet, and how many members of the population play for it. */
+export interface LeaderboardFactionFacet {
+  faction: LeaderboardFaction
+  count: number
+}
+
 /**
  * The aggregated figures behind the widgets, computed in one pass over the whole population.
  *
  * This is the only place anything is summed up, and the storage layer memoises it, so the cost is
  * paid when the data changes rather than when a reader opens the page.
+ *
+ * The leaders are the site's own answer to "who is best at what": one per figure a widget stands for, and each of
+ * them read off the ranking of that very figure (`readMetricLeader`), so the member a tile names is the member
+ * standing first on the page that figure's own ranking opens with. A figure nobody holds is answered with no
+ * leader rather than with a row of zeroes.
  */
 export interface LeaderboardStats {
   /** How many characters the site has in the table. */
@@ -202,10 +515,15 @@ export interface LeaderboardStats {
   topClass: { classId: number; count: number; share: number } | null
   /** The player holding the most collectables altogether (mounts + pets + toys + decor). */
   collector: LeaderboardLeader | null
-  /** The best Mythic+ rating among the players. */
-  rating: LeaderboardLeader | null
-  /** The player with the most decor collected. */
+  /** The player with the most decor collected, first on the decor ranking (`/leaderboards/decor`). */
   architect: LeaderboardLeader | null
+  /** The player leading each of the figures a widget prints, one per ranking of a single figure. */
+  pets: LeaderboardLeader | null
+  toys: LeaderboardLeader | null
+  mounts: LeaderboardLeader | null
+  reputations: LeaderboardLeader | null
+  titles: LeaderboardLeader | null
+  transmogs: LeaderboardLeader | null
   /** Everything gathered across the population, which the line under the widgets counts. */
   totals: {
     mounts: number
@@ -216,12 +534,17 @@ export interface LeaderboardStats {
     achievements: number
   }
   /**
+   * The day the table behind these figures was last written, so a reader can judge how fresh they are
+   * (`readGlobalStats` reads it in the same pass as the counts).
+   */
+  updatedAt: string
+  /**
    * The facets the filters are built from: what a reader can pick, and how many players each
    * choice would leave. Read off the same pass, so a filter can never offer an empty result.
    */
-  realmsFacet: { region: string; realm: string; realmName: string; count: number }[]
+  realmsFacet: LeaderboardRealmFacet[]
   classesFacet: { classId: number; count: number }[]
-  factionsFacet: { faction: LeaderboardFaction; count: number }[]
+  factionsFacet: LeaderboardFactionFacet[]
 }
 
 /** What the endpoint answers with: one page of the table, and the widgets that sit above it. */
@@ -252,7 +575,7 @@ export interface LeaderboardPage {
  * filter in front of it - because that is the table the page opens on and the only one a place can
  * mean without saying whose filters it was read under. It is a number rather than a page, because how
  * many rows a page holds is the reader's to ask for; the page turns the number into a page itself
- * (see `revealRank` in `app/composables/leaderboardView.ts`).
+ * (`metricLeaderboardPageForRank` in `app/composables/metricLeaderboard.ts`).
  */
 export interface LeaderboardStanding {
   /** The character's row, exactly as the table draws it. */
@@ -273,6 +596,18 @@ export interface LeaderboardQuery {
   faction?: LeaderboardFaction | 'all'
   /** A realm slug to keep. */
   realm?: string
+  /**
+   * A Blizzard region code (`eu`, `us`) to keep, which is what turns a realm slug into *one* realm - and which is
+   * also a filter the front door draws as a chip of its own beside the sides (`regionOptions` in
+   * `LeaderboardFilters.vue`).
+   *
+   * A metric leaderboard's realm scope names both, because `gordunni` in EU and a realm of the same slug in US are
+   * two different realms (`MetricLeaderboardScope` above). An honest region narrows the table to it; a *code* the
+   * endpoint does not know is dropped rather than served, which is the front door's own reading of a filter
+   * (`parseRegionFilter` in `server/utils/params`) - while a metric page's address, which names a place rather than
+   * a filter, keeps nobody for a place the site cannot draw (`whereClause`).
+   */
+  region?: string
   /** A class id to keep, or `all`. */
   classId?: number | 'all'
   /** A fragment of a character's name, matched case-insensitively. */

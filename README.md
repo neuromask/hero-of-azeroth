@@ -30,6 +30,15 @@ Item level · M+ score · achievements · mounts · pets · toys · decor · rep
   you looked at, and addresses that are stable enough to share.
 - 🏅 **Overview tab** — item level, M+ score, achievement points against what is reachable, mounts,
   pets, toys, decor and reputations, each tile marked `account-wide` or `per character`.
+- 🏆 **The hall of fame** — every character the site has looked up, ranked. The front door sums the population up:
+  the menu of the site's thirteen rankings, the reader's own place in the overall rating, ten plates about who
+  leads what, and then the population as a whole: where it lives (every realm a link into that realm's own
+  ranking), what it plays, which side it plays for, and everything it has gathered between them. Its own entry in
+  the navigation row is a control in two halves, the way the collections tab is: the tab opens the hub, and the caret
+  beside it drops the same thirteen rankings from any page of the site. The rows are the thirteen rankings — mounts,
+  pets, toys, decor, titles, reputations, transmogs, quests, recipes, achievements, honorable kills, honour level and
+  the overall rating — each at the world's scope, a region's or a realm's, drawn with the portraits, the medals and
+  the sides a reader knows from the rest of the site.
 - 🐎 **Collection shelves** — mounts, pets, toys and decor drawn against the **whole game**: every
   expansion and event bucket with its own bar, every source ("Raid Drop", "Vendor", a zone) as a block
   of tiles beside its neighbours, and a rail of anchors to jump between them.
@@ -68,7 +77,7 @@ the size a social network wants, with the character's own render and class artwo
 
 | Address | What it shows |
 | --- | --- |
-| `/` | Front door *and* hall of fame: the ranking of every character the site has looked up — sorted, filtered and searched — with the search itself standing in the navigation row, in the place a character's own entries take, while this browser knows no character and nobody is signed in |
+| `/` | Front door *and* hall of fame: the summary of the population — the menu of the site's thirteen rankings, the reader's own place in the overall rating, ten plates about who leads what (how many members the site holds, the class most of them wear, and the leader of each figure it ranks), and the population as a whole under them (the realms it is spread over, the classes it plays, the sides it plays for, and everything it has gathered, with the day the table was last written) — with the search itself standing in the navigation row, in the place a character's own entries take, while this browser knows no character and nobody is signed in. The rows are the rankings the menu leads to |
 | `/region-eu/<realm>/<name>` | Overview: the stat tiles, the render, download / share / refresh |
 | `/region-eu/<realm>/<name>/collections` | Collections summary: a tile per shelf and the running total |
 | `/region-eu/<realm>/<name>/collections/mounts` | A shelf: sections with bars, sources side by side, the three switches, the note |
@@ -203,27 +212,29 @@ a second implementation is a second answer.
 | `/api/card/<region>/<realm>/<name>?locale=ru_RU` | The shareable JPEG, 1200×630 |
 | `/api/realms` | The realm list the search box completes from |
 | `/sitemap.xml` | Every character the site has rendered, with its language alternates |
-| `/api/leaderboard?sort=mounts&faction=horde&realm=…&class=…&q=…&page=1` | One page of the hall of fame together with the community's totals — cached for an hour |
+| `/api/leaderboard?sort=mounts&faction=horde&region=eu&realm=…&class=…&q=…&page=1` | One page of the hall of fame's own table — every member the site holds, ordered by one of nine presets — with the community's totals beside it, cached for an hour. The site's own rows are the rankings under `/api/leaderboard/metrics`; this is the read they are built from, and the API a caller can take a page of everything from |
+| `/api/leaderboard/stats` | The population as the front door's plates read it: how many members the site holds, who leads each figure, the class shares, the facets and the day the data was last written - one object, memoised per revision of the data and cached for an hour |
 
 ## 🗂 Project map
 
 | Where | What lives there |
 | --- | --- |
-| `app/pages/index.vue` | The front door, which is the hall of fame: the search in the navigation row, the reader's own plate above the table |
+| `app/pages/index.vue` | The front door, which is the hall of fame: the search in the navigation row, the menu of the site's thirteen rankings, the reader's own plate, the ten plates about the population, and the breakdown of the population as a whole under them. It draws no table: the rows live in the rankings the menu leads to |
 | `app/pages/privacy.vue` | The privacy policy: what is collected, what a sign-in stores, and what the counters are |
 | `app/pages/about.vue` | About the site: what it is, the four things it does, and the fact that it is free |
 | `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |
 | `app/pages/[region]/[realm]/[name]/` | The tabs themselves: `index` (overview), `collections/*`, `achievements/*`, `reputations`, `activity`, `compare/*` (the comparison - `/compare` with nobody to compare against yet, and `/compare/:vsRegion/:vsRealm/:vsName` with a second character) |
-| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's five views under the character's own name, the comparison as the second half of that very entry - the name opens the profile, the half beside it carries the two arrows and opens the comparison - the site's own two entries - the hall of fame and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with those left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of, beside the gold figure and in the corner of the hall of fame's filter block), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row), `CharacterVersus` (the comparison board: two characters and their thirteen figures side by side, each row's winner lit), `FavoriteStar` (the star that saves a character for the favorites: every row of the hall of fame and a character's own name wear it), `CharacterCardActions` (the pair of buttons a comparison card carries - save the character, read them again - and the moment their figures were read, under them) |
-| `app/components/leaderboard/` | `LeaderboardStats` (the widgets), `LeaderboardFilters` (columns, chips, search, the realm menu), `LeaderboardTable`, `LeaderboardYou` (the reader's own place in the table) |
-| `app/composables/` | `characterView` (what the shell hands its views: the profile, the feed, and its own Refresh with its cooldown), `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `characterLookup` (the ask that opens the search from outside it), `leaderboardView` (what the table is asked for, and the two questions a link into it spells out: which columns it lights, and which character's row it asks for), `realmNames`, `lang`, `seo`, `searchHistory` (the characters looked up, and the merge that draws them beside the saved ones), `versusFavorites` (the characters saved with a star, which the board and every search field offer), `savedCharacters` (the bridge to the account's own copies: one read of `/api/saved` per page, the browser's lists handed over once, and the three writes that follow a lookup, a star and a cross), `urls`, `relativeTime`, `wowheadPower` |
+| `app/components/` | `CollectionsGrid`, `CollectionShelf`, `CollectionScopeSwitch` (whose collection the figures are: this character's or the whole account's, on a shelf and on the summary), `CollectionMenu`, `AchievementSummaryGrid`, `AchievementShelfGrid`, `AchievementShelf`, `AchievementMenu`, `ReputationShelf`, `ReputationRow`, `ActivityFeed`, `CharacterName`, `WowheadLink`, `AppIcon`, `LocaleSwitch`, `ScopeSwitch` (the pair of chips a scope question is asked with, on the collections pages and on the reputation journal), `SiteBackdrop` (the artwork, scrim and vignette every page stands on), `SiteHeader` (the brand, the page's name, and the row under it - the site's own navigation, which this header draws whenever a page has none of its own), `SiteNav` (the site's *only* row: the character's five views under the character's own name, the comparison as the second half of that very entry - the name opens the profile, the half beside it carries the two arrows and opens the comparison - the site's own two entries - the hall of fame (a control in two halves: its tab opens the hub, its caret drops the site's thirteen rankings, `HallOfFameMenu`) and the search - held apart from them by a hairline, the language pair, the account, and the panel a phone opens all of it in; a page that is not about a character wears it with those left out), `SiteFooter`, `SiteDocument` (the frame the about page, the policy and the legal notice are cut from), `DocumentNav` (the rail of those documents, beside them), `ProfileStatsNote` (what the account page's figures are and where they come from, folded behind its own title), `ScoreLegend` (the multipliers the site's score is made of: a bare `?` wherever the figure it explains stands - beside the gold figure on the profile, beside the field of the score's own ranking, and on the front door's plate about the overall rating), `HallOfFameMenu` (the site's own entry of the navigation row, in two halves the way the collections tab is: the tab opens the hub, and the caret beside it drops the thirteen rankings of the site), `CookieNotice` (the cookie question, and the way back to it), `SupportButton`, `BackToTop`, `MyProfile` (who this browser is signed in as), `CharacterSearchForm` (the two fields that look a character up), `CharacterSearchDialog` (the same two fields, opened from a page's own row), `CharacterVersus` (the comparison board: two characters and their thirteen figures side by side, each row's winner lit), `FavoriteStar` (the star that saves a character for the favorites: every row of the hall of fame and a character's own name wear it), `CharacterCardActions` (the pair of buttons a comparison card carries - save the character, read them again - and the moment their figures were read, under them) |
+| `app/pages/leaderboards/` | The metric leaderboards: `[metric]` (the world), `[metric]/[region]`, `[metric]/[region]/[realm]` - one page per figure the site ranks, at every scope it ranks it in, each under `/ru` as an alias |
+| `app/components/leaderboard/` | `LeaderboardStats` (the front door's ten plates: how many members the site holds and who is on it now, the class most of them wear, and the leader of each figure the site ranks), `LeaderboardBreakdown` (the same aggregate turned on the population itself: the realms the members are spread over - each of them a link into that realm's own ranking - the classes they play, the sides they play for, and everything they have gathered between them, under the day the table was last written), `LeaderboardFilters` (the site's thirteen rankings as one menu - the one being read wearing the gold - and, under a hairline, the filters every page that draws a table wears: which side, which region, which realm and a name, with the legend of the score beside the field; the front door has no table and is told so, so it wears the menu alone - `filters`), `MetricLeaderboard` (a ranking's own page: the plate, the table and the way through it), `MetricLeaderboardTable` (`# | Character | Guild | Realm | <the figure>` - the one table of the site, and its rows are the row the plates and the board wear: the place in a medal, the side as an edge, the portrait with its halo and its online dot, the name with the star and the two badges, the class, the level and the item level, the guild in a column of its own), `MetricLeaderboardYou` (the plate the whole site wears: who the reader selected, what the figure makes of them, and their three places - the front door draws it about the overall rating, with the question mark that opens the score's own arithmetic beside the figure it prints), `MetricRankLinks` (where one character stands - world, region, realm - above the open row's charts and in the middle of that plate) |
+| `app/composables/` | `characterView` (what the shell hands its views: the profile, the feed, and its own Refresh with its cooldown), `collections`, `collectionView` (the switches a shelf carries: what is shown, and whose collection), `reputationView` (whose journal a page reads: the character's or the account's), `achievements`, `achievementView`, `reputations`, `presence` (the beat and who is on the site), `cookieConsent` (the reader's answer and the Consent Mode call it makes), `metricLeaderboard` (a ranking's own address: the slug, the scope, the page a `?rank=` link lands on, and the key its answer is filed under), `realmNames` (the site's own realm list, which a metric page also asks whether a realm exists at all), `lang`, `seo`, `searchHistory` (the characters looked up, and the merge that draws them beside the saved ones), `versusFavorites` (the characters saved with a star, which the board and every search field offer), `savedCharacters` (the bridge to the account's own copies: one read of `/api/saved` per page, the browser's lists handed over once, and the three writes that follow a lookup, a star and a cross), `urls`, `relativeTime`, `wowheadPower` |
 | `server/api/` | The endpoints above |
-| `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage`, `savedCharacters` (the two lists an account remembers) |
+| `server/utils/` | Blizzard client, the atlas and its readers, the card renderer, the SWR cache, reputations, achievements, the Armoury reader, the character index, `leaderboardStorage` (the table's pages, a character's place, a metric's pages and the places a comparison asks for), `savedCharacters` (the two lists an account remembers) |
 | `scripts/` | The offline refreshes (see below) and `deploy.mjs` |
 | `shared/data/collectionsSchema.ts` | The collection types, the section shape, and the Russian label map |
 | `shared/data/reputationsSchema.ts` | The reputation journal's types, the stage message keys, and the synthetic group's name |
-| `shared/data/leaderboardSchema.ts` | The hall of fame's record, query and payload types, shared by the server and the components |
+| `shared/data/leaderboardSchema.ts` | The hall of fame's record, query and payload types, and the thirteen metric leaderboards a reader can open a ranking of - shared by the server and the components |
 | `shared/utils/leaderboardScore.ts` | `calculatePlayerScore` and the weights it is made of |
 | `shared/utils/consent.ts` | The cookie key, the Consent Mode defaults and what an answer changes — read by both `nuxt.config.ts` and the banner |
 | `shared/utils/savedCharacters.ts` | The remembered character itself: its shape, the key the two lists are deduplicated on, the two limits, and the `localStorage` arms — read by the browser, by an account's own copy and by the endpoints that accept one |
@@ -233,23 +244,23 @@ a second implementation is a second answer.
 
 ## 🏆 The hall of fame
 
-The site's front door *is* its hall of fame: `/` is a public ranking of every character the site has read — the
-population the statistics are counted over (`server/utils/statisticsPopulation`) — with the search in the row
-above it and the community's own totals between the two. It is built so that opening it costs the rest of the
-site nothing:
+The site's front door *is* its hall of fame, and it is a summary rather than a table: `/` shows the menu of the
+site's thirteen rankings, the reader's own place in the overall rating, ten plates about the population — how many
+members it holds (`server/utils/statisticsPopulation`), who is on it right now, the class most of them wear, and the
+leader of each figure the site ranks - and, under the plates, the population as a whole: the realms it is spread over (every one of them a link into that realm's own ranking of the overall rating), the classes it plays, the sides it plays for, and everything its members have gathered between them, printed under the day the table was last written. The rows are the rankings the menu leads to, one page per figure and scope, and
+they are built so that opening the site costs the rest of it nothing:
 
-- **Nothing is aggregated per request.** The table is materialised in the site's own database
-  (`leaderboard`, `server/utils/leaderboardRows`): one row per member, holding the figures the table draws and
-  the overall rating computed when the row was written. Every order the page offers is an index over that table
+- **Nothing is aggregated per request.** The population is materialised in the site's own database
+  (`leaderboard`, `server/utils/leaderboardRows`): one row per member, holding the figures the rankings draw and
+  the overall rating computed when the row was written. Every order a ranking is drawn in is an index over that table
   (`server/utils/db`), so a read is a page of an indexed query rather than a sort of the population — the same
   cost whether the table holds ten players or two hundred thousand, and a deep page is an index scan.
 - **The rating is stored, not derived.** It is computed once, by the formula the site's own code holds
   (`server/utils/playerScore`), and a build that changes the weights — or what a row holds — stamps the table
   and rebuilds the population once at startup (`SCORE_VERSION`, `ROW_VERSION`).
-- **The endpoint is cached for an hour** (`defineCachedEventHandler`, `maxAge: 3600`, `swr: true`), so
-  a burst of readers is answered from Nitro's memory in single-digit milliseconds and the hour is
-  refreshed *behind* a response rather than in front of one. The first page of the table is rendered
-  on the server and arrives inside the document.
+- **The endpoints are cached for an hour** (`defineCachedEventHandler`, `maxAge: 3600`, `swr: false`), so
+  a burst of readers is answered from Nitro's memory in single-digit milliseconds. The first page of a ranking
+  and the front door's own plates are rendered on the server and arrive inside the document.
 - **A write is one row.** A reading filed, an account's totals filed, a character claimed or a main named
   rewrites exactly the member it moved (`refreshGuestRow`, `refreshAccountRow`), inside a single statement
   rather than by rewriting a document.
@@ -261,12 +272,10 @@ site nothing:
 
 The figures a reader is most likely to have moved themselves are the ones on the page they are looking at: every
 character page anybody renders hands the table that character's numbers, so a reader who has just looked somebody up
-has very likely changed the totals the table is about to print. So the page asks for its answer twice — once with
-the document the server rendered, and once, silently, when the browser draws the page without the server having just
-rendered it (a reader stepping back from a character page). Both asks carry `cache-control: no-cache`, because a
-browser is allowed to keep the endpoint's answer for an hour (`max-age` is Nitro's own, built from the endpoint's
-cache — a header a handler cannot set for itself), and the second writes what comes back straight into the table on
-screen: nothing waits, nothing dims, and the counts correct themselves a moment later.
+has very likely changed the totals a ranking is about to print. Every table therefore asks to be answered rather than
+taken out of a browser's store (`cache-control: no-cache` on the request), while an answer's own freshness is Nitro's
+to write from the endpoint's hour (`max-age`) — and the answer the server rendered during the page's own render is
+the one that arrives with the document, so the first paint is the table rather than a spinner.
 
 The storage sits behind `server/utils/leaderboardStorage.ts`, which is a thin layer over the table itself: the
 rows *are* the hall of fame's table in the database (`server/utils/leaderboardRows`), and a table read from a
@@ -281,63 +290,148 @@ chosen so that a top-end character contributes the same order of magnitude to ev
 Adding a category is a line there plus a column on the table's own row; the endpoint, the page and
 the components do not have to learn about it.
 
-On the page itself the figures are the reader's to choose: a row of chips switches columns on and off —
-the overall chip means every column, and picking any other one shows exactly the figures it names,
-several at once — and a `?` beside them opens the legend of the score, whose multipliers are read off
-the formula itself so the panel cannot promise something the server does not compute. The realm names
-come from the site's realm list rather than from whichever language the record happened to be written
-in, and an item level is read beside the level under a row's name rather than as a column of its own — a figure
-that says nothing among characters still climbing is printed only for one at the current level cap, and the
-comparison board and a character's own header print it unconditionally, because neither ranks anybody. An
-account has no item level of its own at all: it is always the character's, so a row of the hall of fame shows
-the main's — the very character the row is named after — and the account's page prints the main's too. The
+### The metric leaderboards
+
+Beside the table there is a ranking *per figure*: `/leaderboards/mounts` is the world's mount ranking,
+`/leaderboards/mounts/eu` the European one, `/leaderboards/mounts/eu/gordunni` that realm's — the same
+three addresses for each of the thirteen figures the comparison board prints. The list lives in one place
+(`METRIC_LEADERBOARDS` in `shared/data/leaderboardSchema.ts`): a slug, the figure it ranks, the column of the
+materialised row the order is read from, the index that carries that order, and the words it is drawn in. Nothing a
+caller types reaches SQL — a slug this build does not serve is a 404, and the *entry* is what the query is built
+from.
+
+A ranking is a total order, and that is the whole of its correctness: `metricOrder` in
+`server/utils/leaderboardRows` writes the order (the figure, then the rating, then the name, then the region, the
+realm and the name key a row is keyed by), the indices in `server/utils/db` carry that very order, and a place is
+answered by *counting the rows above a member* with the same comparison written as a predicate — so a page and the
+place a reader is shown can never disagree about who is ahead of whom. The comparison is written as a flat chain of
+`AND`s and one `OR`, which SQLite turns into a handful of index seeks; nested `OR`s make it count the whole index
+instead (4 ms against 40 ms for one place at two hundred thousand members).
+
+A page of a ranking is laid out as the front door is, because it answers the same kind of question - down to the bar
+they both wear (`LeaderboardFilters.vue`), which is one component on both pages. The bar leads the page, because
+choosing the table is what a reader does before reading one: it opens with the menu of the site's thirteen rankings,
+one figure each, a press each, keeping the region and realm the reader is already looking at, since a query parameter
+would make one address stand for thirteen different ranks. A hairline of the brand gold parts that menu from the
+filters under it: which side, which region, which realm and a name, with the legend of the score beside the field
+wherever the score is what the table shows (the front door draws no table, so it wears the menu alone and is told so
+- `filters`). Those filters are the last thing in the bar and the first thing over the rows they narrow, and the plate
+about the reader stands under them (`MetricLeaderboardYou.vue`), in three columns: who they are (portrait, name, the
+badges, the realm, class and level), where they stand (their three places, centred and parted from the halves beside
+them by a hairline), and what they hold for the figure being ranked, with the press that walks the table to their row.
+The region chips and the realm menu are *scopes* here as much as filters - the region and the realm a ranking is
+drawn for are part of its address - so the menu offers the realms this ranking actually holds members in, with what
+each holds (`readMetricRealms`), "every realm" is the world ranking, and the reset button steps back to it, which is
+what makes it appear at all once a realm or a region is chosen. The rows below wear the marks every row of the site
+wears: the place in a medal for the first three, the side as a bar down the row's edge, the portrait with its account
+halo and an online dot, the name with the star that saves a character for the favorites beside it and the two
+badges that say which row is the reader's own main (`lbYouBadge`) and which row the plate above the
+table is about (`lbSelectedBadge`), the class, the level and - for a character who has finished the climb - the
+item level under it, and the guild in the column the table keeps for it.
+The columns are the table's own and not its content's (`table-fixed`): the place takes a fixed slice of the left
+edge, the player a little more than the rest, and the guild, the realm and the figure share what is left equally -
+a column that grew with the longest name in the table would shift every column beside it, and a reader scanning for
+their own row would lose it as the columns moved. The realm prints the region it belongs to as a badge of its own
+(`EU`, `US` - the game's own shorthand, the way `M+` is): a ranking of the *world* holds both sides of the
+Atlantic side by side and a realm's name is the same word on either of them, so the slug alone would be a name a
+reader could be wrong about.
+
+The guild is a fact about the character rather than a figure of its readings, and it rides on the very profile the
+site already reads for everything else: a reading files it on the character and rewrites the member's row from it
+(`fileDailyReading` in `server/utils/characterReading`), so a row holds it from the day that character is read
+again rather than from the day the row was first written.
+
+A page is named for both halves of what it shows - "Зал славы - Счёт - Hero of Azeroth" (`lbMetricTitle`,
+`lbMetricTitleScoped`): the site's own table, the figure it is read for, and - on a scoped page - the scope,
+which is the *page's* address rather than a filter inside it. A realm's pets and the world's pets are two
+tables, not two views of one.
+
+Every part of a title is joined by the one separator the whole site joins titles with (`TITLE_SEPARATOR` in
+`app/composables/seo.ts`, ` - `), and the brand is the last of them: a page names itself, `usePageSeo` appends the
+brand (`titleWithBrand`), and a page that writes its title whole - the character pages do, theirs ending in the
+brand - writes it with the very same join.
+
+A figure nobody has read is not a nought: the five figures that arrive beside the collections (`titles`, `quests`,
+`recipes`, `transmogs`, `honorLevel`) are `NULL` on a row until something reads them, and a member holding no
+figure for a metric is *left out of that one ranking* rather than placed at the bottom of it. A real zero — an
+account whose own totals say it holds none — is ranked like any other figure. The five columns are filled from the
+rows the table is already made of: a guest's own newest reading, an account's own totals
+(`readAccountTotals` in `server/utils/accountPool`), so the figure a metric page prints for a character is the
+figure the comparison board prints for them.
+
+The comparison board puts the three places of the open row above its charts (`MetricRankLinks.vue`), one line per
+side, each a link into the ranking it names with `?rank=` on it: `/leaderboards/mounts/eu?rank=1102` opens the
+European ranking at the page holding the 1 102nd member and marks their row. One request answers all three places
+of both sides (`server/api/leaderboard/metric-ranks`), it is made only while a row is open, and the transmogs row
+waits for the wardrobe it is about to file before it asks — a place computed from a figure the site does not hold
+yet would be a place of nothing. A character who is not in the population at all — an alt that is neither its
+account's main nor a row of its own — is told so rather than given a place.
+
+The metric pages are cached exactly as the front door is (`server/api/leaderboard/metrics`, an hour keyed on the
+question and on the stamp of the data), the first page of one is rendered on the server, and the realms, regions
+and figures a reader may reach are the site's own: there is no page for the item level (which the site draws no
+history of) and none for the Mythic+ rating (which the site's own read counts in the season Blizzard is
+running).
+
+A ranking's answer is filed under the question that asked for it, and that is the page's own rule rather than the
+endpoint's (`requestKey` in `app/composables/metricLeaderboard.ts`): the name a fetch is cached under is its address
+together with the narrowing and the page, so a page the router has rebuilt for another ranking — another figure,
+another region, another realm, another page of one — *asks*, rather than being handed the rows of the ranking the
+reader has just left. `useAsyncData` does not fetch again for a key it already holds an answer for, so a single
+fixed key is exactly what a table looks like when it changes only on a full reload: the address moved, the request
+did not. The same name on both sides of the wire is what lets the server's answer ride in with the document
+(`useAsyncData`'s payload) instead of being asked for twice.
+
+The bar above a table is where the site's tables are chosen: the menu of the thirteen of them, one figure each
+(`METRIC_LEADERBOARDS`), stands over the filters, parted from them by a hairline of the brand gold. Each entry is an
+address rather than a query parameter, so each has a page of its own and a crawler can find it, and the entry a reader
+is reading wears the gold and is not a link to itself. The hub is not an entry of this menu: it is the tab of the
+navigation row above, whose caret opens this same list from anywhere on the site (`HallOfFameMenu.vue`), and the front
+door wears the menu without the filters under it (`filters`), because it draws no table to narrow. Under the menu are the filters: which side, which
+region, which realm, and a name, with the legend of the score (`?`, "how the score is calculated") beside the field,
+where the figure it explains is the one in the table (its multipliers are read off the formula itself, so a panel can
+never promise something the server does not compute). The realm names come from the site's realm list rather than from
+whichever language the record happened to be written in, and an item level is read beside the level under a row's
+name rather than as a figure of its own — a figure that says nothing among characters still climbing is printed only
+for one at the current level cap, and the comparison board and a character's own header print it unconditionally,
+because neither ranks anybody. An account has no item level of its own at all: it is always the character's, so a
+row shows the main's — the very character the row is named after — and the account's page prints the main's too. The
 Mythic+ rating is counted in the season Blizzard is running (`server/utils/mplus`): a score read before a season
 began counts as nothing, so a table never prints the season that has just ended.
 
-The page carries the site's one search in three places, and every one of them is the same two fields
+The page carries the site's one search in two places, and both of them are the same two fields
 (`app/components/CharacterSearchForm.vue`) - the site's own glass, with the rim of a field warming to the brand
 gold while it holds the cursor, and the button the search is pressed through cut from the amber glass a
 character's own download button wears: the material's frosted pane over the deep amber fill, its rim warmed from
 amber by the one variable every rim of the site reads, and its glow widening under the pointer. The geometry is
 the layout's, so the button is exactly the size it always was - what its three shapes share is the material, not
 the shape: in the navigation row, as one row, in the place a character's own entries take while this browser knows
-signed in (`compact` - the shape the front door wears on a first visit); the sheet the row drops
-(`app/components/CharacterSearchDialog.vue`, on `Ctrl`/`⌘`+`K` as well); and the button under an empty table -
-because a name the table does not hold is not a name the site does not know, it is one nobody has looked up yet,
-and looking somebody up is what writes their row. That last one asks for the search instead of holding it
-(`app/composables/characterLookup.ts`) and hands over the name the reader typed into the filter, so the field is
-not a dead end.
+nobody and nobody is signed in (`compact`); and the sheet the row drops
+(`app/components/CharacterSearchDialog.vue`, on `Ctrl`/`⌘`+`K` as well). There used to be a third, under an empty
+table, offering the name that matched nothing; the table it stood under is a set of rankings now, and a ranking
+that holds nobody for a realm says so rather than asking for a search.
 
 The list that opens under the name field is one list holding two kinds of remembered character: the ones this
 browser looked up, and the ones it saved with a star for a comparison (`mergeSearchEntries`,
 `app/composables/searchHistory.ts`). They are drawn together because a reader looking for a character does not
 care which of the two remembered it, and each row carries the star, so the list a reader can see is the list a
-reader can change. Those same stars are how the list is filled from the rest of the site: every row of the hall
-of fame wears one, a character's own page carries one as a
+reader can change. Those same stars are how the list is filled from the rest of the site: every row of a ranking
+wears one, a character's own page carries one as a
 button in its header, beside Refresh (`app/components/FavoriteStar.vue`, `app/pages/[region]/[realm]/[name].vue`),
 and the account page keeps the whole list in one tile, where a pill is a way to the character and the cross
 beside it a way out of the list. The saved ones stand first, and the pane draws at most twenty of the pair: a field's list is a
 way back to a character rather than an archive to browse, and what is typed still narrows the whole list before
 that cut is made.
 
-The table itself is wider than a phone on purpose - a rank, a name and up to nine figures do not fit a column
-of glass - so it scrolls sideways under a bar of the site's own (`.hoa-scroll-x`,
-`app/assets/css/main.css`): the one scroller of the site that *draws* its bar, because a table whose
-right-hand columns are a drag away has to say so rather than look complete.
-
-Its columns are measured the same way in every row (`app/components/leaderboard/LeaderboardTable.vue`): the
-rank and the rating are as wide as their own figures, the name column is as wide as a name's own line with the
-star and *both* of the marks a row can wear on it (`NAME_WIDTH_MIN`), and a figure column is given no width at
-all, which in a fixed layout is how a column takes an equal share of what the measured columns leave. So the
-figures are the columns that spread across the panel and the name stays where a reader looks for it - at the
-left, whatever number of figures is switched on. A name is **never cut**: no mark of a row may squeeze it out of
-the cell, which is what a name lost to its own badges looked like. Nor does a mark drop to a line of its own: the
-column was measured for the row wearing both marks - the reader's own row that is also the row being read - so
-every row reads on one line, and the table's own minimum width grew by what the name column grew by, which is how
-the wider name took no room from the figures. The side a row is on is not one of those marks: it is the colour of
-the row's own edge, the same two pixels the selected row wears in the brand gold - the gold wins on the row being
-read, because an edge carries one colour - so the table says it once per row rather than in a pill beside every
-name.
+A ranking is drawn a row at a time in the one table of the site (`app/components/leaderboard/MetricLeaderboardTable.vue`),
+which is wider than a phone on purpose - a place, a name, a guild, a realm and a figure do not fit a column of glass -
+so it scrolls sideways under a bar of the site's own (`.hoa-scroll-x`, `app/assets/css/main.css`): the one scroller of
+the site that *draws* its bar, because a table whose right-hand columns are a drag away has to say so rather than look
+complete. The place and the figure are as wide as their own numbers, the name is measured for its own line with the
+star and *both* marks a row can wear on it, and the rest spread across the panel, so a name is never cut and no mark
+drops to a line of its own. The side a row is on is not one of those marks: it is the colour of the row's own edge -
+the same two pixels the selected row wears in the brand gold, and the gold wins, because an edge carries one colour -
+so the table says it once per row rather than in a pill beside every name.
 
 A reader who is signed in has that same list kept for their account (`/api/saved`), so it is the list they had on
 their other device. The browser's copy is what a field still draws first - it is written before anything is asked
@@ -353,18 +447,22 @@ looked nobody up on this device - the main of their account: `/api/profile` is r
 case, so the main costs the page no second request, and a reader who signed in somewhere else finds their
 character waiting in the bar instead of a pair of empty fields. The row under the page's name is the site's own
 navigation and the very component a character page wears (`app/components/SiteNav.vue`), drawn only once there is
-somebody for its six character entries to point at; the bar carries that character's place instead of the account
-chip (`app/components/leaderboard/LeaderboardYou.vue`).
+somebody for its six character entries to point at; the bar carries that character's own plate instead of the account
+chip (`app/components/leaderboard/MetricLeaderboardYou.vue`, which the front door draws about the overall rating
+too).
 
-The table is a *destination* rather than only a list. Every stat tile on a character page links into it with the
-figure's own chip lit **and** that character's row named (`leaderboardColumnsQuery`, `leaderboardRowQuery` - the
-same pair the page reads the address back with), because a reader who presses a tile is asking one question:
-where does *this* character stand on this figure? So the hall of fame reads the place the table gives that row
-(`/api/leaderboard/<region>/<realm>/<name>`), turns to the page that holds it and scrolls to the row itself - a
-row already on the screen is scrolled to without asking for anything at all, and a character the table does not
-know (an alt of an account whose main is the row it enters) leaves the page exactly as it was. The walk happens
-once per link, and `data-key` on every row is what makes a row an address a page can walk to rather than a
-position it has to count to. The button under the reader's own plate walks the same way.
+The rankings are a *destination* rather than only a list, and there are two ways into them from what a reader is
+looking at. Every stat tile on a character page links into the **ranking of the figure it prints**, on that
+character's own realm (`metricLeaderboardPath` - the very composable every ranking page is addressed by, so a tile and
+the page it opens cannot spell the same scope differently), because a reader who presses a tile is asking one
+question: where does *this* character stand on this figure? The ranking they land on answers it twice over - its plate
+holds their place among the world, the region and their realm, and the button beside it walks the table to their row.
+That walk is the `?rank=` mechanism itself: the place is turned into the page that holds it
+(`app/composables/metricLeaderboard.ts`), the row is scrolled to once it is drawn, and a character the table does not
+know (an alt of an account whose main is the row it enters) leaves the page exactly as it was. `data-key` on every row
+is what makes a row an address a page can walk to rather than a position it has to count to. And the plates of the
+front door's own tiles name a leader each: pressing one opens that leader's page, which is where the figures behind
+the plate are read in full.
 
 ## 🎯 Collections: where the numbers come from
 
@@ -508,7 +606,10 @@ character of an account on the site is placed in the distribution by the account
 roster's readings.
 
 Under each row stands that metric's panel (`app/components/MetricHistoryPanel.vue`), and it is two charts of the
-site's own record. The **history** is the column's character, one point per real change, drawn as a line over
+site's own record. The **history** is the column's character, one point a *day* - the day is the smallest thing
+the record holds, so a second reading inside a day rewrites that day's point rather than filing another one beside
+it (`fileDailyReading` in `server/utils/characterReading`), and the reader folds whatever an older build left to
+one point a day as well - drawn as a line over
 the last week, month, quarter, year or everything, with a table view of the same points; a character the site
 has read once is drawn as that single point rather than as a notice, because it is where the curve starts. The
 **distribution** is the metric over the whole population — everyone the site has read, in twenty-four buckets the
@@ -688,8 +789,10 @@ character up still costs nothing and needs no account.
   (`server/plugins/characterSync.ts`) does the same on a timer, so no page ever waits on a Blizzard
   read per alt. Every read also stamps the moment it happened on the character
   (`characters.stats_read_at`), because a reading is filed for the moment it was taken rather than for the day
-  it belongs to — and a page that printed a day would tell a reader who has just pressed Refresh that their
-  character was read "20 hours ago".
+  it belongs to - and a page that printed a day would tell a reader who has just pressed Refresh that their
+  character was read "20 hours ago". The point that reading is filed as belongs to the day all the same: one point a
+  day per character and per account (`snapshots`, `account_snapshots`), so a day's readings cost one row however
+  many times it was opened, and a chart drawn from them is a curve of days.
 - **The account pool is the source of every figure.** Mounts, pets, toys, decor and the factions
   driven to Exalted are shared across a whole Battle.net account, so the account's numbers are a
   **union of unique ids** (`account_pool`), filled from Blizzard's account collections

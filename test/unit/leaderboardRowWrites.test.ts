@@ -35,6 +35,8 @@ function reading(input: {
   ap?: number
   level?: number
   avatar?: string
+  /** The guild the profile named, or nothing at all for a profile that named none. */
+  guild?: string
 }): never {
   return {
     name: 'Stranger',
@@ -43,6 +45,7 @@ function reading(input: {
     faction: 'HORDE',
     classId: 1,
     avatarUrl: input.avatar ?? '',
+    guild: input.guild ?? '',
     ilvl: input.ilvl ?? 300,
     mPlusScore: 0,
     ap: input.ap ?? 1000,
@@ -273,6 +276,48 @@ describe('a re-read that moved one field and no collection', () => {
 
     expect(statisticsRevision()).toBeGreaterThan(before)
     expect(row('eu', 'gordunni', 'stranger')).toMatchObject({ mounts: 11 })
+  })
+})
+
+/**
+ * The guild, which is a fact about the character rather than a figure of its readings - and the one fact the
+ * metric leaderboards print in a column of their own.
+ *
+ * It arrives on the profile beside the item level, so it is filed by the same write and carried into the row the
+ * member is drawn by. It used to be written only where a character was *first* met, which meant a row kept the
+ * guild of the day it was created: every row written before the site stored a guild at all printed a dash for a
+ * reader who is in a guild, for as long as the row lived.
+ */
+describe('the guild a reading names', () => {
+  it('reaches the character and the row of a member the site already knew', () => {
+    const id = guest()
+
+    // The day the site met them the profile named no guild, so neither the character nor the row carries one.
+    expect(memory.db.prepare('SELECT guild FROM characters WHERE id = ?').get(id)).toMatchObject({ guild: null })
+    expect(row('eu', 'gordunni', 'stranger')).toMatchObject({ guild: null })
+
+    // A later reading names one. Not a single figure moved, so no point is filed - and both rows move anyway.
+    fileDailyReading(id, reading({ mounts: 10, guild: 'Таверна у Луны' }))
+
+    expect(points(id)).toBe(1)
+    expect(memory.db.prepare('SELECT guild FROM characters WHERE id = ?').get(id)).toMatchObject({
+      guild: 'Таверна у Луны'
+    })
+    expect(row('eu', 'gordunni', 'stranger')).toMatchObject({ guild: 'Таверна у Луны' })
+  })
+
+  it('is left as it was by a reading that names none, rather than blanked', () => {
+    const id = guest()
+
+    fileDailyReading(id, reading({ mounts: 10, guild: 'Таверна у Луны' }))
+    // A character who is in no guild answers with an empty name, and a partial read carries none at all: neither
+    // may take a name the record already holds away.
+    fileDailyReading(id, reading({ mounts: 10 }))
+
+    expect(memory.db.prepare('SELECT guild FROM characters WHERE id = ?').get(id)).toMatchObject({
+      guild: 'Таверна у Луны'
+    })
+    expect(row('eu', 'gordunni', 'stranger')).toMatchObject({ guild: 'Таверна у Луны' })
   })
 })
 

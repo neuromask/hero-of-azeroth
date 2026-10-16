@@ -44,6 +44,9 @@ CREATE TABLE characters (
   ilvl REAL,
   faction TEXT,
   avatar TEXT,
+  -- The guild the character belongs to, which is a fact about the character rather than a figure of its readings
+  -- (see ./server/utils/db). Named here for the reason every other column is: a read that asks for it must find it.
+  guild TEXT,
   is_main INTEGER NOT NULL DEFAULT 0,
   last_seen_at INTEGER NOT NULL DEFAULT 0,
   first_seen_at INTEGER,
@@ -110,6 +113,9 @@ CREATE TABLE leaderboard (
   realm_name TEXT NOT NULL,
   display_name TEXT NOT NULL,
   avatar TEXT,
+  -- The guild of the character the row is named after, and the five figures a metric leaderboard ranks: all of
+  -- them nullable, because a figure nobody has read is unknown rather than nought (see ./server/utils/db).
+  guild TEXT,
   class_id INTEGER NOT NULL DEFAULT 0,
   faction TEXT NOT NULL DEFAULT 'neutral',
   level INTEGER NOT NULL DEFAULT 0,
@@ -125,6 +131,11 @@ CREATE TABLE leaderboard (
   decor INTEGER,
   reputations INTEGER,
   achievements INTEGER,
+  titles INTEGER,
+  quests INTEGER,
+  recipes INTEGER,
+  transmogs INTEGER,
+  honor_level INTEGER,
   collectables INTEGER NOT NULL DEFAULT 0,
   score INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (region, realm_slug, name_key)
@@ -145,6 +156,27 @@ CREATE TABLE saved_characters (
   starred_at INTEGER,
   UNIQUE (user_id, region, realm_slug, name_key)
 );
+-- The order each metric ranking is read through (see ./server/utils/db, where the site's own list lives): a test
+-- that reads one of these tables runs the same shape of query the page runs, and an index missing here would leave
+-- the read on the planner's own plan. The fallback a database without an index is answered by is covered on its
+-- own (see test/unit/metricLeaderboard.test.ts).
+CREATE INDEX idx_leaderboard_total ON leaderboard(score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_mounts ON leaderboard(mounts DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_pets ON leaderboard(pets DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_toys ON leaderboard(toys DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_decor ON leaderboard(decor DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_achievements ON leaderboard(achievements DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_reputations ON leaderboard(reputations DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_titles ON leaderboard(titles DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_quests ON leaderboard(quests DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_recipes ON leaderboard(recipes DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_transmogs ON leaderboard(transmogs DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_kills ON leaderboard(honorable_kills DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+CREATE INDEX idx_leaderboard_honor_level ON leaderboard(honor_level DESC, score DESC, display_name COLLATE NOCASE, region, realm_slug, name_key, updated_at);
+-- The filters the bar offers: a realm, and a class.
+CREATE INDEX idx_leaderboard_realm ON leaderboard(region, realm_slug);
+CREATE INDEX idx_leaderboard_class ON leaderboard(class_id);
+CREATE INDEX idx_leaderboard_user ON leaderboard(user_id);
 `
 
 export interface NewCharacter {
@@ -156,6 +188,8 @@ export interface NewCharacter {
   level?: number
   /** The item level the character wears, which is a fact about the character rather than a reading. */
   ilvl?: number
+  /** The guild the character is in, which is read off the profile the site already fetches. */
+  guild?: string
   statsReadAt?: number
 }
 
@@ -206,8 +240,8 @@ export function createMemoryDb(): MemoryDb {
     addCharacter(character) {
       const result = db
         .prepare(
-          `INSERT INTO characters (user_id, region, realm_slug, name, name_key, display_name, is_main, level, ilvl, stats_read_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO characters (user_id, region, realm_slug, name, name_key, display_name, is_main, level, ilvl, guild, stats_read_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           character.userId,
@@ -219,6 +253,7 @@ export function createMemoryDb(): MemoryDb {
           character.isMain ? 1 : 0,
           character.level ?? null,
           character.ilvl ?? null,
+          character.guild ?? null,
           character.statsReadAt ?? null
         )
 
@@ -229,8 +264,8 @@ export function createMemoryDb(): MemoryDb {
       const result = db
         .prepare(
           `INSERT INTO characters
-             (user_id, region, realm_slug, realm_name, name, name_key, display_name, is_main, level, ilvl, last_seen_at, stats_read_at)
-           VALUES (NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?)`
+             (user_id, region, realm_slug, realm_name, name, name_key, display_name, is_main, level, ilvl, guild, last_seen_at, stats_read_at)
+           VALUES (NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0, ?)`
         )
         .run(
           character.region,
@@ -241,6 +276,7 @@ export function createMemoryDb(): MemoryDb {
           character.name,
           character.level ?? null,
           character.ilvl ?? null,
+          character.guild ?? null,
           character.statsReadAt ?? null
         )
 

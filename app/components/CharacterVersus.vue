@@ -39,6 +39,8 @@ import { useSearchHistory } from '~/composables/searchHistory'
 import { useVersusFavorites } from '~/composables/versusFavorites'
 import type { CharacterData } from '~~/server/utils/blizzard'
 import type { DistributionResponse, HistorySeries, MetricKey } from '#shared/data/historySchema'
+import { METRIC_LEADERBOARDS } from '#shared/data/leaderboardSchema'
+import type { MetricLeaderboard, MetricLeaderboardRank, MetricLeaderboardRanks } from '#shared/data/leaderboardSchema'
 
 /** The second character of a comparison: the three segments of its own address, as the address spells them. */
 interface VersusTarget {
@@ -391,6 +393,70 @@ const { data: distribution, refresh: refreshDistribution } = await useAsyncData(
   () => (distributionUrl.value ? $fetch<DistributionResponse>(distributionUrl.value) : Promise.resolve(null)),
   { default: () => null }
 )
+
+/**
+ * The ranking the open metric has a page of, or `null` for a metric the site ranks nowhere on its own.
+ *
+ * The board's thirteen rows are the thirteen metric leaderboards, and the two lists are tied together by the
+ * figure itself (`METRIC_LEADERBOARDS` in `#shared/data/leaderboardSchema` is keyed on `metric`), so a row added
+ * to the board without a ranking of its own draws no rank links rather than a link to the wrong figure. The
+ * Mythic+ rating is deliberately not one of them: it is ranked by the front door's own table, in the season
+ * Blizzard is running, and it is not a row of this board at all (`server/utils/mplus`).
+ */
+const openLeaderboard = computed<MetricLeaderboard | null>(() => {
+  if (!metric.value) return null
+  return METRIC_LEADERBOARDS.find((entry) => entry.metric === metric.value) ?? null
+})
+
+/**
+ * Whether the places may be asked for yet.
+ *
+ * The wardrobe is the one figure of the board that arrives *after* the profile has been drawn
+ * (`server/api/transmog`, 2.5 MB), and the site files it as the character's own reading when it lands. Asking
+ * for a place in the transmogs ranking before then would be asking about a figure the site does not hold yet,
+ * and the answer would be "no figure read" - a place that is not a place. So that one metric waits for both
+ * sides' wardrobes, exactly as the charts below wait for them (`watch` above), and every other metric is ready
+ * the moment its row is opened.
+ */
+const ranksReady = computed(() => {
+  if (!openLeaderboard.value) return false
+  if (metric.value !== 'transmogs') return true
+
+  return currentWardrobe.value !== undefined && (!props.target || targetWardrobe.value !== undefined)
+})
+
+/**
+ * The places of both sides in one request, for the open metric alone.
+ *
+ * One request rather than one per side and one per scope: the three places of a character are three counts over
+ * one table, and the board's two sides are usually two rows of the same realm - so the whole block below costs
+ * one read, and it is made only while a row is open (the key is `none` for a folded board, which fetches
+ * nothing). A late answer cannot overwrite a fresh one: the key names the metric and both characters, so an
+ * answer to a question nobody is asking any more lands on its own entry (`useAsyncData` keeps one per key).
+ */
+const ranksKey = computed(() =>
+  openLeaderboard.value && ranksReady.value ? `vs-ranks:${openLeaderboard.value.slug}:${panelPlayersParam.value}` : 'vs-ranks:none'
+)
+const ranksUrl = computed(() =>
+  openLeaderboard.value && ranksReady.value
+    ? `/api/leaderboard/metric-ranks?metric=${openLeaderboard.value.slug}&players=${encodeURIComponent(panelPlayersParam.value)}`
+    : null
+)
+
+const {
+  data: ranks,
+  pending: ranksPending,
+  error: ranksError
+} = await useAsyncData(
+  ranksKey,
+  () => (ranksUrl.value ? $fetch<MetricLeaderboardRanks>(ranksUrl.value) : Promise.resolve(null)),
+  { default: () => null }
+)
+
+/** One side's places, read off the shared answer by the key the table and the endpoint both key a row by. */
+function rankFor(key: string): MetricLeaderboardRank | null {
+  return ranks.value?.players.find((player) => player.key === key) ?? null
+}
 
 /**
  * The wardrobe arrives *after* the page has been rendered, and reading it is what files it as the character's own
@@ -787,8 +853,24 @@ onBeforeUnmount(() => {
             </button>
 
             <!-- The panel opens on both sides at once, because `openMetric` is one shared value: this is the
-                 first character's own history beside the population's histogram, with both markers on it. -->
+                 first character's own history beside the population's histogram, with both markers on it.
+
+                 Over it stands where this character is in the ranking of the open figure, as three links into the
+                 ranking itself - the one thing a figure in a column cannot say about the population on its own
+                 (`app/components/leaderboard/MetricRankLinks.vue`). The distribution below is the population's,
+                 and both columns show the same one; the places are this character's alone. -->
             <div v-if="openMetric === metricOf(row)" class="border-t border-white/10 bg-black/20 p-2">
+              <MetricRankLinks
+                v-if="openLeaderboard"
+                :slug="openLeaderboard.slug"
+                :label="$t(openLeaderboard.labelKey)"
+                :region="region"
+                :realm="realm"
+                :name="name"
+                :rank="rankFor(currentTableKey)"
+                :pending="ranksPending"
+                :failed="!!ranksError"
+              />
               <MetricHistoryPanel
                 :metric="metricOf(row)"
                 :history="currentHistory"
@@ -1000,8 +1082,20 @@ onBeforeUnmount(() => {
               </button>
 
               <!-- The same metric as the first column's, opened by the one shared `openMetric`: the second
-                   character's own history, with the population's histogram and both markers beside it. -->
+                   character's own history, with the population's histogram and both markers beside it. The places
+                   over it are their own - computed for this side of the comparison and for no other. -->
               <div v-if="openMetric === metricOf(row)" class="border-t border-white/10 bg-black/20 p-2">
+                <MetricRankLinks
+                  v-if="openLeaderboard && target"
+                  :slug="openLeaderboard.slug"
+                  :label="$t(openLeaderboard.labelKey)"
+                  :region="target.region"
+                  :realm="target.realm"
+                  :name="target.name"
+                  :rank="rankFor(targetTableKey)"
+                  :pending="ranksPending"
+                  :failed="!!ranksError"
+                />
                 <MetricHistoryPanel
                   :metric="metricOf(row)"
                   :history="targetHistory"

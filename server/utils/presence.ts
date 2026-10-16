@@ -1,8 +1,8 @@
 /**
  * Who is on the site right now.
  *
- * The hall of fame marks the row of a player whose account is here - the green dot on the portrait
- * (`app/components/leaderboard/LeaderboardTable.vue`) - and this module is the whole of what that mark is
+ * The site's tables mark the row of a player whose account is here - the green dot on the portrait
+ * (`app/components/leaderboard/MetricLeaderboardTable.vue`) - and this module is the whole of what that mark is
  * read from. A signed-in browser beats once a minute while its tab is visible
  * (`POST /api/user/heartbeat`, sent by `app/composables/presence.ts`), a beat stamps `users.last_seen_at`,
  * and an account whose stamp is newer than `PRESENCE_WINDOW_SECONDS` is on the site.

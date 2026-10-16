@@ -20,6 +20,9 @@
  * with Blizzard's per-character numbers, which is the behaviour the site has always had.
  */
 import { nowSec } from './db'
+// The day a point belongs to, which is what keeps a history a curve of days rather than of syncs
+// (`fileAccountReading` below files one point a day).
+import { dayStartOf, SECONDS_PER_DAY } from '#shared/utils/day'
 import { debugLog } from './logger'
 import { readCharacterReading } from './characterReading'
 // The account's own row in the hall of fame, which the point filed below is what moves.
@@ -511,10 +514,12 @@ export function readAccountTotals(userId: number): AccountTotals {
  *
  * Three rules, and they are the three the readings obey as well (`fileDailyReading` in `./characterReading`):
  *
- *   - a point is one real change. Totals that say what the newest point already says are not written again, so
- *     refreshing the same character twice in an afternoon costs the disk nothing;
- *   - the moment is the second the totals moved, never the start of a day, and never earlier than the newest
- *     point on file - which is what keeps two writes inside one second from colliding on the unique key;
+ *   - a point is one *day*, and a day is the smallest thing a history holds. Totals that say what the day's point
+ *     already says are not written again, so refreshing the same character twice in an afternoon costs the disk
+ *     nothing; totals that *moved* rewrite the day's point rather than filing a second one beside it, so a day
+ *     costs one row however many times it was read;
+ *   - the moment is the second the totals last moved, never the start of a day - the day they belong to is the day
+ *     they were read in (`#shared/utils/day`), which is what the writer above and the history reader agree on;
  *   - a set that is not complete is not a point. The totals are gathered from the pool and from the roster's
  *     readings, and an account none of whose characters has ever been read in full has zeros where its figures
  *     will be; a history that started with a zero would show a climb that never happened, so nothing is filed
@@ -575,13 +580,22 @@ export function fileAccountReading(userId: number): void {
     return
   }
 
+  // The day these totals belong to: the moment is this reading's, and a day the account has already been read in is
+  // *rewritten* rather than joined by a second point - the rule the readings obey, and the reason a history is a
+  // curve of days rather than of syncs (`#shared/utils/day`, `fileDailyReading` in `./characterReading`).
   const now = nowSec()
-  const takenAt = latest && latest.taken_at >= now ? latest.taken_at + 1 : now
+  const dayStart = dayStartOf(now)
+  const existing = db
+    .prepare(
+      `SELECT id FROM account_snapshots
+        WHERE user_id = ? AND taken_at >= ? AND taken_at < ?
+        ORDER BY taken_at DESC LIMIT 1`
+    )
+    .get(userId, dayStart, dayStart + SECONDS_PER_DAY) as { id: number } | undefined
 
-  // Sixteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
-  const values = [
-    userId,
-    takenAt,
+  // Fifteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list - and the two
+  // writes below carry the same fourteen figures, which is why they are built once.
+  const figures = [
     next.mplus_score,
     next.achievements,
     next.mounts,
@@ -598,12 +612,22 @@ export function fileAccountReading(userId: number): void {
     totals.score
   ]
 
-  db.prepare(
-    `INSERT INTO account_snapshots
-       (user_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor, reputations,
-        titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(...(values as any[]))
+  if (existing) {
+    db.prepare(
+      `UPDATE account_snapshots
+          SET taken_at = ?, mplus_score = ?, achievements = ?, mounts = ?, pets = ?, toys = ?, decor = ?,
+              reputations = ?, titles = ?, quests = ?, recipes = ?, transmogs = ?, honorable_kills = ?,
+              honor_level = ?, score = ?
+        WHERE id = ?`
+    ).run(now, ...(figures as any[]), existing.id)
+  } else {
+    db.prepare(
+      `INSERT INTO account_snapshots
+         (user_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+          titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(userId, now, ...(figures as any[]))
+  }
 
   // The population has moved: an account's figures are what its characters and every aggregate of them are read
   // from, so whatever was cut out of the population before this point is stale. The account's own row in the hall

@@ -1,24 +1,28 @@
 <script setup lang="ts">
 /**
- * The summary row above the table: five glass plates about the population as a whole.
+ * The summary row of the front door: ten glass plates about the population as a whole.
  *
- * Every plate reads the same object - the aggregate the endpoint sends with the first page of the
- * table (see `#shared/data/leaderboardSchema`) - and none of them computes anything: the leaders
- * are already picked, the share is already a percentage, and the plate only decides what to print
- * large and what to print under it. That is the point of the shape: a widget can be added to this
- * row, or to a page built later, without the storage layer learning about it.
+ * Every plate reads the same object - the aggregate `/api/leaderboard/stats` answers with
+ * (`LeaderboardStats` in `#shared/data/leaderboardSchema`) - and none of them computes anything: the leaders are
+ * already picked, the share is already a percentage, and the plate only decides what to print large and what to
+ * print under it. That is the point of the shape: a widget can be added to this row, or to a page built later,
+ * without the storage layer learning about it.
  *
- * A plate whose leader is missing prints a dash rather than a zero, which is the honest answer for
- * a table that has just been backfilled from the sitemap's index: it knows who has been looked up
- * and what their mounts are, but not their decor, and "master architect, 0 pieces" would be a
- * claim the data does not support.
+ * Two of the plates are about the population rather than about a figure - how many members the site holds (with
+ * who is on it right now beside the count), and which class most of them wear - and the other eight are the same
+ * plate: the leader of one figure, with their name under it in their class colour and the whole plate leading to
+ * their page. Seven of those eight are figures the site ranks, so the plate is a door into that figure's ranking
+ * (`/leaderboards/<figure>`); the eighth is the king of collections, which counts four figures added up and has no
+ * ranking of its own.
  *
- * Each plate opens with the glyph it is known by, twice the size of the words beside it: the mark
- * on a plate is what a reader picks it out by from across the row, and the five are read as five
- * marks before any of them is read as words.
+ * A plate whose leader is missing prints a dash rather than a zero, which is the honest answer for a table that has
+ * just been backfilled from the sitemap's index: it knows who has been looked up and what their mounts are, but not
+ * their decor, and "master architect, 0 pieces" would be a claim the data does not support.
+ *
+ * Each plate opens with the glyph it is known by, twice the size of the words beside it: the mark on a plate is what
+ * a reader picks it out by from across the row, and the row is read as marks before any of them is read as words.
  */
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
-import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
 // How a figure is written on the site: one rule, shared with the card and every other page.
 import { formatNumber } from '#shared/utils/formatNumber'
 import type { LeaderboardPlayer, LeaderboardStats } from '#shared/data/leaderboardSchema'
@@ -56,7 +60,7 @@ function profileUrl(player: LeaderboardPlayer): string {
   return localeUrl(`/${regionPath(player.region)}/${player.realm}/${player.name}`)
 }
 
-/** One plate, described rather than written out five times. */
+/** One plate, described rather than written out ten times. */
 interface Card {
   key: string
   /** The glyph to draw, or `null` for a plate that carries a colour instead of an icon. */
@@ -79,15 +83,50 @@ interface Card {
   href?: string
 }
 
+/** The leader figures of the aggregate, which are the plates that stand for one figure each. */
+type FigureField = 'pets' | 'architect' | 'toys' | 'mounts' | 'reputations' | 'titles' | 'transmogs'
+
+/**
+ * The figures the row prints a leader for, in the order the plates are drawn, each with the glyph and the words it
+ * is known by.
+ *
+ * One list rather than seven plates written out: every one of them is the leader of one figure, read from the
+ * aggregate's own field of that name, and the only thing that differs between them is how they are named. The field
+ * is spelled as the aggregate spells it, so a figure the aggregate stops answering for is a plate that stops
+ * compiling rather than a plate of dashes.
+ */
+const FIGURES: Array<{ field: FigureField; icon: string; label: string }> = [
+  { field: 'pets', icon: 'pets', label: 'lbStatPets' },
+  { field: 'architect', icon: 'decor', label: 'lbStatArchitect' },
+  { field: 'toys', icon: 'toys', label: 'lbStatToys' },
+  { field: 'mounts', icon: 'mounts', label: 'lbStatMounts' },
+  { field: 'reputations', icon: 'exalted-rep', label: 'lbStatReputations' },
+  { field: 'titles', icon: 'titles', label: 'lbStatTitles' },
+  { field: 'transmogs', icon: 'transmogs', label: 'lbStatTransmogs' }
+]
+
 const cards = computed<Card[]>(() => {
   const stats = props.stats
   const leader = stats?.collector
-  const rating = stats?.rating
-  const architect = stats?.architect
   const topClass = stats?.topClass
 
   const nameOf = (player?: LeaderboardPlayer | null) =>
     player ? `${player.displayName} · ${realmLabel(player.region, player.realm, player.realmName)}` : DASH
+
+  /** The plate of one figure's leader, which is the same plate seven times over. */
+  const figureCard = (figure: { field: FigureField; icon: string; label: string }): Card => {
+    const top = stats?.[figure.field] || null
+
+    return {
+      key: figure.field,
+      icon: figure.icon,
+      label: t(figure.label),
+      value: top ? formatNumber(top.value) : DASH,
+      hint: top ? nameOf(top.player) : DASH,
+      hintHex: top ? classById(top.player.classId)?.hex : undefined,
+      href: top ? profileUrl(top.player) : undefined
+    }
+  }
 
   return [
     {
@@ -119,30 +158,15 @@ const cards = computed<Card[]>(() => {
         ? t('lbStatClassHint', { share: topClass.share, count: formatNumber(topClass.count) })
         : DASH
     },
-    {
-      key: 'rating',
-      icon: 'key',
-      label: t('lbStatRating'),
-      value: rating ? formatNumber(rating.value) : DASH,
-      valueClass: rating ? mPlusQualityTextClass(rating.value) : undefined,
-      hint: rating ? nameOf(rating.player) : DASH,
-      hintHex: rating ? classById(rating.player.classId)?.hex : undefined,
-      href: rating ? profileUrl(rating.player) : undefined
-    },
-    {
-      key: 'architect',
-      icon: 'decor',
-      label: t('lbStatArchitect'),
-      value: architect ? formatNumber(architect.value) : DASH,
-      hint: architect ? nameOf(architect.player) : DASH,
-      hintHex: architect ? classById(architect.player.classId)?.hex : undefined,
-      href: architect ? profileUrl(architect.player) : undefined
-    }
+    ...FIGURES.map(figureCard)
   ]
 })
 </script>
 
 <template>
+  <!-- Ten plates, five to a row from `lg` up: the lead of the row is a mark and a name, so the row is read as marks
+       before any of them is read as words. Below that they come two to a row, which leaves a phone with a plate it
+       can read rather than a grid of truncated words. -->
   <div
     class="grid grid-cols-2 gap-3 lg:grid-cols-5"
     :class="pending ? 'opacity-70' : ''"

@@ -51,5 +51,21 @@ export function useRealmNames() {
     return locale.value === 'ru' ? realm.nameRu || realm.name : realm.name
   }
 
-  return { realmLabel }
+  /**
+   * Whether the site's own realm list knows a realm - or `null` while that list has not been read at all.
+   *
+   * A metric leaderboard's address names a realm (`/leaderboards/mounts/eu/gordunni`), and a slug the list does
+   * not hold is a realm the game does not have: a page that answered "nobody is ranked here" for it would be
+   * saying something false about the game rather than something true about the site's data. The three answers are
+   * therefore three states rather than two - known, unknown, and *cannot tell* - and the third one is not an
+   * error: a realm list that could not be read (Blizzard down, a cold process) says nothing about whether a realm
+   * exists, so a page keeps drawing the ranking it has and only a slug the list actively denies is named as
+   * unknown.
+   */
+  function knowsRealm(region: string, slug: string): boolean | null {
+    if (!(data.value || []).length) return null
+    return byRegionAndSlug.value.has(`${region}:${slug}`)
+  }
+
+  return { realmLabel, knowsRealm }
 }

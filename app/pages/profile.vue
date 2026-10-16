@@ -17,6 +17,9 @@ import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 // this is what turns it into the one the language being read uses (`server/utils/blizzard`).
 import { professionByName, professionLabel } from '#shared/utils/wow-professions'
 import { formatNumber } from '#shared/utils/formatNumber'
+// The day a reading belongs to: a point of the history is that day's own, so the day is cut by one shared rule
+// (`fileDailyReading` files one point a day, and the history reader folds to the same cut).
+import { dayStartOf } from '#shared/utils/day'
 // The Mythic+ ladder the character page colours the rating by, so a figure keeps its colour here.
 import { mPlusQualityTextClass } from '#shared/utils/wow-quality'
 // The remembered characters: the shape both lists of them are kept in, the key two entries are the same
@@ -646,8 +649,10 @@ function applyLatest(id: number, profile: any) {
 
   entry.statsReadAt = readAt
   entry.latest = {
-    // The day the reading belongs to, which is what a snapshot is keyed by.
-    takenAt: Math.floor(readAt / 86400) * 86400,
+    // The day the reading belongs to, which is what a point of the history is: the reader that serves it folds
+    // the table to the newest point of each day (`readCharacterHistory`), and the writer files a day's reading as
+    // that day's point (`fileDailyReading`) - both of them cutting the day with this very rule.
+    takenAt: dayStartOf(readAt),
     ilvl: profile.ilvl ?? null,
     mplus: profile.mPlusScore ?? null,
     achievements: profile.ap ?? null,

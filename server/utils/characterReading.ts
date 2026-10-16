@@ -12,12 +12,15 @@
  * against them - and a second reader is a second opinion unless the record is read in one place.
  *
  * The writing is one function too (`fileDailyReading`), called from both of the places a reading is taken,
- * so the two can never file a point differently. A point is one real update rather than a day: reading the
- * same character twice in an afternoon leaves one new point only when the figures actually moved, which is
- * what keeps the history an honest log of change and not a wall of repeated readings.
+ * so the two can never file a point differently. A point is one *day*: reading the same character twice in an
+ * afternoon moves the day's point rather than filing a second one beside it, so a history costs a row a day at
+ * most, and a chart drawn from it is a curve of days - the smallest thing the record holds (`#shared/utils/day`
+ * cuts the day, and decides it the same way for the reader below and for the page that prints one).
  */
 import type { CharacterData } from './blizzard'
 import type { DistributionResponse, HistorySeries, MetricKey } from '#shared/data/historySchema'
+// The day a point belongs to: one rule for the writer here, the reader below and the page that prints it.
+import { dayStartOf, SECONDS_PER_DAY } from '#shared/utils/day'
 import { nowSec } from './db'
 import { calculatePlayerScore } from './playerScore'
 // The scale a histogram is cut by, and the empty buckets of one: the half of the rule that the chart and the
@@ -121,6 +124,12 @@ const METRIC_COLUMNS: Record<MetricKey, string> = {
  * A character of an account is answered with the **account's** history rather than its own: what the statistics
  * count is the account (`./statisticsPopulation`), so a main and its alts show one curve - the account's own
  * figures, which is what every one of them prints beside it. A guest's history is its own reading.
+ *
+ * The points are folded to **one a day** on the way out: the newest reading of each day, which is what the writer
+ * files as the day's point. A writer does that itself (`fileDailyReading`), but a table written before it did holds
+ * a point per change, and a chart drawn from those rows would be dense wherever a character happened to be read
+ * twice in an afternoon. Folding here is what makes the curve the same shape over the whole history - a day a
+ * step - whatever the table happens to hold, and it is one `GROUP BY` over the index the rows are already in.
  */
 export function readCharacterHistory(
   region: string,
@@ -142,14 +151,27 @@ export function readCharacterHistory(
   const column =
     metric === 'mPlusScore' ? seasonRatingSql(METRIC_COLUMNS[metric], 'taken_at') : METRIC_COLUMNS[metric]
 
-  const points =
-    row.user_id === null
-      ? (db
-          .prepare(`SELECT taken_at, ${column} AS value FROM snapshots WHERE character_id = ? ORDER BY taken_at ASC`)
-          .all(row.id) as Array<{ taken_at: number; value: number | null }>)
-      : (db
-          .prepare(`SELECT taken_at, ${column} AS value FROM account_snapshots WHERE user_id = ? ORDER BY taken_at ASC`)
-          .all(row.user_id) as Array<{ taken_at: number; value: number | null }>)
+  // A guest's points are its own readings, an account's are the account's own totals, and the shape of the fold is
+  // the same for both: the day a point belongs to is the day it was taken in (`#shared/utils/day`), and of that day
+  // the newest point is the one the curve carries.
+  const table = row.user_id === null ? 'snapshots' : 'account_snapshots'
+  const owner = row.user_id === null ? 'character_id' : 'user_id'
+  const ownerId = row.user_id === null ? row.id : row.user_id
+
+  const points = db
+    .prepare(
+      `SELECT point.taken_at AS taken_at, point.${column} AS value
+         FROM ${table} point
+         JOIN (
+           SELECT MAX(taken_at) AS newest, taken_at / ${SECONDS_PER_DAY} AS day
+             FROM ${table}
+            WHERE ${owner} = ?
+            GROUP BY day
+         ) latest ON latest.newest = point.taken_at
+        WHERE point.${owner} = ?
+        ORDER BY point.taken_at ASC`
+    )
+    .all(ownerId, ownerId) as Array<{ taken_at: number; value: number | null }>
 
   return {
     character: { region, realm, name, displayName: row.display_name },
@@ -315,11 +337,17 @@ export type ProfileReading = Partial<Omit<CharacterData, 'stats'>> & { stats?: P
  * Blizzard reading against (`readCharacterReading`), and a read that happened has happened whether or not
  * the figures below moved.
  *
- * The figures are written as one point per real update, not one per day: a figure the reading does not carry
- * keeps what the newest point already holds - the way a partial profile does not erase the record: a lookup
- * whose reputation read timed out must not blank a number that was read this morning. A point already holding
- * these very figures is left alone, so a page the site has read again costs the disk nothing beyond the
- * moment above.
+ * The figures are written as the point of the day the reading was taken in - one point a day, at most. A day the
+ * site has already read is rewritten: this reading becomes the day's point, with this moment and these figures, and
+ * no second row joins it. That is what makes a history a curve of days rather than a log of presses - reading the
+ * same character twice in an afternoon is one day of reading and one step on a chart - and what keeps a press from
+ * costing a row. A reading *older* than the one the day already holds is not written at all, which is the case a
+ * backfill makes and a page cannot: the day keeps the newest thing read in it.
+ *
+ * A figure the reading does not carry keeps what the day's point already holds - the way a partial profile does not
+ * erase the record: a lookup whose reputation read timed out must not blank a number that was read this morning. A
+ * day whose point already holds these very figures is left alone, so a page the site has read again costs the disk
+ * nothing beyond the moment above.
  *
  * `readAt` is the moment the reading was taken, in seconds, and it is now unless a caller says otherwise. The
  * two readers of a profile file the second they read it; the migration that moves the hall of fame's own table
@@ -338,6 +366,20 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
   // they do not carry, applied to a fact that lives one level up.
   if (typeof profile.ilvl === 'number') {
     db.prepare('UPDATE characters SET ilvl = ? WHERE id = ?').run(profile.ilvl, characterId)
+  }
+
+  // And the guild, which rides on the very profile this reading came from (`CharacterData.guild` in ./blizzard)
+  // and is a fact about the character rather than a figure of its readings - the same kind of fact as the item
+  // level above, and written by the same rule: only where the profile names one, so a lookup that did not ask for
+  // it - or a character who is in no guild - leaves the name the row already holds rather than blanking it.
+  //
+  // It has to be written *here* rather than where a character is first met (`rememberGuestRow` in ./profileFeed):
+  // that upsert runs when the site meets somebody, and a character it already knows kept the guild of the day they
+  // were first looked up - which for every row written before the guild was stored at all is no name at all. The
+  // metric leaderboards print it in a column of their own, so a row that never learned it prints a dash for a
+  // reader who is in a guild (`leaderboardRows`: the row is rewritten from this one below).
+  if (profile.guild) {
+    db.prepare('UPDATE characters SET guild = ? WHERE id = ?').run(profile.guild, characterId)
   }
 
   const reading: Record<string, number | null> = {
@@ -403,14 +445,34 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
         })
       : null
 
-  // A point is one real update, so its moment is the second it was read - and never earlier than the newest
-  // point already on file, so two reads inside one second cannot collide on the unique key.
-  const takenAt = latest && latest.taken_at >= moment ? latest.taken_at + 1 : moment
+  // A reading that moved the figures is written as the point of the *day* it was read in, and that is the whole
+  // of what a history is: a day is the smallest thing it holds. A day the site has already read is therefore
+  // rewritten - its moment moves to this reading, and its figures become these - rather than gaining a second
+  // point beside it: reading the same character twice in an afternoon is one day's worth of reading, one row, and
+  // one step on a chart, which is what the profile page has always assumed when it names the day a reading
+  // belongs to (`dayStartOf` in `#shared/utils/day`). The lookup is the index's own prefix (`(character_id,
+  // taken_at)`), so finding the day's point is one range read.
+  const dayStart = dayStartOf(moment)
+  const existing = db
+    .prepare(
+      `SELECT id, taken_at FROM snapshots
+        WHERE character_id = ? AND taken_at >= ? AND taken_at < ?
+        ORDER BY taken_at DESC LIMIT 1`
+    )
+    .get(characterId, dayStart, dayStart + SECONDS_PER_DAY) as { id: number; taken_at: number } | undefined
 
-  // Sixteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list.
-  const values = [
-    characterId,
-    takenAt,
+  // A reading *older* than the one the day already holds is not written at all: the day keeps the newest thing
+  // read in it. A page cannot do this - it reads at the moment it asks, and now never runs backwards - but a
+  // backfill can, and does: the migration that moves the hall of fame's own table files each row for the day it
+  // was taken, and a day the site has read since already says more than the row being moved.
+  if (existing && existing.taken_at > moment) {
+    refreshRowOfMember(characterId)
+    return
+  }
+
+  // Sixteen values is more than `node:sqlite`'s typed overloads name, so they go over as one list - and the two
+  // writes below carry the same fourteen figures, which is why they are built once.
+  const figures = [
     next.mplus_score,
     next.achievements,
     next.mounts,
@@ -427,12 +489,26 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
     score
   ]
 
-  db.prepare(
-    `INSERT INTO snapshots
-       (character_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor, reputations,
-        titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(...(values as any[]))
+  if (existing) {
+    // The day's own point, rewritten in place. Its moment is this reading's, because what the day holds is the
+    // newest thing read in it, and its key cannot collide: the row being written is the row that day already has.
+    db.prepare(
+      `UPDATE snapshots
+          SET taken_at = ?, mplus_score = ?, achievements = ?, mounts = ?, pets = ?, toys = ?, decor = ?,
+              reputations = ?, titles = ?, quests = ?, recipes = ?, transmogs = ?, honorable_kills = ?,
+              honor_level = ?, score = ?
+        WHERE id = ?`
+    ).run(moment, ...(figures as any[]), existing.id)
+  } else {
+    // A day with no point yet: the reading is filed at its own moment, and that second is free by construction -
+    // a point already on it would be a point of this very day, which is the branch above.
+    db.prepare(
+      `INSERT INTO snapshots
+         (character_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor, reputations,
+          titles, quests, recipes, transmogs, honorable_kills, honor_level, score)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(characterId, moment, ...(figures as any[]))
+  }
 
   // A reading was filed, so the population's aggregates are stale from this moment: a distribution memo keyed on
   // the revision cannot answer from before it (`./statisticsPopulation`).

@@ -16,9 +16,18 @@ import type {
   LeaderboardPlayer,
   LeaderboardQuery,
   LeaderboardStanding,
-  LeaderboardStats
+  LeaderboardStats,
+  MetricLeaderboard,
+  MetricLeaderboardPage,
+  MetricLeaderboardRanks
 } from '#shared/data/leaderboardSchema'
-import { readGlobalStats, readLeaderboardPage, readLeaderboardStanding } from './leaderboardRows'
+import {
+  readGlobalStats,
+  readLeaderboardPage,
+  readLeaderboardStanding,
+  readMetricLeaderboardPage,
+  readMetricRanks
+} from './leaderboardRows'
 import { migrateStatistics } from './statisticsMigration'
 import { statisticsRevision } from './statisticsPopulation'
 
@@ -71,6 +80,42 @@ export async function getLeaderboardStanding(
   await migrateStatistics()
 
   return readLeaderboardStanding(character)
+}
+
+/**
+ * One page of one metric leaderboard, with the same prologue every read here has: the migration that moves the
+ * site's old table into the database is awaited first, so a page read before it has run is not a page with rows
+ * missing.
+ *
+ * The figures are the members' own - a guest's newest reading, an account's own totals - because that is what the
+ * rows are made of, and this read does nothing to them but order and slice (`./leaderboardRows`).
+ */
+export async function getMetricLeaderboard(
+  metric: MetricLeaderboard,
+  query: LeaderboardQuery = {},
+  perPage = DEFAULT_PER_PAGE
+): Promise<MetricLeaderboardPage> {
+  await migrateStatistics()
+
+  const size = Math.min(MAX_PER_PAGE, Math.max(MIN_PER_PAGE, Math.floor(perPage || DEFAULT_PER_PAGE)))
+
+  return readMetricLeaderboardPage(metric, query, size)
+}
+
+/**
+ * The three places each of the named characters holds in one metric's rankings.
+ *
+ * One answer for the whole comparison rather than one per scope per character: a comparison board asks about its
+ * two sides at once, and the world's population is the same number for both of them - which is a fact the read
+ * memoises within the call (`readMetricRanks`).
+ */
+export async function getMetricRanks(
+  metric: MetricLeaderboard,
+  keys: string[]
+): Promise<MetricLeaderboardRanks> {
+  await migrateStatistics()
+
+  return readMetricRanks(metric, keys)
 }
 
 /**

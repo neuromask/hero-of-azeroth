@@ -3,14 +3,13 @@
  * The site's overall score, and what it is made of: a gold question mark that opens the multipliers the figure is
  * summed from.
  *
- * One component because the question is asked in two places and the answer must not be written twice. The hall of
- * fame asks it in the corner of its filter block, where the score is the first column of the table below
- * (`LeaderboardFilters.vue`); the profile asks it beside the main's own gold figure, which is the same number,
- * computed by the same rule on the server (`app/pages/profile.vue`, `server/utils/playerScore.ts`).
- *
- * The button wears the site's own question as its tooltip (`lbLegendTitle`), while the pane it opens is titled
- * with what it explains (`lbLegendHeading`): the pane is the one that names the score, so the two are separate
- * messages rather than one read twice.
+ * One component because the question is asked in three places and the answer must not be written twice. A table
+ * where the score is the figure it ranks wears it in its filter bar, beside the field
+ * (`app/components/leaderboard/LeaderboardFilters.vue`); the profile asks it beside the main's own gold figure,
+ * which is the same number, computed by the same rule on the server (`app/pages/profile.vue`,
+ * `server/utils/playerScore.ts`); and the front door's plate, which is about the overall rating, asks it the same
+ * way. It is the question mark alone wherever it stands, because the figure it explains is the one right beside it -
+ * the words are the pane's.
  *
  * The multipliers are read off `SCORE_WEIGHTS` rather than written out here, so the panel a reader opens and the
  * formula the server computes with cannot drift apart: this is the same table, drawn. It opens in the pane every
@@ -70,6 +69,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="root" class="relative shrink-0">
+    <!-- The question, and nothing else: the figure it explains is the one standing in the table beside it (or in the
+         plate above it), so a reader who wonders where that number comes from has one press to make - and the words
+         of the answer are inside the pane, where they are read once rather than beside every table on the site. -->
     <button
       type="button"
       class="hoa-liquid-glass grid h-8 w-8 place-items-center rounded-full border text-sm font-semibold text-wow-goldLight"

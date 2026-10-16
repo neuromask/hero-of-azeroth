@@ -149,6 +149,12 @@ describe('the rows the table draws', () => {
     expect(names({ classId: 1 })).toEqual(['alpha', 'beta'])
     expect(names({ q: 'азур' })).toEqual(['азурмаск'])
     expect(names({ q: 'nobody' })).toEqual([])
+    // The region narrows the table the way the realm does, which is the chip the filter bar draws beside the sides.
+    // The realm and the region together are one place: the same realm slug in another region holds nobody.
+    expect(names({ region: 'eu' })).toEqual(['alpha', 'beta', 'азурмаск', 'epsilon'])
+    expect(names({ region: 'us' })).toEqual(['gamma', 'delta'])
+    expect(names({ region: 'us', realm: 'kirin-tor' })).toEqual(['gamma', 'delta'])
+    expect(names({ region: 'eu', realm: 'kirin-tor' })).toEqual([])
   })
 
   it('slices the population into pages, and keeps a caller inside them', async () => {
@@ -203,12 +209,21 @@ describe('the rows the table draws', () => {
       realms: 3,
       classes: 5,
       topClass: { classId: 1, count: 2, share: 33 },
-      // The three leaders, each the first row of one order: the most collectables, the best rating, the most
-      // decor. A leader holding nothing is reported as no leader at all rather than as a row of zeroes.
+      // The king of collections is the first row of the collectables order; the figure leaders are the first rows of
+      // their own rankings (`/leaderboards/<figure>`), so a widget and the page it stands for can never name two
+      // different members. A figure nobody holds - no titles, no transmogs in this fixture - is no leader at all
+      // rather than a row of zeroes.
       collector: { player: { name: 'gamma' }, value: 200 },
-      rating: { player: { name: 'азурмаск' }, value: 3000 },
       architect: { player: { name: 'epsilon' }, value: 1 },
-      totals: { mounts: 451, pets: 111, toys: 1, decor: 1, reputations: 1, achievements: 2501 }
+      pets: { player: { name: 'alpha' }, value: 50 },
+      toys: { player: { name: 'epsilon' }, value: 1 },
+      mounts: { player: { name: 'gamma' }, value: 200 },
+      reputations: { player: { name: 'epsilon' }, value: 1 },
+      titles: null,
+      transmogs: null,
+      totals: { mounts: 451, pets: 111, toys: 1, decor: 1, reputations: 1, achievements: 2501 },
+      // The day the table behind the figures was last written, which is what the front door prints under them.
+      updatedAt: '2026-10-15'
     })
 
     expect(stats.realmsFacet.map((realm) => [realm.realm, realm.count])).toEqual([

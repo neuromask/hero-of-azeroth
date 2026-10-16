@@ -1,61 +1,50 @@
 <script setup lang="ts">
 /**
- * The front door, which is the hall of fame: the site's own public page, with the reader's own place above the
- * table's summary.
+ * The front door, which is the hall of fame: the page the site is summed up on.
  *
- * For a while the site had two doors - a form to walk through and a ranking to arrive at - and a reader had to
- * choose between them before knowing which one they wanted. The form was the only page that could speak to
- * somebody who had never heard of the site and had no character in the table; the ranking was the only page that
- * showed what the site is worth looking at. They are one page now: a reader lands on the table, and the plate of
- * the character this browser opened last stands over the summary plates as soon as there is one
- * (`app/components/LeaderboardYou.vue`) - rather than as a page of its own.
+ * It is a *summary* rather than a table, and the tables are the rankings the menu leads to
+ * (`/leaderboards/<figure>`, at the world, a region or a realm). This page is what stands in front of them: the menu
+ * of the site's fourteen entries - the hall of fame itself, and the thirteen figures - the plate of the character
+ * this browser selected, and the ten plates about the population: how many members it holds and who is on it right
+ * now, the class most of them wear, and the leader of each figure the site ranks. A reader who wants rows presses a
+ * plate (their own name, or the leader's) or a menu entry; every one of those is an address of its own.
  *
- * A first visit is the only one that needs the two fields, and they stand in the row under the header, in the place
- * the character's own entries take - the place that is empty exactly because this browser knows no character -
- * while the button that opens the same fields as a sheet stands at the far end of that row
- * (`app/components/CharacterSearchDialog`, and `Ctrl`/`⌘`+`K` from anywhere). A reader who has looked somebody
- * up has that button, and a reader who is signed in is shown their own main on the plate instead (`accountMain`
- * below); so the two fields are drawn exactly while this browser knows no character *and* nobody is signed in, and
- * the plate the moment either is true. The row keeps the search for everybody, and the header itself keeps the
- * language and the account.
+ * That is a change of shape rather than of purpose. For a while the site had two doors - a form to walk through and
+ * a ranking to arrive at - and a reader had to choose between them before knowing which one they wanted; they became
+ * one page, and the ranking that page drew has since become the thirteen rankings the menu names. What is left here
+ * is the part of it that was never a list: who the site holds, who leads it, and where the reader stands.
  *
- * That is what the address says as well. This page is `/` in English and `/ru` in Russian, exactly as it was,
- * so every link and every ranking of the site's own front door is unchanged; the hall of fame's old address,
- * `/leaderboard`, is a 301 to this one (`nuxt.config.ts`, `routeRules`), and that is the site's only redirect
- * - it buries an address rather than choosing a language, which no other address of the site does.
+ * The address is `/` in English and `/ru` in Russian, exactly as it was, so every link the site has handed out still
+ * lands where it said; the hall of fame's old address, `/leaderboard`, is a 301 to this one (`nuxt.config.ts`,
+ * `routeRules`), and that is the site's only redirect - it buries an address rather than choosing a language, which
+ * no other address of the site does.
  *
  * The row under the header is the site's own navigation, as one component (`app/components/SiteNav.vue`): the
- * character's six views - the profile under their own name, the collections, the achievements, the
- * reputations, the feed and the comparison - pointing at the character this browser opened last, and the
- * site's own two entries held apart from them past a hairline: the hall of fame and the search. They are
- * drawn only once
- * there is such a character: an entry that leads to the page the reader is already on is worse than no entry
- * at all, and before the browser has been taught a character there is nothing to point at but the search. The
- * table is where a character is learned - pressing a row opens their page, and that is the act that remembers
- * them - so the row is full on the next page a reader opens rather than invented here. Below `lg` the entries
- * move into the panel that row drops, because a phone has room for the search and the panel's button alone - and
- * the language and the account travel in that panel too, which is where the header's corner hands them over.
+ * character's six views - the profile under their own name, the collections, the achievements, the reputations,
+ * the feed and the comparison - pointing at the character this browser opened last, and the site's own two entries
+ * held apart from them past a hairline: the hall of fame and the search. They are drawn only once there is such a
+ * character: an entry that leads to the page the reader is already on is worse than no entry at all, and before the
+ * browser has been taught a character there is nothing to point at but the search. Nothing is learned here any more:
+ * a character is remembered by opening their page, and a reader who has just arrived has the search to do it with.
+ * Below `lg` the entries move into the panel that row drops, because a phone has room for the search and the panel's
+ * button alone - and the language and the account travel in that panel too, which is where the header's corner hands
+ * them over.
  *
- * What the page does not own is the data. Every filter, every preset and every page number is one request to
- * `/api/leaderboard`, which is cached for an hour and answers from memory (see
- * `server/api/leaderboard/index.ts`), and the first page of the table is rendered on the server and arrives
- * inside the document - so a reader sees the hall of fame immediately, and the site's TTFB does not move
- * whether the table holds ten characters or ten thousand.
+ * The figures are the site's own, and they are asked for once: the aggregate behind the plates is one request
+ * (`/api/leaderboard/stats`, an hour of caching keyed on the stamp of the data), it is rendered on the server, and
+ * it costs no more whether the population holds ten characters or two hundred thousand.
  */
 definePageMeta({ alias: '/ru' })
 
-// The characters this browser has looked up, which is where the row's character views and the plate in the bar
-// find the character they belong to (see the composable for the shape and the limit). The key it keeps them
-// under is also what marks the reader's own row in the table below.
+// The characters this browser has looked up, which is where the row's character views and the plate below find the
+// character they belong to (see the composable for the shape and the limit).
 import { searchHistoryKey, type SearchHistoryEntry } from '#shared/utils/savedCharacters'
 import { useSearchHistory } from '~/composables/searchHistory'
-// The way into the search from outside it: the empty table asks for it on the name that matched nothing
-// (see the composable for why the ask is shared state rather than a prop).
-import { useCharacterLookup } from '~/composables/characterLookup'
-// Where a row of the table stands, which is what a character page's tile is answered with, and the two
-// spellings of the question itself: which columns a link lights, and which row it asks for.
-import { leaderboardRowFromQuery, LEADERBOARD_ROW_PARAM } from '~/composables/leaderboardView'
-import type { LeaderboardPlayer, LeaderboardStanding } from '#shared/data/leaderboardSchema'
+// The figure the reader's own plate is about - the overall rating, which is the order the hall of fame was always
+// read in - and the address a place in a ranking is opened at, from the composable that owns that address.
+import { metricLeaderboardOf } from '#shared/data/leaderboardSchema'
+import { metricLeaderboardPath, metricLeaderboardRankQuery } from '~/composables/metricLeaderboard'
+import type { LeaderboardStats } from '#shared/data/leaderboardSchema'
 import { formatNumber } from '#shared/utils/formatNumber'
 
 // The picture the page stands on: the hall of fame's own artwork (`app/assets/img`), which is part of the
@@ -69,36 +58,34 @@ import backdrop from '~/assets/img/hf-bg_01.webp'
 import hoaPrev from '~/assets/img/hoa-prev.jpg'
 
 const { t } = useI18n()
-const route = useRoute()
+const localeUrl = useLocaleUrl()
 const publicConfig = useRuntimeConfig().public
 
-const {
-  filters,
-  search,
-  columns,
-  toggleColumn,
-  page,
-  rows,
-  stats,
-  pending,
-  error,
-  refresh,
-  revealRank,
-  setSort,
-  setFaction,
-  setRealm,
-  setPage
-} = useLeaderboardView()
+/** The ranking the reader's own plate stands for: the overall rating, at the world's scope. */
+const score = metricLeaderboardOf('score')
 
 /**
- * Who is on the site, which is what the dots on the portraits are drawn from.
+ * The population, as the plates below read it - and the same object every widget of the page is drawn from
+ * (`LeaderboardStats` in `#shared/data/leaderboardSchema`).
  *
- * The list is fetched with the page - the first answer the server sends already carries it, so the dots are
- * in the HTML - and re-read every minute while the tab is visible (`app/composables/presence.ts`). Only the
- * table draws anything with it, which is why the read lives here rather than in the plugin: the beat is
- * everybody's, and the list is this page's.
+ * It is awaited with the page, so the plates arrive with the first render rather than filling in behind the reader.
+ * The request asks to be answered afresh (`no-cache`), because the population moves as the site's own pages are
+ * rendered and an hour of it in a browser's store is an hour of figures that are no longer the site's.
  */
-const { online, count: onlineCount } = await usePresence()
+const { data: stats, pending } = await useFetch<LeaderboardStats>('/api/leaderboard/stats', {
+  key: 'hoa-leaderboard-stats',
+  headers: { 'cache-control': 'no-cache' }
+})
+
+/**
+ * Who is on the site, which the population plate prints beside the count it holds.
+ *
+ * The list is fetched with the page - the first answer the server sends already carries it, so the figure is in the
+ * HTML - and re-read every minute while the tab is visible (`app/composables/presence.ts`). The beat is everybody's,
+ * so the read lives here rather than in the plugin, and the count is the only part of it this page has any use for:
+ * the dots on the portraits went with the table.
+ */
+const { count: onlineCount } = await usePresence()
 
 /**
  * The front door's own head: the site-wide title and description, the still of the site as its preview image, and
@@ -121,7 +108,7 @@ usePageSeo({
   jsonLd: () => ({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: 'HeroOfAzeroth',
+    name: SITE_NAME,
     url: publicConfig.siteUrl,
     description: t('homeDescription'),
     inLanguage: [...SUPPORTED_LOCALES]
@@ -129,28 +116,11 @@ usePageSeo({
 })
 
 /**
- * The way out of an empty table: the name the reader tried is offered to the search.
+ * The line under the page's name in the header: who the site holds, in the reader's language.
  *
- * The table can tell a reader that nobody in it matches, and the one thing it cannot do about that is look a
- * character up - which is the act that reads a profile and writes a row. The ask travels through shared state
- * (`app/composables/characterLookup.ts`) and the sheet that answers it is the one standing in this page's own
- * row, which is what keeps the table and the search from having to know about each other.
- */
-const { open: lookUp } = useCharacterLookup()
-
-/** The first and the last rank on the page being drawn, for "showing 26–50 of 1 240". */
-const from = computed(() => (page.value && rows.value.length ? (page.value.page - 1) * page.value.perPage + 1 : 0))
-const to = computed(() => (page.value ? (page.value.page - 1) * page.value.perPage + rows.value.length : 0))
-
-/** The rank the first row of the page carries, which is what a medal is measured against. */
-const offset = computed(() => (page.value ? (page.value.page - 1) * page.value.perPage : 0))
-
-/**
- * The line under the page's name in the header: who is in the table, in the reader's language.
- *
- * It is the header's version of a character's class and realm - the facts the page is about, read in one
- * glance - and it comes off the same aggregate the widgets print, so it can never disagree with them. An
- * empty string until the first answer lands, which the header prints as no line.
+ * It is the header's version of a character's class and realm - the facts the page is about, read in one glance -
+ * and it comes off the same aggregate the plates below print, so it can never disagree with them. An empty string
+ * until the answer lands, which the header prints as no line.
  */
 const meta = computed(() => {
   const current = stats.value
@@ -271,187 +241,23 @@ const rosterKeys = computed(
 )
 
 /**
- * The identity of the character this browser was reading, which is what one of the table's rows is marked by.
+ * Answers the plate's own button: the place the reader holds, opened where it is a place.
  *
- * The mark is about the character the page is about rather than about who owns it: the page is a table of
- * characters, and the character a reader looked up here is exactly one of them - so that is the row it can point
- * at. The badge on that row says "selected", which is what it is, rather than claiming the row is the reader's
- * own. A reader who has looked nobody up on this device carries no such mark at all, and for a reader who is
- * signed in the plate stands for their main: the row *that* walks to is the one the account badge marks
- * (`ownerKey`), not this one.
+ * The plate prints three of them - the world's, the region's and the realm's, each a link of its own - and the
+ * button beside the figure is the fourth way to the same rows: the reader's place in the *world's* ranking of the
+ * overall rating, which is the ranking the hall of fame has always been. It is an address rather than a scroll
+ * (`/leaderboards/score?rank=N`): the rows live on the ranking's own page, and a place is what turns that page to
+ * the row it belongs to (`app/composables/metricLeaderboard.ts`).
  */
-const meKey = computed(() => (history.value[0] ? searchHistoryKey(history.value[0]) : ''))
+function reveal(rank: number) {
+  if (!score || !(rank > 0)) return
 
-/**
- * The row the plate in the bar stands for, keyed the way a row is keyed, which is what its button walks to
- * (`revealRow`): the character `you` names - a signed-in reader's main, or a guest's last lookup. It is
- * deliberately a value of its own rather than one of the two badges: the plate is about one character, and the
- * badges are about two different questions.
- */
-const plateKey = computed(() => (you.value ? searchHistoryKey(you.value) : ''))
-
-/**
- * The reader's own row, written the way a row is keyed, which the table marks with its second badge.
- *
- * The two marks say different things and can stand on the same row: the first says which character is being read,
- * and this one says which character is the reader's - the main their account leads with. A reader looking at
- * somebody else's character sees exactly one badge, and on their own main both.
- */
-const ownerKey = computed(() => {
-  const main = accountMain.value
-  if (!main) return ''
-
-  return searchHistoryKey({ region: main.region, realm: main.realmSlug, name: main.name })
-})
-
-/**
- * How a row is found once the table has been asked for it.
- *
- * Two things lead to a row in this table, and both end here. The plate in the bar leads to the row of the
- * character it stands for - a signed-in reader's main, or the last character a guest looked up. A tile on a
- * character page leads to the row of the character whose page was pressed on: the tile's link carries that
- * character's key into this page's address (`leaderboardRowQuery`), and the table is turned to it below.
- *
- * A place is the one thing about a row the table can be asked for, and turning a place into a page is the
- * page's own step (`revealRank`); then the row has to be *seen*, and it is drawn one answer later - so the
- * scroll waits for that answer rather than looking for a row that is not on the screen yet. Every row carries
- * its own key (`data-key`, written by `LeaderboardTable` from the same `searchHistoryKey` the row is drawn
- * under), and that is what makes the walk an attribute rather than a position: the row is found wherever the
- * table happens to have put it, on whatever page, without the page counting rows.
- */
-const scrollTarget = ref<string | null>(null)
-
-/**
- * Brings a row into the middle of the window, by the key it is drawn under. The sticky header is why it is the
- * middle: a row scrolled to the top of the window would land under the bar.
- */
-function scrollToRow(key: string) {
-  nextTick(() => document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center' }))
+  void navigateTo({ path: localeUrl(metricLeaderboardPath(score.slug)), query: metricLeaderboardRankQuery(rank) })
 }
-
-/**
- * Walks to a row: the scroll when it is already drawn, and the page that holds it plus a scroll once that page
- * lands when it is not.
- *
- * A row already drawn is a scroll rather than a request, on purpose: the reader is looking at the table they
- * asked for, and reordering it would move the very row they have just found.
- */
-function reveal(key: string, rank: number) {
-  if (!key) return
-
-  if (rows.value.some((player: LeaderboardPlayer) => searchHistoryKey(player) === key)) {
-    scrollToRow(key)
-    return
-  }
-
-  revealRank(rank)
-  scrollTarget.value = key
-}
-
-/** Answers the plate's button: the reader's place, turned into the page that holds their row. */
-function revealRow(rank: number) {
-  reveal(plateKey.value, rank)
-}
-
-// The page the reader asked for arrives a moment after the request: `pending` falling is what says it is
-// drawn, and the scroll happens once per row that was walked to, not once per page of the table.
-watch(pending, (busy) => {
-  if (busy || !scrollTarget.value) return
-
-  const key = scrollTarget.value
-  scrollTarget.value = null
-  scrollToRow(key)
-})
-
-/**
- * The row a link into this table asked for: the character whose page the reader pressed it on.
- *
- * A tile on a character page is a link into the table - the figure under the reader's eye is a column of it -
- * and the reader pressing one is asking a question about *that* character: where do they stand among
- * everybody on this figure? Landing at the top of the table would answer a different question and leave the
- * reader to page through fifty screens for the one row they wanted, so the link names the row as well as the
- * column (`leaderboardRowQuery`), and this page turns the name into the place the overall table gives that
- * character and then walks to it.
- */
-const askedKey = computed(() => leaderboardRowFromQuery(route.query[LEADERBOARD_ROW_PARAM]))
-
-/**
- * The row that has already been walked to, so a link is followed once rather than on every render of the
- * table around it.
- */
-const walked = ref<string | null>(null)
-
-/**
- * Where the character a tile asked for stands - read in the browser, after the page has been drawn.
- *
- * A place is a question of its own, and one no other reader can be answered from, which is why it is a
- * request rather than part of the table's answer (`server/api/leaderboard/[region]/[realm]/[name]`). It is
- * asked for only when an address names a row, which is what makes the read lazy: a plain visit to the hall of
- * fame asks for the table and nothing else.
- *
- * It is asked for in the browser rather than while the page is being rendered, because what it leads to - the
- * scroll to the row - is something only a browser can do. The table itself is still rendered on the server,
- * with the columns the link named, so a reader arriving from a tile sees the figure they pressed from the
- * first frame while the place they hold on it is being looked up behind them.
- */
-const { data: askedStanding, refresh: loadAskedStanding } = await useFetch<LeaderboardStanding | null>(
-  () => {
-    const key = askedKey.value
-    if (!key) return ''
-
-    const [region, realm, name] = key.split(':')
-    if (!region || !realm || !name) return ''
-
-    return `/api/leaderboard/${region}/${realm}/${encodeURIComponent(name)}`
-  },
-  { key: 'hoa-leaderboard-asked', immediate: false, default: () => null }
-)
-
-/**
- * And the walk to it, once the place is known.
- *
- * Two things make this read the way it does. The first is that the row may already be on the screen: the table
- * the reader is looking at is the answer the server sent, so a character in it is scrolled to without asking
- * for a place at all. The second is that an address asks once - `walked` remembers the row this page has
- * already been turned to, so a table that re-renders around it (a filter changed by hand, an answer landing)
- * does not drag the reader back to a row they have already seen.
- *
- * A place that cannot be read leaves the page exactly as it is: a character the table does not know - one of
- * an account's alts, which the hall of fame enters as the main its account leads with, or a character whose
- * page nobody has rendered yet - has no row to walk to, and the ask is simply left unanswered.
- */
-watch(
-  [askedKey, askedStanding],
-  ([key, standing]) => {
-    // A scroll is the browser's: a server render has no window to move, and the place is read there for the
-    // answer alone (hence `immediate: false` above).
-    if (!import.meta.client || !key) return
-    if (walked.value === key) return
-
-    if (!standing) {
-      if (rows.value.some((player: LeaderboardPlayer) => searchHistoryKey(player) === key)) {
-        walked.value = key
-        scrollToRow(key)
-        return
-      }
-
-      loadAskedStanding()
-      return
-    }
-
-    // A place without a rank is not a place: the answer is only used once it says where the row stands.
-    if (!standing.rank) return
-
-    walked.value = key
-    reveal(key, standing.rank)
-  },
-  { immediate: true }
-)
-
 // The history lives in the browser and the server has none, so it is read once the page is mounted: the first
-// render carries no character at all - no plate in the bar, no character links in the row - and both sides
-// render the same page at the same moment, so hydration has nothing to disagree about. It is the row that
-// fills in, never the table.
+// render carries no character at all - no plate, no character links in the row - and both sides render the same
+// page at the same moment, so hydration has nothing to disagree about. It is the plate that fills in, never the
+// figures above it.
 onMounted(loadHistory)
 </script>
 
@@ -502,89 +308,41 @@ onMounted(loadHistory)
     </SiteHeader>
 
     <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
-      <!-- The reader's own place in the table, drawn over the summary plates rather than in the bar. The place
-           is the first thing a reader who came to see where they stand is looking for: it is the page's own
-           answer about them, of the same kind as the five plates under it, and it belongs where those are read
-           rather than in a bar that every page of the site draws the same way. It is also the only block of this
-           page that is about one character, so it is the one block that moves: a reader who looked somebody else
-           up and came here finds their place above the population. A reader this browser knows nobody for is
-           shown no plate at all, and nothing stands in its place either: the way to look somebody up is not a
-           plate of the population's, and the row under the header is where the search of the site stands - the
-           fields a first visit is offered are handed to that row (`app/components/LeaderboardYou.vue`). -->
-      <LeaderboardYou v-if="you" class="mb-3" :character="you" @reveal="revealRow" />
+      <!-- The site's tables, as one menu and nothing else: the front door draws no table, so the bar is told there
+           is none (`filters`) and stands as the row of links it is - the hall of fame first, then the thirteen
+           figures. It leads the page, because the tables are what the site is for and this page is what stands in
+           front of them. -->
+      <LeaderboardFilters :current="null" :filters="false" />
 
-      <!-- The page opens with what the table holds rather than with a block about the site: the widgets are the
-           answer a reader who came for the ranking is looking for, and the search is one press away in the row
-           above - the fields themselves for a reader this browser knows nobody for, and the sheet behind the
-           button in that row for everybody else (`app/components/CharacterSearchDialog`). -->
-      <LeaderboardStats :stats="stats" :pending="pending" :online="onlineCount" />
-
-      <LeaderboardFilters
+      <!-- The reader's own place, as the plate every ranking of the site wears: who they are, what the overall
+           rating makes of them, and their three places in it - the world's, their region's and their realm's - each
+           one a link into the ranking it names, with the button beside the figure opening the world's at the row
+           they hold in it, and the question mark opening the score's own arithmetic. It is the page's own answer
+           about the reader, so it stands over the plates about everybody else, and a reader this browser knows
+           nobody for is shown no plate at all: the way to look somebody up is the search in the row under the
+           header, not a plate of the population's. -->
+      <MetricLeaderboardYou
+        v-if="you && score"
         class="mt-3"
-        :faction="filters.faction"
-        :realm="filters.realm"
-        :search="search"
-        :columns="columns"
-        :stats="stats"
-        @update:faction="setFaction"
-        @update:realm="setRealm"
-        @update:search="search = $event"
-        @toggle-column="toggleColumn"
+        legend
+        :metric="score"
+        :character="you"
+        :scope="{}"
+        @reveal="reveal"
       />
 
-      <p v-if="error" class="mt-3 flex items-center gap-3 text-sm text-red-400">
-        <span>{{ t('lbError') }}</span>
-        <button type="button" class="underline hover:text-red-300" @click="refresh()">
-          {{ t('activityRetry') }}
-        </button>
-      </p>
+      <!-- And the plates about the population: how many members the site holds and who is on it right now, the
+           class most of them wear, and the leader of each figure it ranks - each of those a door into the ranking
+           it leads, and all ten of them drawn from one request (`/api/leaderboard/stats`). -->
+      <LeaderboardStats class="mt-3" :stats="stats || null" :pending="pending" :online="onlineCount" />
 
-      <!-- The table, with the name that matched nothing handed to the search when the answer comes back empty: a
-           character the site has never rendered has no row here, and the field the reader filled in is not the
-           place to find that out the hard way. The press leaves the table as an event and becomes an ask here
-           (`app/composables/characterLookup.ts`), which the sheet in the row above answers.
-
-           The rows are handed their `you` no longer: a page walks to a row by the key the row itself carries,
-           so what it needs to know is the key and not whether it happens to be the plate's. -->
-      <LeaderboardTable
-        class="mt-3"
-        :players="rows"
-        :sort="filters.sort"
-        :columns="columns"
-        :offset="offset"
-        :pending="pending"
-        :highlight="meKey"
-        :owner="ownerKey"
-        :online="online"
-        @update:sort="setSort"
-        @inspect="lookUp(search)"
-      />
-
-      <div v-if="page && page.total" class="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-xs text-gray-500">
-          {{ t('lbShowing', { from: formatNumber(from), to: formatNumber(to), total: formatNumber(page.total) }) }}
-          <span v-if="page.updatedAt"> · {{ t('lbUpdated', { date: page.updatedAt }) }}</span>
-        </p>
-
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-            :disabled="page.page <= 1"
-            @click="setPage(page.page - 1)"
-          >{{ t('lbPrev') }}</button>
-
-          <span class="tabular-nums text-xs text-gray-400">{{ page.page }} / {{ page.pages }}</span>
-
-          <button
-            type="button"
-            class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-            :disabled="page.page >= page.pages"
-            @click="setPage(page.page + 1)"
-          >{{ t('lbNext') }}</button>
-        </div>
-      </div>
+      <!-- Under them, the population as a whole rather than one member at a time: where it lives (each realm a link
+           into that realm's own ranking), what it plays, which side it plays for, and everything it has gathered
+           between them with the day the table was last written. Same request, same block, and the part of the hub a
+           reader who has no character of their own still has something to read in. -->
+      <LeaderboardBreakdown class="mt-3" :stats="stats || null" :pending="pending" />
     </div>
+
 
     <!-- The line every page of the site signs off with: the wordmark over the brand line, drawn exactly as the
          character pages draw it. -->

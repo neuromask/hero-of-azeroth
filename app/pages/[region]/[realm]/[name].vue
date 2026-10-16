@@ -276,8 +276,9 @@ if (error.value) {
  */
 usePageSeo({
   title: () => seoTitle.value,
-  // The title already ends in the brand, so it is written whole rather than templated again.
-  titleTemplate: (title) => `${title} - Hero of Azeroth`,
+  // The title already ends in the brand, so it is written whole rather than templated again: the join is the site's
+  // own (`titleWithBrand`), which is what keeps a character's title and a ranking's parted the same way.
+  titleTemplate: (title) => titleWithBrand(title),
   description: () => seoDescription.value,
   // A chat window shows the figures; a search result shows the plain facts.
   ogDescription: () => seoOgDescription.value,
@@ -335,8 +336,8 @@ const metaParts = computed<MetaPart[]>(() => {
     // 1. Уровень
     {
       // The level, with the item level read beside it: what a character *wears* belongs with what it is rather
-      // than with the figures it has gathered, which is why the board's rows and the table's columns do not carry
-      // it (`app/components/CharacterVersus.vue`, `app/components/leaderboard/LeaderboardTable.vue`).
+      // than with the figures it has gathered, which is why neither the board's rows nor the rankings' carry
+      // it (`app/components/CharacterVersus.vue`, `app/components/leaderboard/MetricLeaderboardTable.vue`).
       text: [String(c.level), c.ilvl ? `ilvl ${formatNumber(c.ilvl)}` : ''].filter(Boolean).join(' · '),
       className: amberBadge
     },

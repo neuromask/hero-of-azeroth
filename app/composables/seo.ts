@@ -6,8 +6,32 @@ import type { MaybeRefOrGetter } from 'vue'
  */
 const OG_LOCALES: Record<string, string> = { en: 'en_US', ru: 'ru_RU' }
 
-/** The brand, which reads the same in every language. */
-const SITE_NAME = 'HeroOfAzeroth'
+/**
+ * The brand every page's title ends with, which reads the same in every language.
+ *
+ * It is exported rather than kept here because it is not `usePageSeo`'s alone: the structured data of the front door
+ * names the site, the character page's own template ends in it, and every one of them has to spell it the same way.
+ */
+export const SITE_NAME = 'Hero of Azeroth'
+
+/**
+ * What parts the site's titles are joined with, in one place for the whole site: `Зал славы - Счёт - Hero of Azeroth`.
+ *
+ * A title is read in a search result and in a chat window, where the parts are what a reader scans rather than a
+ * sentence they parse - so it is the same dash everywhere, and a page that composes a title of its own (the
+ * character pages do, their titles ending in the brand) composes it with this. Nothing else about a page is joined
+ * with it: a line of figures under a name, a description, a scope label - those are prose and keep their own
+ * separator (`·`).
+ */
+export const TITLE_SEPARATOR = ' - '
+
+/**
+ * A page's own name, with the brand after it: what `usePageSeo`'s default template does, offered as a function as
+ * well because a page that writes its title whole needs the same join (`app/pages/[region]/[realm]/[name].vue`).
+ */
+export function titleWithBrand(title?: string): string {
+  return title ? `${title}${TITLE_SEPARATOR}${SITE_NAME}` : SITE_NAME
+}
 
 /** The card the API renders, announced so a network can lay its preview out. */
 const CARD_WIDTH = 1200
@@ -74,10 +98,11 @@ export function usePageSeo(options: PageSeoOptions) {
 
   /**
    * The title as the document and the previews carry it: the page names itself and the template
-   * appends the brand. `og:title` is that same string, because a preview missing its brand reads
+   * appends the brand, parted from it by the one separator every title of the site is parted by
+   * (`TITLE_SEPARATOR`). `og:title` is that same string, because a preview missing its brand reads
    * as a link from nowhere.
    */
-  const titleTemplate = options.titleTemplate || ((title?: string) => `${title ?? ''} · ${SITE_NAME}`)
+  const titleTemplate = options.titleTemplate || ((title?: string) => titleWithBrand(title))
   const fullTitle = computed(() => titleTemplate(toValue(options.title)))
 
   /** The sentence a preview carries, which is the search one unless a page says otherwise. */
@@ -119,9 +144,7 @@ export function usePageSeo(options: PageSeoOptions) {
     ogImageHeight: () => (hasImage.value ? options.imageHeight || CARD_HEIGHT : undefined),
     ogImageType: () => (hasImage.value ? options.imageType || 'image/png' : undefined),
     ogImageAlt: () =>
-      hasImage.value
-        ? toValue(options.imageAlt) || `${toValue(options.title)} · ${SITE_NAME}`
-        : undefined,
+      hasImage.value ? toValue(options.imageAlt) || titleWithBrand(toValue(options.title)) : undefined,
 
     twitterCard: () => (hasImage.value ? 'summary_large_image' : 'summary'),
     twitterTitle: () => fullTitle.value,

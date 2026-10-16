@@ -1,6 +1,6 @@
 /**
  * The shared contracts both ends of the wire read: how a figure is written, how a class is coloured,
- * how an event is filed, and how the table's columns travel in an address.
+ * how an event is filed, and how many rows a page of a table holds.
  *
  * These are pure functions used by the pages, the card and the endpoint alike, which is exactly why
  * they are worth pinning: a change here is a change on every screen and on the pictures drawn from
@@ -16,8 +16,7 @@ import {
   activityInCategory,
   activityType
 } from '../../shared/utils/activity'
-import { CURRENT_MAX_LEVEL, LEADERBOARD_SORTS, isAtItemLevelCap } from '../../shared/data/leaderboardSchema'
-import { leaderboardColumnsFromQuery, leaderboardColumnsQuery } from '../../app/composables/leaderboardView'
+import { CURRENT_MAX_LEVEL, LEADERBOARD_PER_PAGE, LEADERBOARD_SORTS, isAtItemLevelCap } from '../../shared/data/leaderboardSchema'
 
 describe('formatNumber', () => {
   it('groups thousands with a plain space, in both languages', () => {
@@ -84,28 +83,16 @@ describe('the activity feed', () => {
 describe('the leaderboard contract', () => {
   it('knows an overall order and the item-level cap', () => {
     expect(LEADERBOARD_SORTS).toContain('total')
-    // The honorable kills stand in the table's own column after the rating, so they are a figure a reader can
-    // order by as well - and the endpoint checks a query string against this very list.
+    // The honorable kills are a figure a reader can order a table by, and the endpoint checks a query string
+    // against this very list.
     expect(LEADERBOARD_SORTS).toContain('kills')
     expect(isAtItemLevelCap(CURRENT_MAX_LEVEL)).toBe(true)
     expect(isAtItemLevelCap(CURRENT_MAX_LEVEL - 1)).toBe(false)
     expect(isAtItemLevelCap(undefined)).toBe(false)
   })
 
-  it('round-trips the columns a link carries', () => {
-    expect(leaderboardColumnsQuery(['total'])).toEqual({})
-    expect(leaderboardColumnsQuery(['mounts', 'total'])).toEqual({ columns: 'mounts' })
-    expect(leaderboardColumnsFromQuery('mounts,toys')).toEqual(['mounts', 'toys'])
-    expect(leaderboardColumnsFromQuery('toys,mounts')).toEqual(['mounts', 'toys'])
-    expect(leaderboardColumnsFromQuery('nonsense')).toBeNull()
-    expect(leaderboardColumnsFromQuery('')).toBeNull()
-    expect(leaderboardColumnsFromQuery(undefined)).toBeNull()
-  })
-
-  it('carries the honorable kills column in an address, like every other figure', () => {
-    // An address naming several figures spells them in the order the table draws its columns in
-    // (`LEADERBOARD_SORTS`), which is why the kills come back before the rating however the address wrote them.
-    expect(leaderboardColumnsFromQuery('mplus,kills')).toEqual(['kills', 'mplus'])
-    expect(leaderboardColumnsQuery(['kills'])).toEqual({ columns: 'kills' })
+  it('counts a page the same way in every ranking, which is what turns a place into a page', () => {
+    expect(LEADERBOARD_PER_PAGE).toBeGreaterThan(0)
+    expect(Number.isInteger(LEADERBOARD_PER_PAGE)).toBe(true)
   })
 })

@@ -32,10 +32,22 @@
  */
 import { getLeaderboard, leaderboardDataStamp } from '~~/server/utils/leaderboardStorage'
 import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
+import { parseRegionFilter } from '~~/server/utils/params'
 import type { LeaderboardFaction, LeaderboardSort } from '#shared/data/leaderboardSchema'
 
 /** The factions a caller may filter by; anything else means "everybody". */
 const FACTIONS: readonly LeaderboardFaction[] = ['alliance', 'horde', 'neutral']
+
+/**
+ * The region a caller asked to narrow the table to, or `undefined` for every region.
+ *
+ * Read leniently, unlike the region in a *page's* address: a filter is a choice among the chips a reader can see,
+ * and a value nobody offered means "all of them" rather than a broken request (`parseRegionFilter`).
+ */
+function parseFilterRegion(value: unknown): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value
+  return typeof raw === 'string' ? parseRegionFilter(raw) : undefined
+}
 
 /** The order a caller asked for, or the overall table when it named one this build does not know. */
 function parseSort(value: unknown): LeaderboardSort {
@@ -78,7 +90,8 @@ export default defineCachedEventHandler(
     //     (`getKey` below), so a write that moves the table moves the key and the answer is read again. The hour
     //     is a ceiling on how long an entry may live, never a promise about the figures.
     //   - **the browser's**, out of the `cache-control` Nitro writes from `maxAge` below. The page asks with
-    //     `cache-control: no-cache` (`app/composables/leaderboardView.ts`), which is what stops the browser using
+    //     `cache-control: no-cache` (`app/composables/metricLeaderboard.ts`, and the front door's read of the
+    //     plates), which is what stops the browser using
     //     its own copy without asking the server. It does *not* make this handler skip its own cache - Nitro has
     //     no switch for that on a cached event handler - so what actually refreshes an answer is the stamp above.
     //   - **a proxy's or a CDN's**, if one stands in front: `max-age` is a directive a shared cache honours too,
@@ -91,6 +104,7 @@ export default defineCachedEventHandler(
     return await getLeaderboard({
       sort: parseSort(query.sort),
       faction: parseFaction(query.faction),
+      region: parseFilterRegion(query.region),
       realm: parseText(query.realm),
       classId: parseNumber(query.class),
       q: parseText(query.q),

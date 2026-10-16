@@ -159,6 +159,8 @@ export function rememberGuestRow(input: {
   classId?: number | null
   level?: number | null
   faction?: string | null
+  /** The guild the profile named, which is a fact about the character rather than a figure of its readings. */
+  guild?: string | null
   /** The day the site first met the character, in seconds; now when the caller does not say. */
   firstSeenAt?: number
 }): number {
@@ -168,8 +170,8 @@ export function rememberGuestRow(input: {
   db.prepare(
     `INSERT INTO characters
        (user_id, region, realm_slug, realm_name, name, name_key, display_name, class_id, level, faction, avatar,
-        first_seen_at, last_seen_at)
-     VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        guild, first_seen_at, last_seen_at)
+     VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (region, realm_slug, name_key) WHERE user_id IS NULL DO UPDATE SET
        realm_name = excluded.realm_name,
        display_name = excluded.display_name,
@@ -177,6 +179,7 @@ export function rememberGuestRow(input: {
        level = COALESCE(excluded.level, characters.level),
        faction = COALESCE(excluded.faction, characters.faction),
        avatar = COALESCE(excluded.avatar, characters.avatar),
+       guild = COALESCE(excluded.guild, characters.guild),
        last_seen_at = excluded.last_seen_at`
   ).run(
     input.region,
@@ -189,6 +192,7 @@ export function rememberGuestRow(input: {
     input.level ?? null,
     (input.faction || '').toLowerCase() || null,
     input.avatar || null,
+    input.guild || null,
     input.firstSeenAt ?? now,
     now
   )
@@ -221,6 +225,9 @@ function rememberGuest({ region, realm, name, profile }: Omit<ProfileFeedInput, 
     avatar: profile.avatarUrl,
     classId: profile.classId,
     level: profile.level,
-    faction: profile.faction
+    faction: profile.faction,
+    // The guild rides along on the very profile the page has already read (`CharacterData.guild` in ./blizzard):
+    // no call of its own is made for it, and a profile that names none leaves whatever the row held.
+    guild: profile.guild
   })
 }

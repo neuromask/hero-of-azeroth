@@ -35,6 +35,21 @@ export function parseRegion(value?: string | null): BlizzardRegion {
   return region
 }
 
+/**
+ * The region a caller asked to *narrow a table to*, or `undefined` for every region.
+ *
+ * The two questions a region is asked here are not the same question. An address naming one
+ * (`parseRegion` above) must be served or refused, because a page standing for a region the site has no data for is
+ * a page with nothing behind it. A *filter* arrives from a control a reader pressed among two or three, and a value
+ * that is no longer among them - a link written by an older build, a hand-edited address - is a choice that has
+ * gone rather than a broken request: the table stands whole, narrowed by nothing. Both spellings of the region
+ * (`eu`, `region-eu`) are read the same way.
+ */
+export function parseRegionFilter(value?: string | null): BlizzardRegion | undefined {
+  const region = decodeRouteParam(value).toLowerCase().replace(/^region-/, '')
+  return isRegion(region) ? region : undefined
+}
+
 export function decodeRouteParam(value?: string | null): string {
   if (!value) return ''
   try {

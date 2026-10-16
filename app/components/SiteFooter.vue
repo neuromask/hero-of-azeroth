@@ -86,7 +86,7 @@ const localeUrl = useLocaleUrl()
   <div class="flex flex-col items-center gap-3" :class="standalone ? 'pt-9' : ''">
     <!-- `h-[2.45rem]` is `h-7` (1.75rem) times 1.4: the wordmark is the tallest thing in the footer, so
          a size read off the mark it used to be is easier to keep in step than a fresh number. -->
-    <AppIcon v-if="standalone" name="hoa-logotype" alt="HeroOfAzeroth" class="h-[2.45rem] w-auto" />
+    <AppIcon v-if="standalone" name="hoa-logotype" alt="Hero of Azeroth" class="h-[2.45rem] w-auto" />
 
     <!-- The pill: the site's frosted pane (`hoa-panel`), so the line is read against a sheet instead of
          against the artwork - the same block the plates above the foot are cut from. The letters stay

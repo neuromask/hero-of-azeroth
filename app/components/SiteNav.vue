@@ -4,6 +4,8 @@
 // never offer a different set of entries than the row above it.
 import { COLLECTION_KINDS } from '#shared/data/collectionsSchema'
 import { ACHIEVEMENT_CATEGORIES, ACHIEVEMENT_LABEL_KEYS } from '#shared/data/achievementsSchema'
+// The thirteen rankings the hall of fame's own menu drops, in the order it lists them (`HallOfFameMenu`).
+import { METRIC_LEADERBOARDS } from '#shared/data/leaderboardSchema'
 // The class a name is printed in, which is what tints the tab that carries the character's own name.
 import { classById, DEFAULT_CLASS_HEX } from '#shared/utils/wow-class'
 // The shape a character is remembered in, which is what the row's links and the tab's face are built from.
@@ -26,6 +28,10 @@ import type { SearchHistoryEntry } from '#shared/utils/savedCharacters'
  * hairline. One row still, so stepping between a character and the table keeps the bar and the entries exactly
  * where they are - but a reader can see which entries are about the character under the bar and which are
  * about the site they are on.
+ *
+ * The hall of fame is a control in two halves - the tab opens the hub, and the caret beside it drops the site's
+ * thirteen rankings (`app/components/HallOfFameMenu.vue`) - and it is drawn the way the collections tab and its
+ * caret are, because it answers the same kind of question: a page of its own to read, and a list of pages under it.
  *
  * The sixth view of a character is the comparison, and it does not stand as a tab of its own: it rides on the
  * character's own entry, as the second half of a split control beside the name. The name opens the profile and
@@ -125,6 +131,8 @@ const open = ref(false)
 /** The two subtrees of the panel, which are lists inside it rather than panes dropped over it. */
 const openCollections = ref(false)
 const openAchievements = ref(false)
+/** And the site's own list: the thirteen rankings of the hall of fame (`HallOfFameMenu`). */
+const openRankings = ref(false)
 
 /** The button and the panel, which is what a press has to land outside of to shut the panel. */
 const trigger = ref<HTMLButtonElement | null>(null)
@@ -167,14 +175,16 @@ onBeforeUnmount(() => {
 
 /**
  * A panel that has just been opened shows where the reader stands: the subtree the page being read belongs to
- * opens with it - the shelves of the collections, or the fifteen categories of the achievements - and the
- * other stays shut, so a reader already on a shelf sees the shelf they are on without a second press.
+ * opens with it - the shelves of the collections, the fifteen categories of the achievements, or the thirteen
+ * rankings - and the others stay shut, so a reader already on a shelf sees the shelf they are on without a second
+ * press.
  */
 watch(open, (opened) => {
   if (!opened) return
 
   openCollections.value = props.active === 'collections'
   openAchievements.value = props.active === 'achievements'
+  openRankings.value = props.active === 'leaderboard'
 })
 
 /** An entry that has just been picked is the page being read, so the panel is done with. */
@@ -193,6 +203,11 @@ function onShelf(shelf: string): boolean {
 /** And whether `category` is the achievements page being read. */
 function onCategory(category: string): boolean {
   return new RegExp(`/achievements/${category}/?$`).test(route.path)
+}
+
+/** And whether `slug` is the ranking being read, which is the site's own list's lit entry. */
+function onRanking(slug: string): boolean {
+  return String(route.params.metric || '') === slug
 }
 
 /** A row of the panel, and the two states it has - written whole, the way the site's panes write theirs. */
@@ -409,19 +424,44 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
         </NuxtLink>
       </template>
 
-      <!-- And the site's own group under its own heading: the table every figure on this site is ranked in.
+      <!-- And the site's own group under its own heading: the hall of fame, and the thirteen tables of the site
+           under it. In a list of rows the split control of the row above has no room, so the pair is drawn the way
+           the collections and the achievements are: a row that opens the tables it stands for. The hub itself is
+           the brand in the header at every width, and it is what the row is lit as when it is being read.
            The search is not repeated here - it stands in the row above, one press away at every width and
            bound to `Ctrl`/`⌘`+`K` as well. -->
       <p class="mt-1 border-t border-white/10" :class="HEADING">{{ t('navSiteGroup') }}</p>
 
-      <NuxtLink
-        :to="localeUrl('/')"
+      <button
+        type="button"
         :class="active === 'leaderboard' ? ROW_ON : ROW_OFF"
-        :aria-current="active === 'leaderboard' ? 'page' : undefined"
-        @click="close"
+        :aria-expanded="openRankings"
+        aria-controls="hoa-mobile-rankings"
+        @click="openRankings = !openRankings"
       >
-        {{ t('lbNav') }}
-      </NuxtLink>
+        <span class="flex-1 text-left">{{ t('lbNav') }}</span>
+        <svg
+          class="h-4 w-4 shrink-0 transition-transform duration-200"
+          :class="openRankings ? 'rotate-180' : ''"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div v-show="openRankings" id="hoa-mobile-rankings" class="mb-1 ml-4 border-l border-white/10 pl-1">
+        <NuxtLink
+          v-for="entry in METRIC_LEADERBOARDS"
+          :key="entry.slug"
+          :to="localeUrl(metricLeaderboardPath(entry.slug))"
+          :class="onRanking(entry.slug) ? SUB_ON : SUB_OFF"
+          :aria-current="onRanking(entry.slug) ? 'page' : undefined"
+          @click="close"
+        >
+          {{ t(entry.labelKey) }}
+        </NuxtLink>
+      </div>
 
       <!-- And the reader's own two settings, which the row above no longer carries: the language and the
            account, exactly as the header's corner draws them (`app/components/HeaderTools.vue`). The panel is
@@ -450,7 +490,7 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
           :aria-label="`${t('tabOverview')}: ${character?.name}`"
         >
           <span
-            class="relative grid h-5 w-5 shrink-0 place-items-center overflow-hidden rounded-full border"
+            class="relative grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full border"
             :style="{ borderColor: `${classHex}66`, backgroundColor: `${classHex}1f` }"
           >
             <span class="text-[10px] font-extrabold" :style="{ color: classHex }">{{ initial }}</span>
@@ -536,14 +576,10 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
       <div class="hidden items-center gap-3 lg:flex">
         <span class="h-6 w-px bg-white/15" aria-hidden="true" />
 
-        <NuxtLink
-          :to="localeUrl('/')"
-          class="hoa-tab hoa-liquid-glass"
-          :class="{ 'hoa-tab-active': active === 'leaderboard' }"
-          :aria-current="active === 'leaderboard' ? 'page' : undefined"
-        >
-          {{ t('lbNav') }}
-        </NuxtLink>
+        <!-- The hall of fame and the site's rankings, as one control in two halves: the tab opens the hub, and the
+             caret beside it drops the thirteen tables of the site (`app/components/HallOfFameMenu.vue`) - the same
+             pair the collections tab and its caret are, drawn the same way. -->
+        <HallOfFameMenu :active="active === 'leaderboard'" />
       </div>
 
       <!-- The way to somebody who is not this character: the two fields, dropped as a sheet under this row. It

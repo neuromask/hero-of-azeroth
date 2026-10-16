@@ -30,13 +30,6 @@ const props = withDefaults(
      */
     autofocus?: boolean
     /**
-     * The name the field opens with, when the search was asked for on one rather than typed into - the
-     * reader pressed the way out of an empty table, or arrived from a page that has no row for the
-     * character they want. The caller owns the name and the form owns the field: it goes in exactly as a
-     * remembered character would, and nothing else about the form changes.
-     */
-    initialName?: string
-    /**
      * Whether the two fields and the button stand in one row rather than stacked.
      *
      * The form is offered in two shapes and both are the same act: the card a page sets room aside for, and the
@@ -64,7 +57,7 @@ const props = withDefaults(
      */
     vsBase?: string
   }>(),
-  { autofocus: false, initialName: '', compact: false, target: 'profile', vsBase: '' }
+  { autofocus: false, compact: false, target: 'profile', vsBase: '' }
 )
 
 /**
@@ -499,23 +492,6 @@ const focusStart = () => {
 }
 
 /**
- * Puts a name the caller asked for into the field.
- *
- * A search that is asked for rather than typed is the same act from the form's side: the field is filled
- * and the reader presses the button, so the form keeps its own rules about what makes a search possible -
- * a realm is still picked from the list, and the name is still the reader's to correct. It is applied on
- * mount, because a sheet that was opened for the ask brings a fresh form with it, and watched as well,
- * because a form that is already on screen can be asked a second time: another row of the table, or the
- * same row of another page.
- */
-const applyInitialName = () => {
-  const asked = props.initialName.trim()
-  if (asked) name.value = asked
-}
-
-watch(() => props.initialName, applyInitialName)
-
-/**
  * What the button reads while a search is in flight. The address being pushed renders a
  * character, and that page asks Blizzard for it before it can draw: the navigation is held on
  * that fetch, so this form - and its button - stays on screen for as long as the request takes.
@@ -597,7 +573,6 @@ onMounted(() => {
   restoreSession()
   loadHistory()
   loadVersusFavorites()
-  applyInitialName()
   focusStart()
   document.addEventListener('mousedown', onDocumentClick)
 })

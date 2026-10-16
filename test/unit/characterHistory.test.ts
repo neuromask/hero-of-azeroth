@@ -1,16 +1,19 @@
 /**
  * The history: the event-log writes (`fileDailyReading`) and the reader that serves them (`readCharacterHistory`).
  *
- * The record is one point per real update, not one per day, so the tests below are about exactly that: a first
- * read files a point, an unchanged read files nothing, a changed read files a new point, and a partial read
- * keeps what the newest point already holds. The overall rating is stored with the point (computed when the six
- * figures it weighs are all present), and the reader maps the snapshot's snake_case columns to the camelCase the
- * wire speaks - so both halves are exercised against the very SQL the site runs, through `memoryDb`.
+ * The record is one point a **day**: the day is the smallest thing a history holds. So the tests below are about
+ * exactly that - a first read files the day's point, an unchanged read files nothing, a changed read *rewrites* the
+ * day's point rather than filing a second one beside it, a reading older than the one the day already holds is not
+ * written at all, and a partial read keeps what the day's point carries. The overall rating is stored with the point
+ * (computed when the six figures it weighs are all present), and the reader folds whatever the table holds to one
+ * point a day and maps the snapshot's snake_case columns to the camelCase the wire speaks - so both halves are
+ * exercised against the very SQL the site runs, through `memoryDb`.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CharacterData } from '../../server/utils/blizzard'
 import { fileDailyReading, readCharacterHistory, readSnapshotDistribution } from '../../server/utils/characterReading'
 import { calculatePlayerScore } from '../../server/utils/playerScore'
+import { dayStartOf, SECONDS_PER_DAY } from '#shared/utils/day'
 import { createMemoryDb, installUseDb, type MemoryDb } from '../helpers/memoryDb'
 
 let memory: MemoryDb
@@ -88,7 +91,7 @@ describe('fileDailyReading', () => {
     expect(memory.db.prepare('SELECT COUNT(*) AS n FROM snapshots WHERE character_id = ?').get(id)).toMatchObject({ n: 1 })
   })
 
-  it('files a new point when a figure moved', () => {
+  it("rewrites the day's point when a figure moved, and files no second one", () => {
     const id = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Testchar' })
 
     fileDailyReading(id, profile())
@@ -97,7 +100,32 @@ describe('fileDailyReading', () => {
     grown.stats.mounts = { count: 150, total: 800 }
     fileDailyReading(id, grown)
 
-    expect(memory.db.prepare('SELECT COUNT(*) AS n FROM snapshots WHERE character_id = ?').get(id)).toMatchObject({ n: 2 })
+    // One day, one point - and what it holds is the newest thing read in it.
+    const rows = memory.db
+      .prepare('SELECT taken_at, mounts FROM snapshots WHERE character_id = ?')
+      .all(id) as Array<{ taken_at: number; mounts: number }>
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ mounts: 150 })
+  })
+
+  it('is not written at all when the reading is older than the day the site has read', () => {
+    const id = memory.addCharacter({ userId: 1, region: 'eu', realm: 'gordunni', name: 'Testchar' })
+
+    // Two moments of one day, the first reading the later of them: the second is exactly what the migration that
+    // moves the hall of fame's own table files - a reading for a day the site has read since - and it must not take
+    // the day back.
+    const later = dayStartOf(Math.floor(Date.now() / 1000)) + 120
+    fileDailyReading(id, profile(), later)
+
+    const changed = profile()
+    changed.stats.mounts = { count: 150, total: 800 }
+    fileDailyReading(id, changed, later - 60)
+
+    const rows = memory.db
+      .prepare('SELECT taken_at, mounts FROM snapshots WHERE character_id = ?')
+      .all(id) as Array<{ taken_at: number; mounts: number }>
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ taken_at: later, mounts: 100 })
   })
 
   it('keeps a figure the reading did not carry from the newest point', () => {
@@ -150,11 +178,15 @@ describe('readCharacterHistory', () => {
     expect(readCharacterHistory('eu', 'gordunni', 'nobody', 'score')).toBeNull()
   })
 
-  it('reads one metric oldest first, mapped to the wire shape', () => {
+  it('reads one metric a point a day, oldest first', () => {
     const id = memory.addGuestCharacter({ region: 'eu', realm: 'gordunni', name: 'Testchar' })
 
     memory.addSnapshot({ characterId: id, takenAt: 1000, mounts: 10, score: 123 })
-    memory.addSnapshot({ characterId: id, takenAt: 2000, mounts: 20, mplus: 1800 })
+    memory.addSnapshot({ characterId: id, takenAt: 1000 + SECONDS_PER_DAY, mounts: 20, mplus: 1800 })
+    // A second point of the *same* day is not a second point of the history: the table is folded to the newest
+    // reading of each day, which is what a history is (`fileDailyReading`), and a row filed by an older build - a
+    // point per change - is folded the same way.
+    memory.addSnapshot({ characterId: id, takenAt: 1000 + SECONDS_PER_DAY + 120, mounts: 25 })
 
     const history = readCharacterHistory('eu', 'gordunni', 'testchar', 'mounts')
 
@@ -162,7 +194,7 @@ describe('readCharacterHistory', () => {
     expect(history?.metric).toBe('mounts')
     expect(history?.points).toEqual([
       { takenAt: 1000, value: 10 },
-      { takenAt: 2000, value: 20 }
+      { takenAt: 1000 + SECONDS_PER_DAY + 120, value: 25 }
     ])
   })
 

@@ -58,7 +58,7 @@ const localeUrl = useLocaleUrl()
              with the emblem cut from it, so it keeps its own frame and stays sharp at any size. -->
         <NuxtLink
           :to="localeUrl('/')"
-          aria-label="HeroOfAzeroth"
+          aria-label="Hero of Azeroth"
           class="block h-20 w-20 shrink-0 transition-transform hover:scale-105"
         >
           <AppIcon name="hoa-emblem" class="h-full w-full" />

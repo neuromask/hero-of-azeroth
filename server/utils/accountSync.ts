@@ -251,7 +251,7 @@ async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
   db.prepare(
     `UPDATE characters
         SET realm_name = ?, display_name = ?, class_id = ?, level = ?, faction = ?,
-            avatar = ?, profession_1 = ?, profession_2 = ?, last_seen_at = ?
+            avatar = ?, guild = COALESCE(?, guild), profession_1 = ?, profession_2 = ?, last_seen_at = ?
       WHERE id = ?`
   ).run(
     profile.realm,
@@ -260,6 +260,10 @@ async function doRefreshCharacterStats(row: CharacterRow, locale = 'en_US') {
     profile.level || null,
     (profile.faction || '').toLowerCase() || null,
     profile.avatarUrl || null,
+    // The guild the profile named, which is a fact about the character and not a figure of its readings: it is
+    // written here, where a character is read in full, and nowhere else. A profile that names none leaves the
+    // guild the row already held rather than blanking it, which is the rule every partial read follows.
+    profile.guild || null,
     professions[0] || null,
     professions[1] || null,
     now,

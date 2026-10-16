@@ -18,6 +18,8 @@
  *     changed (`PRAGMA user_version`) - which is what a fresh deploy and a formula change need, and nothing else.
  */
 import { LEADERBOARD_SORTS } from '#shared/data/leaderboardSchema'
+import { metricFigureOf, metricLeaderboardOf } from '#shared/data/leaderboardSchema'
+import type { DatabaseSync } from 'node:sqlite'
 import type {
   LeaderboardFaction,
   LeaderboardLeader,
@@ -26,13 +28,22 @@ import type {
   LeaderboardQuery,
   LeaderboardSort,
   LeaderboardStanding,
-  LeaderboardStats
+  LeaderboardStats,
+  LeaderboardRealmFacet,
+  MetricLeaderboard,
+  MetricLeaderboardPage,
+  MetricLeaderboardRank,
+  MetricLeaderboardRanks,
+  MetricLeaderboardScope,
+  MetricLeaderboardSlug
 } from '#shared/data/leaderboardSchema'
 import { SCORE_WEIGHTS } from '#shared/utils/leaderboardScore'
 import { totalCollectables, SCORE_VERSION } from './playerScore'
+// The regions the site serves, which is what an address segment of a metric page is checked against.
+import { isRegion } from './params'
 // The season a stored Mythic+ rating is counted in: a score read before the season began counts as nothing.
 import { seasonRatingSql } from './mplus'
-import { bumpStatisticsRevision } from './statisticsPopulation'
+import { bumpStatisticsRevision, statisticsRevision } from './statisticsPopulation'
 
 /**
  * The rating, as SQL: every category multiplied by its weight and added up.
@@ -75,6 +86,7 @@ const SOURCE_COLUMN_NAMES = [
   'realm_name',
   'display_name',
   'avatar',
+  'guild',
   'class_id',
   'faction',
   'level',
@@ -89,7 +101,15 @@ const SOURCE_COLUMN_NAMES = [
   'toys',
   'decor',
   'reputations',
-  'achievements'
+  'achievements',
+  // The five figures a metric leaderboard may rank, in the order the comparison board reads them
+  // (`METRIC_LEADERBOARDS` in #shared/data/leaderboardSchema). They are nullable where the six above are not,
+  // and that is the whole of how a metric ranking says "no figure read for this member" rather than "zero".
+  'titles',
+  'quests',
+  'recipes',
+  'transmogs',
+  'honor_level'
 ] as const
 
 /** Those columns as SQL, for the two reads that compare a row with the one about to replace it. */
@@ -122,6 +142,7 @@ const GUEST_ROWS = (where: string): string => `
     COALESCE(c.realm_name, c.realm_slug) AS realm_name,
     COALESCE(c.display_name, c.name) AS display_name,
     c.avatar AS avatar,
+    c.guild AS guild,
     COALESCE(c.class_id, 0) AS class_id,
     ${FACTION_SQL('c.faction')} AS faction,
     COALESCE(c.level, 0) AS level,
@@ -138,7 +159,14 @@ const GUEST_ROWS = (where: string): string => `
     COALESCE(s.toys, 0) AS toys,
     COALESCE(s.decor, 0) AS decor,
     COALESCE(s.reputations, 0) AS reputations,
-    COALESCE(s.achievements, 0) AS achievements
+    COALESCE(s.achievements, 0) AS achievements,
+    -- The five figures a metric leaderboard ranks, copied as the reading holds them: a figure nobody has read
+    -- stays NULL, which is what keeps that member out of that one ranking rather than at the bottom of it.
+    s.titles AS titles,
+    s.quests AS quests,
+    s.recipes AS recipes,
+    s.transmogs AS transmogs,
+    s.honor_level AS honor_level
   FROM characters c
   JOIN snapshots s ON s.id = (
     SELECT id FROM snapshots WHERE character_id = c.id ORDER BY taken_at DESC LIMIT 1
@@ -161,6 +189,9 @@ const ACCOUNT_ROWS = (where: string): string => `
     COALESCE(c.realm_name, c.realm_slug) AS realm_name,
     COALESCE(c.display_name, c.name) AS display_name,
     c.avatar AS avatar,
+    -- The guild of the very character this row is named after (the main joined above), never the roster's: a
+    -- guild belongs to a character, and the row's identity is one character's.
+    c.guild AS guild,
     COALESCE(c.class_id, 0) AS class_id,
     ${FACTION_SQL('c.faction')} AS faction,
     COALESCE(c.level, 0) AS level,
@@ -179,7 +210,16 @@ const ACCOUNT_ROWS = (where: string): string => `
     COALESCE(a.toys, 0) AS toys,
     COALESCE(a.decor, 0) AS decor,
     COALESCE(a.reputations, 0) AS reputations,
-    COALESCE(a.achievements, 0) AS achievements
+    COALESCE(a.achievements, 0) AS achievements,
+    -- The five figures a metric leaderboard ranks, read from the account's own totals - the very numbers the
+    -- comparison board prints for this character (readAccountTotals in ./accountPool), so a main's place and
+    -- the figure beside it are one answer. Left as the totals hold them rather than folded to zero: an account
+    -- whose totals have never carried a titles count is unranked in the titles ranking, not last in it.
+    a.titles AS titles,
+    a.quests AS quests,
+    a.recipes AS recipes,
+    a.transmogs AS transmogs,
+    a.honor_level AS honor_level
   FROM users u
   JOIN account_snapshots a ON a.id = (
     SELECT id FROM account_snapshots WHERE user_id = u.id ORDER BY taken_at DESC LIMIT 1
@@ -201,9 +241,9 @@ function writeRows(rows: string): string {
 }
 
 /** The columns a read hands back, named the way a player is read below. */
-const READ_COLUMNS = `region, realm_slug AS realm, name_key AS name, realm_name, display_name, avatar, class_id,
+const READ_COLUMNS = `region, realm_slug AS realm, name_key AS name, realm_name, display_name, avatar, guild, class_id,
   faction, level, first_seen_at, updated_at, is_account, ilvl, mplus_score AS mplus, honorable_kills AS kills,
-  mounts, pets, toys, decor, reputations, achievements, score`
+  mounts, pets, toys, decor, reputations, achievements, titles, quests, recipes, transmogs, honor_level, score`
 
 /** One row as a read hands it back, before it becomes a player. */
 interface MemberRow {
@@ -213,6 +253,7 @@ interface MemberRow {
   realm_name: string
   display_name: string
   avatar: string | null
+  guild: string | null
   class_id: number
   faction: string
   level: number
@@ -228,6 +269,11 @@ interface MemberRow {
   decor: number | null
   reputations: number | null
   achievements: number | null
+  titles: number | null
+  quests: number | null
+  recipes: number | null
+  transmogs: number | null
+  honor_level: number | null
   score: number
 }
 
@@ -257,6 +303,9 @@ function toPlayer(row: MemberRow): LeaderboardPlayer {
     name: row.name,
     displayName: row.display_name || row.name,
     avatar: row.avatar || undefined,
+    // A guild the site has never read is left off rather than written as an empty string: a row of a table
+    // prints a dash for it, and "" is a guild name nobody could have.
+    ...(row.guild ? { guild: row.guild } : {}),
     ...(row.is_account ? { isAccount: true as const } : {}),
     classId: row.class_id ?? 0,
     faction: normalizeFaction(row.faction ?? undefined),
@@ -270,6 +319,14 @@ function toPlayer(row: MemberRow): LeaderboardPlayer {
     decor: row.decor ?? 0,
     reputations: row.reputations ?? 0,
     achievements: row.achievements ?? 0,
+    // The five figures a metric leaderboard ranks, which are the one part of a row that is allowed to be
+    // unknown: `null` here is a member the site has no reading of for that figure, and the ranking of it leaves
+    // them out rather than printing a nought nobody measured (`null` on the wire, not `0`).
+    titles: row.titles ?? null,
+    quests: row.quests ?? null,
+    recipes: row.recipes ?? null,
+    transmogs: row.transmogs ?? null,
+    honorLevel: row.honor_level ?? null,
     score: row.score,
     updatedAt: dayOf(row.updated_at),
     firstSeenAt: dayOf(row.first_seen_at)
@@ -422,8 +479,12 @@ export function dropGuestRow(region: string, realm: string, name: string): void 
  *
  * 2: an account's row carries the item level of the main it is named after rather than the best gear on its
  *    roster, which is what the row had been written with.
+ *
+ * 3: a row carries the guild of the character it is named after and the five figures a metric leaderboard
+ *    ranks (`titles`, `quests`, `recipes`, `transmogs`, `honor_level`), which a row written by an older build
+ *    simply does not hold - a metric page read from those rows would find every one of them unranked.
  */
-export const ROW_VERSION = 2
+export const ROW_VERSION = 3
 
 /**
  * Rebuilds every row from the database, which is what a fresh database and a changed formula need.
@@ -544,6 +605,16 @@ const FACTION_ORDER: readonly LeaderboardFaction[] = ['alliance', 'horde', 'neut
 function whereClause(query: LeaderboardQuery): { where: string; params: (string | number)[] } {
   const clauses: string[] = []
   const params: (string | number)[] = []
+
+  // A region, which only a metric leaderboard's own scope names (`LeaderboardQuery.region`): a code this build
+  // does not serve keeps nobody rather than everybody, because a caller that asked for `xx` did not ask for the
+  // world - and a realm below it means nothing without the region that identifies it.
+  const region = (query.region || '').trim().toLowerCase()
+  if (region) {
+    if (!isRegion(region)) return { where: 'WHERE 0 = 1', params: [] }
+    clauses.push('region = ?')
+    params.push(region)
+  }
 
   if (query.faction && query.faction !== 'all') {
     clauses.push('faction = ?')
@@ -684,6 +755,401 @@ function readLeader(
 }
 
 /**
+ * The order one metric leaderboard is drawn in, as SQL: the figure it ranks, then the rating, then the name
+ * without case - the table's own order - and then the three segments a row is keyed by.
+ *
+ * That last part is not decoration. A ranking is a *total* order: a page and a place have to be the same
+ * ranking, and a count of the rows above a member can only agree with the page if the two name the same
+ * comparison down to the last tie. The rating settles two members with the same figure; the name settles two
+ * with the same rating; and the address settles the two that are still equal - the same name on two realms,
+ * which is a real pair of members and not a duplicate. Without it the database would be free to order those
+ * two either way on either read, and a reader's place would move while they looked at it.
+ *
+ * Written expression for expression as the indices in `./db` (`LEADERBOARD_ORDER_TAIL`), which is what keeps a
+ * page an index scan rather than a sort of the population.
+ */
+export function metricOrder(metric: MetricLeaderboard): string {
+  const lead = `${metric.column} DESC`
+  const tail = [RATING_ORDER, NAME_ORDER, 'region ASC', 'realm_slug ASC', 'name_key ASC']
+
+  return [lead, ...tail.filter((term) => term !== lead)].join(', ')
+}
+
+/**
+ * The comparison that says a row sorts strictly above one member, as SQL.
+ *
+ * It is the order above, written as a predicate - and the only honest way to count a place without numbering
+ * the whole population, which is a window function SQLite pays for with a scan of everybody
+ * (`readLeaderboardStanding` measured the two). A member's place is one more than the number of rows the
+ * comparison keeps.
+ *
+ * The six alternatives are one term of the order each, and they are written *flat* - a chain of `AND`s joined by
+ * one `OR` - rather than nested, which is what the order's tail looks like when it is transcribed literally. A
+ * flat chain is a shape SQLite turns into a handful of index seeks (its "multi-index OR"); the same comparison
+ * with an `OR` inside an `OR` makes the planner give up and count the whole index instead. At two hundred thousand
+ * members that is the difference between 4 ms and 40 ms for one place, and the plan of either is printed by the
+ * load test.
+ */
+function metricAboveSql(column: string): string {
+  return `(
+    ${column} > ? OR
+    (${column} = ? AND score > ?) OR
+    (${column} = ? AND score = ? AND display_name < ? COLLATE NOCASE) OR
+    (${column} = ? AND score = ? AND display_name = ? COLLATE NOCASE AND region < ?) OR
+    (${column} = ? AND score = ? AND display_name = ? COLLATE NOCASE AND region = ? AND realm_slug < ?) OR
+    (${column} = ? AND score = ? AND display_name = ? COLLATE NOCASE AND region = ? AND realm_slug = ? AND name_key < ?)
+  )`
+}
+
+/**
+ * The values that predicate binds, in the order the six alternatives read them: the figure for the first, the
+ * figure and the rating for the second, and one more term of the address for each alternative after it.
+ */
+function metricAboveValues(player: LeaderboardPlayer, value: number): (string | number)[] {
+  const name = player.displayName || player.name
+  const { score, region, realm } = player
+
+  return [
+    value,
+    value,
+    score,
+    value,
+    score,
+    name,
+    value,
+    score,
+    name,
+    region,
+    value,
+    score,
+    name,
+    region,
+    realm,
+    value,
+    score,
+    name,
+    region,
+    realm,
+    player.name
+  ]
+}
+
+/** The scope a query names, echoed back the way a page prints it: a region, and the realm inside it. */
+function scopeOf(query: LeaderboardQuery): MetricLeaderboardScope {
+  const region = (query.region || '').trim().toLowerCase()
+  const realm = (query.realm || '').trim().toLowerCase()
+
+  return {
+    ...(region ? { region } : {}),
+    ...(region && realm ? { realm } : {})
+  }
+}
+
+/**
+ * The realm menus read so far, each with the revision of the data it was read at (`statisticsRevision`).
+ *
+ * A menu is small - one row per realm - so the map is bounded by the rankings and scopes in play rather than by the
+ * population: thirteen figures, each with a world menu and one per region, and the oldest entry is dropped when the
+ * cap is reached, exactly as the distribution's own memo does (`server/utils/characterReading`).
+ */
+const realmsMemo = new Map<string, { revision: number; realms: LeaderboardRealmFacet[] }>()
+
+/** How many menus are kept before the oldest is dropped. One per ranking and scope, with room to spare. */
+const REALMS_MEMO_LIMIT = 64
+
+/**
+ * The realms one ranking holds members in, as the realm menu of its filter bar reads them.
+ *
+ * Read over the *region* the page is scoped to rather than over the realm it shows: a reader standing on
+ * `eu/gordunni` is offered the other realms of EU - the siblings of the one they are looking at - and a reader on
+ * the world page is offered every realm of both regions. The faction and the name a reader has typed are
+ * deliberately not part of it, for the reason the front door's own facet is not narrowed by its chips: the menu
+ * is about the population the table could show, not about the slice of it currently on screen.
+ *
+ * `realm_name` is left out although the front door's facet carries it: the column is not part of the covering
+ * index, so reading it would fetch every row of the scope to see a name - and the site's own realm list already
+ * names a realm in the language being read (`app/composables/realmNames.ts`), which is what the menu prints
+ * anyway.
+ *
+ * It is memoised per ranking and scope, for the reason the widgets are memoised
+ * (`getGlobalStats` in `./leaderboardStorage`): the menu of every page of one ranking is the same menu, the pass
+ * that builds it is the only read here that has to sort (`GROUP BY` over a figure's index), and a burst of readers
+ * should pay for it once. A write that moves the population moves the revision the memo is keyed on, so a menu can
+ * never be a menu of a table that has moved.
+ */
+function readMetricRealms(db: DatabaseSync, metric: MetricLeaderboard, scope: MetricLeaderboardScope): LeaderboardRealmFacet[] {
+  const memoKey = `${metric.slug}|${scope.region || '*'}`
+  const at = statisticsRevision()
+  const answered = realmsMemo.get(memoKey)
+
+  if (answered && answered.revision === at) return answered.realms
+
+  const { where, params } = whereClause({ region: scope.region })
+
+  const realms = throughMetricIndex(
+    db,
+    metric,
+    (from) =>
+      `SELECT region, realm_slug AS realm, '' AS realmName, COUNT(*) AS count ${from}
+        ${where || 'WHERE 1 = 1'} AND ${metric.column} IS NOT NULL
+        GROUP BY region, realm_slug ORDER BY count DESC, region ASC, realm_slug ASC`,
+    (statement) => statement.all(...params) as unknown as LeaderboardRealmFacet[]
+  )
+
+  realmsMemo.set(memoKey, { revision: at, realms })
+  if (realmsMemo.size > REALMS_MEMO_LIMIT) {
+    const oldest = realmsMemo.keys().next().value
+    if (oldest !== undefined) realmsMemo.delete(oldest)
+  }
+
+  return realms
+}
+
+/**
+ * One page of one metric leaderboard: the members that hold a figure for the metric, ordered by it and sliced.
+ *
+ * The population of a metric ranking is narrower than the table's, and deliberately: a member whose row holds no
+ * figure for this metric is not a member with none of it, and placing them at the bottom would be the site
+ * inventing a nought nobody measured (NULL in ./db, and the note on the leaderboard table). So the read keeps the
+ * rows that hold a figure and nothing else - the count, the page and the place of a member all name the same
+ * population, which is the property a place has to have.
+ *
+ * The scope is a LeaderboardQuery and nothing else: the world names no region, a region names its own, and a
+ * realm names its region beside its slug, so `gordunni` in EU is one realm rather than every realm of that name
+ * (whereClause above).
+ *
+ * The rows are read *through* the ranking's own index (`INDEXED BY`, and `MetricLeaderboard.index` for why): the
+ * page is one ordered walk of it, stopping after a page's worth of rows that the scope keeps. Left to itself,
+ * SQLite answers a scoped page by filtering with the realm index and sorting what is left - correct, and ten times
+ * the cost of the walk at two hundred thousand members. The count above is deliberately *not* pinned: counting a
+ * scope is what the realm index is for, and the planner's own choice there is the right one.
+ *
+ * A database that does not have that index at all - the migration that writes it reports the failure it hit rather
+ * than throwing (`migrateLeaderboardIndexes`) - cannot be read through it, and SQLite says so by refusing the
+ * statement. That is answered with the same query without the directive rather than with a 500: a slower page is a
+ * great deal better than no page.
+ */
+export function readMetricLeaderboardPage(
+  metric: MetricLeaderboard,
+  query: LeaderboardQuery,
+  perPage: number
+): MetricLeaderboardPage {
+  const db = useDb()
+  ensurePopulation()
+
+  const { where, params } = whereClause(query)
+  const ranked = `${where || 'WHERE 1 = 1'} AND ${metric.column} IS NOT NULL`
+  const size = Math.max(1, Math.floor(perPage))
+
+  const counted = throughMetricIndex(
+    db,
+    metric,
+    (from) => `SELECT COUNT(*) AS total, MAX(updated_at) AS newest ${from} ${ranked}`,
+    (statement) => statement.get(...params) as { total: number; newest: number | null }
+  )
+
+  const pages = Math.max(1, Math.ceil(counted.total / size))
+  const page = Math.min(pages, Math.max(1, Math.floor(query.page || 1)))
+
+  const order = `ORDER BY ${metricOrder(metric)} LIMIT ? OFFSET ?`
+  const values = [...params, size, (page - 1) * size]
+
+  const rows = throughMetricIndex(
+    db,
+    metric,
+    (from) => `SELECT ${READ_COLUMNS} ${from} ${ranked} ${order}`,
+    (statement) => statement.all(...values) as unknown as MemberRow[]
+  )
+
+  return {
+    slug: metric.slug,
+    scope: scopeOf(query),
+    players: rows.map(toPlayer),
+    total: counted.total,
+    page,
+    perPage: size,
+    pages,
+    realms: readMetricRealms(db, metric, scopeOf(query)),
+    updatedAt: dayOf(counted.newest)
+  }
+}
+
+/**
+ * How many characters one ranks request answers for, which is what a comparison board can name: its two sides,
+ * and a little room beside them. The same bound the distribution endpoint keeps (`server/api/distribution`), and
+ * for the same reason - a caller cannot turn one request into a walk of the population.
+ */
+export const RANK_KEYS_LIMIT = 4
+
+/**
+ * Answers one read of a metric's rows, through the metric's own index where the database has it.
+ *
+ * The index is the difference between an in-index walk and a table lookup per row. `region = 'eu' AND mounts IS NOT
+ * NULL` is answered by the realm index and then has to fetch eighty thousand rows to see whether they hold a
+ * figure, where the same question asked of the covering metric index is answered by walking it once: at two hundred
+ * thousand members, 12 ms against 90 ms for the count of a region, and 22 ms against 190 ms for a page of one
+ * (`test/bench` measures each of them). So every statement below that knows which metric it is about is prepared
+ * against that metric's index rather than left to the planner.
+ *
+ * A database that does not have the index at all - the migration that writes it reports the failure it hit rather
+ * than throwing (`migrateLeaderboardIndexes` in ./db) - cannot answer a statement prepared against it, and SQLite
+ * says so outright ("no query solution"). That is answered with the very same statement without the directive,
+ * because a slower page is a great deal better than no page.
+ */
+function throughMetricIndex<T>(
+  db: DatabaseSync,
+  metric: MetricLeaderboard,
+  build: (from: string) => string,
+  run: (statement: ReturnType<DatabaseSync['prepare']>) => T
+): T {
+  const from = (indexed: boolean) => (indexed ? `FROM leaderboard INDEXED BY ${metric.index}` : 'FROM leaderboard')
+
+  try {
+    return run(db.prepare(build(from(true))))
+  } catch (error) {
+    console.warn(
+      `[leaderboard] ${metric.slug} was read without its own index: ${error instanceof Error ? error.message : String(error)}`
+    )
+
+    return run(db.prepare(build(from(false))))
+  }
+}
+
+/**
+ * Where the characters a caller named stand in one metric's three rankings - the world, their own region and
+ * their own realm - in one answer.
+ *
+ * Three places rather than one, because that is what a reader of a comparison board is shown: a figure means
+ * little on its own, and the same figure means three different things among everybody, among the region's
+ * players and among a single realm's. All three are read from the same rows and the same order as the page
+ * (`readMetricLeaderboardPage`), so a place and the page it opens cannot disagree.
+ *
+ * A character is answered for whether or not they are in the population. A key the table does not hold is
+ * `participating: false` with no places at all - an alt that is neither its account's main nor a guest row of its
+ * own is not in the table, and inventing a place for it would be the site answering a question about a member
+ * that does not exist. The population sizes are still reported, because they are facts about the *ranking*
+ * rather than about the character: a reader is told how many hold a figure, which is what makes an absent place
+ * read as "not in this ranking" rather than as an error.
+ *
+ * The populations are memoised per scope within one call, so two characters of one realm pay for that realm's
+ * population once - and the places are counted against the index the page itself is read from.
+ */
+export function readMetricRanks(metric: MetricLeaderboard, keys: string[]): MetricLeaderboardRanks {
+  const db = useDb()
+  ensurePopulation()
+
+  /** The rows a scope ranks, as the `WHERE` of every count below: the scope's, and a figure held. */
+  const ranked = (scope: MetricLeaderboardScope): { where: string; params: string[] } => {
+    const { where, params } = whereClause({ region: scope.region, realm: scope.realm })
+    return { where: `${where || 'WHERE 1 = 1'} AND ${metric.column} IS NOT NULL`, params: params as string[] }
+  }
+
+  const populations = new Map<string, number>()
+
+  /** How many members hold a figure in one scope, counted once per scope per call. */
+  const population = (scope: MetricLeaderboardScope): number => {
+    const id = `${scope.region || '*'}|${scope.realm || '*'}`
+    const known = populations.get(id)
+    if (known !== undefined) return known
+
+    const { where, params } = ranked(scope)
+    const counted = throughMetricIndex(
+      db,
+      metric,
+      (from) => `SELECT COUNT(*) AS n ${from} ${where}`,
+      (statement) => (statement.get(...params) as { n: number }).n
+    )
+
+    populations.set(id, counted)
+    return counted
+  }
+
+  /** One member's place in one scope, which the scope's own count of the rows above them is. */
+  const place = (scope: MetricLeaderboardScope, player: LeaderboardPlayer, value: number): number => {
+    const { where, params } = ranked(scope)
+    const above = metricAboveSql(metric.column)
+    const values = [...params, ...metricAboveValues(player, value)]
+
+    const counted = throughMetricIndex(
+      db,
+      metric,
+      (from) => `SELECT COUNT(*) AS above ${from} ${where} AND ${above}`,
+      (statement) => (statement.get(...values) as { above: number }).above
+    )
+
+    return counted + 1
+  }
+
+  const worldTotal = population({})
+
+  const players = keys.slice(0, RANK_KEYS_LIMIT).map((key): MetricLeaderboardRank => {
+    const [region = '', realm = '', ...rest] = key.split(':')
+    const name = rest.join(':')
+
+    const row = db
+      .prepare(`SELECT ${READ_COLUMNS} FROM leaderboard WHERE region = ? AND realm = ? AND name = ?`)
+      .get(region, realm, name) as MemberRow | undefined
+
+    // A region and a realm are only rankings at all when the key names a region this build serves: a realm slug
+    // on its own names no realm (`MetricLeaderboardScope`).
+    const inRegion = isRegion(region)
+    const regionTotal = inRegion ? population({ region }) : 0
+    const realmTotal = inRegion ? population({ region, realm }) : 0
+
+    if (!row) {
+      return {
+        key,
+        participating: false,
+        value: null,
+        worldRank: null,
+        regionRank: null,
+        realmRank: null,
+        worldTotal,
+        regionTotal,
+        realmTotal
+      }
+    }
+
+    const player = toPlayer(row)
+    const value = metricFigureOf(player, metric.metric)
+
+    return {
+      key,
+      participating: true,
+      player,
+      value,
+      worldRank: value === null ? null : place({}, player, value),
+      regionRank: value === null || !inRegion ? null : place({ region }, player, value),
+      realmRank: value === null || !inRegion ? null : place({ region, realm }, player, value),
+      worldTotal,
+      regionTotal,
+      realmTotal
+    }
+  })
+
+  const { newest } = db.prepare('SELECT MAX(updated_at) AS newest FROM leaderboard').get() as {
+    newest: number | null
+  }
+
+  return { slug: metric.slug, players, updatedAt: dayOf(newest) }
+}
+
+/**
+ * The row leading one of the site's rankings, which is what a widget about that figure prints.
+ *
+ * Read through the ranking's own order (`metricOrder`), so the member a widget names is the member standing *first*
+ * on the page that figure's ranking opens with - and the read is the index seek that order is backed by (`./db`)
+ * rather than a sort of the population. A figure nobody holds is no leader at all, which is the honest answer for a
+ * table backfilled from pages nobody has opened (`readLeader`).
+ */
+function readMetricLeader(slug: MetricLeaderboardSlug): LeaderboardLeader | null {
+  const metric = metricLeaderboardOf(slug)
+  if (!metric) return null
+
+  return readLeader(metric.column, metricOrder(metric), (player) => metricFigureOf(player, metric.metric) ?? 0)
+}
+
+/**
  * The figures behind the widgets, gathered in one pass over the population.
  *
  * Everything here is an aggregate over the table as a whole - how many members it holds, how many realms and classes
@@ -710,7 +1176,8 @@ export function readGlobalStats(): LeaderboardStats {
          COALESCE(SUM(toys), 0) AS toys,
          COALESCE(SUM(decor), 0) AS decor,
          COALESCE(SUM(reputations), 0) AS reputations,
-         COALESCE(SUM(achievements), 0) AS achievements
+         COALESCE(SUM(achievements), 0) AS achievements,
+         MAX(updated_at) AS newest
        FROM leaderboard`
     )
     .get() as {
@@ -723,6 +1190,7 @@ export function readGlobalStats(): LeaderboardStats {
     decor: number
     reputations: number
     achievements: number
+    newest: number | null
   }
 
   const classesFacet = db
@@ -759,8 +1227,13 @@ export function readGlobalStats(): LeaderboardStats {
       ? { classId: top.classId, count: top.count, share: Math.round((top.count / totals.players) * 100) }
       : null,
     collector: readLeader('collectables', COLLECTABLES_ORDER, totalCollectables),
-    rating: readLeader('mplus_score', SORT_COLUMNS.mplus, (player) => player.mPlusScore),
-    architect: readLeader('decor', SORT_COLUMNS.decor, (player) => player.decor),
+    architect: readMetricLeader('decor'),
+    pets: readMetricLeader('pets'),
+    toys: readMetricLeader('toys'),
+    mounts: readMetricLeader('mounts'),
+    reputations: readMetricLeader('reputations'),
+    titles: readMetricLeader('titles'),
+    transmogs: readMetricLeader('transmogs'),
     totals: {
       mounts: totals.mounts,
       pets: totals.pets,
@@ -769,6 +1242,7 @@ export function readGlobalStats(): LeaderboardStats {
       reputations: totals.reputations,
       achievements: totals.achievements
     },
+    updatedAt: dayOf(totals.newest),
     realmsFacet,
     classesFacet,
     factionsFacet

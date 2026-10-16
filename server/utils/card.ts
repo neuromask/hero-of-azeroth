@@ -1152,7 +1152,7 @@ async function buildCardSvg(
    * kept for a server that cannot read the icon.
    */
   const logotype = iconElement('hoa-logotype', LOGO_X, 52, LOGO_SIZE, '#94a3b8')
-    || '<text font-size="26" fill="#94a3b8" x="1144" y="88" text-anchor="end">HeroOfAzeroth</text>'
+    || '<text font-size="26" fill="#94a3b8" x="1144" y="88" text-anchor="end">Hero of Azeroth</text>'
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" font-family="${FONT_FAMILY}">
   <defs>

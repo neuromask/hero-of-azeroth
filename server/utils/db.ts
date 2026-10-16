@@ -61,6 +61,74 @@ export function nowSec(): number {
 }
 
 /**
+ * The orders the materialised table is read in, as the indices that carry them: the name an index has always
+ * had, and the column it leads with.
+ *
+ * One list rather than a block of SQL, because an index here has two lives. It is created by the schema below,
+ * and it is *reconciled* by the migration (`migrateLeaderboardIndexes`): a build that changes what an order is
+ * made of - this one added the address a row is keyed by to the end of every order, so that a metric ranking
+ * has one total order to read - must rebuild the indices an older database already has, and a second list of
+ * names written out beside the first is a list that loses one.
+ *
+ * The order is the order the metric leaderboards are drawn in (`METRIC_LEADERBOARDS`), with the two orders the
+ * front door offers that are not a metric of their own (`mplus`, `collectables`) in the places they have always
+ * held.
+ */
+const LEADERBOARD_ORDER_INDEXES: readonly (readonly [name: string, column: string])[] = [
+  ['idx_leaderboard_total', 'score'],
+  ['idx_leaderboard_achievements', 'achievements'],
+  ['idx_leaderboard_mounts', 'mounts'],
+  ['idx_leaderboard_toys', 'toys'],
+  ['idx_leaderboard_pets', 'pets'],
+  ['idx_leaderboard_decor', 'decor'],
+  ['idx_leaderboard_reputations', 'reputations'],
+  ['idx_leaderboard_mplus', 'mplus_score'],
+  ['idx_leaderboard_kills', 'honorable_kills'],
+  ['idx_leaderboard_titles', 'titles'],
+  ['idx_leaderboard_quests', 'quests'],
+  ['idx_leaderboard_recipes', 'recipes'],
+  ['idx_leaderboard_transmogs', 'transmogs'],
+  ['idx_leaderboard_honor_level', 'honor_level'],
+  ['idx_leaderboard_collectables', 'collectables']
+]
+
+/**
+ * The tail every one of those orders ends in, and the reason it is a tail rather than a pair of tie-breakers:
+ * a ranking is a total order.
+ *
+ * The figure the order is about comes first, then the rating, then the name without case - which is what the
+ * table has always drawn - and then the three segments a row is keyed by, which is what settles a tie that
+ * nothing else can: two members with the same figure and the same name on two realms are still two rows, and a
+ * place computed by a count has to agree with the page about which of them comes first. The rating is skipped
+ * where it leads the order (an index cannot name a column twice), and `leaderboardOrderIndex` below is the one
+ * place that is written.
+ */
+const LEADERBOARD_ORDER_TAIL: readonly string[] = [
+  'score DESC',
+  'display_name COLLATE NOCASE',
+  'region',
+  'realm_slug',
+  'name_key',
+  // The last column is not one of the order's terms at all: it is the moment the row was written, which a page
+  // reports beside its rows ("data as of ...") and which a *scoped* count of a metric needs - `COUNT(*)` and
+  // `MAX(updated_at)` together over the region's members. Carried here, that aggregate is answered by the index
+  // alone; left out, every row of the scope is fetched to read one column, which at two hundred thousand members is
+  // 90 ms against 12 ms for one region (`test/bench` measures both).
+  'updated_at'
+]
+
+/** One order, as the statement that creates the index carrying it. */
+function leaderboardOrderIndex(name: string, column: string): string {
+  const terms = [`${column} DESC`, ...LEADERBOARD_ORDER_TAIL.filter((term) => term !== `${column} DESC`)]
+  return `CREATE INDEX IF NOT EXISTS ${name} ON leaderboard(${terms.join(', ')})`
+}
+
+/** The same statement with the noise taken out, which is how an index on file is compared with the one wanted. */
+function normalizeIndexSql(sql: string): string {
+  return sql.replace(/\s+/g, ' ').replace(/create index (if not exists )?/i, 'create index ').trim().toLowerCase()
+}
+
+/**
  * The whole schema, written so that applying it twice changes nothing.
  *
  * `main_character_id` is a plain integer rather than a foreign key on purpose: it points at a row
@@ -160,6 +228,17 @@ CREATE TABLE IF NOT EXISTS characters (
   ilvl REAL,
   faction TEXT,
   avatar TEXT,
+  /**
+   * The guild the character belongs to, as the last full profile read named it (guild.name in
+   * ./blizzard), or NULL when no read has carried one.
+   *
+   * It is a fact about the character rather than a figure of its readings, so it lives here beside the level
+   * and the portrait rather than in the snapshots table, and a read that does not carry one leaves what is here
+   * alone - the rule every partial read follows. It is NULL rather than an empty string for a character the site
+   * has never seen in a guild, because "in no guild" and "never read" are two answers and only the second one is
+   * something the site can honestly say; a row of a table that prints it draws a dash for both.
+   */
+  guild TEXT,
   profession_1 TEXT,
   profession_2 TEXT,
   is_main INTEGER NOT NULL DEFAULT 0,
@@ -191,10 +270,11 @@ CREATE INDEX IF NOT EXISTS idx_characters_key ON characters(region, realm_slug, 
 -- would be split between them.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_guest ON characters(region, realm_slug, name_key) WHERE user_id IS NULL;
 
--- One reading of one character: what its profile said when the site read it. A point is filed for the moment it
--- was taken and only when the figures have moved, so this is a character's real history rather than one row a day
--- (see ./characterReading). It is what a tile prints, what a page weighs a live Blizzard answer against, and what
--- a history and a distribution are drawn from (./statisticsPopulation).
+-- One reading of one character, and the smallest thing it holds is a *day*: the writer files a reading as the point
+-- of the day it was taken in, and a day the site has already read is rewritten rather than gaining a second point
+-- (see ./characterReading), so this is a character's real history at one row a day at most. The moment is the second
+-- of the newest reading of that day, which is what a page weighs a live Blizzard answer against. It is what a tile
+-- prints, and what a history and a distribution are drawn from (./statisticsPopulation).
 CREATE TABLE IF NOT EXISTS snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
@@ -229,8 +309,9 @@ CREATE TABLE IF NOT EXISTS snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_character ON snapshots(character_id, taken_at);
 
--- The account's own figures over time, one point per change. The unit the statistics are counted over is the
--- *account* rather than its characters (see ./statisticsPopulation), so an account's history is kept here: a
+-- The account's own figures over time, one point a *day* like the readings beside it (./characterReading). The unit the
+-- statistics are counted over is the *account* rather than its characters (see ./statisticsPopulation), so an
+-- account's history is kept here: a
 -- character's own readings are one character's record - what a tile prints and what a page weighs a live
 -- reading against - and every character of an account shows the account's numbers instead.
 --
@@ -288,6 +369,10 @@ CREATE TABLE IF NOT EXISTS leaderboard (
   realm_name TEXT NOT NULL,
   display_name TEXT NOT NULL,
   avatar TEXT,
+  -- The guild the row's own character is in, read off that character's row: it is a fact about a character
+  -- rather than a figure of its account, so an account's row prints the guild of the main it is named after.
+  -- NULL when no read has carried one, which a table draws as a dash.
+  guild TEXT,
   class_id INTEGER NOT NULL DEFAULT 0,
   faction TEXT NOT NULL DEFAULT 'neutral',
   -- What the character *is*, read from its own row and from its newest reading: the level as the game reports it
@@ -308,6 +393,26 @@ CREATE TABLE IF NOT EXISTS leaderboard (
   decor INTEGER,
   reputations INTEGER,
   achievements INTEGER,
+  /**
+   * The five figures the table's own column list has no room for, and the reason they are here rather than
+   * read from the member's rows on every page: a metric leaderboard an address names (/leaderboards/<slug>)
+   * ranks one of them, and an order has to be an index over a stored column to stay a page read (see the note
+   * above this table, and ./leaderboardRows for what fills them).
+   *
+   * They are filled from the very rows the six above are - a guest's own newest reading, an account's own
+   * newest totals (readAccountTotals in ./accountPool) - so a figure a reader sees on a metric page is the
+   * figure the comparison board prints for the same character, by construction rather than by agreement.
+   *
+   * NULL means *unknown* here, and it is deliberately not folded to zero: none of these five is a collection
+   * of items with a natural nought, and a member whose titles nobody has read is not a member with no titles.
+   * A ranking of one of them therefore leaves that member out rather than placing them at the bottom (a real
+   * zero - an account whose totals say it holds none - does take part, exactly as it does everywhere else).
+   */
+  titles INTEGER,
+  quests INTEGER,
+  recipes INTEGER,
+  transmogs INTEGER,
+  honor_level INTEGER,
   -- How many collectables a row holds altogether - mounts, pets, toys and decor - which is what the "king of
   -- collections" widget leads on (see totalCollectables in ./playerScore). Stored for the same reason the rating is:
   -- it is a sum over four columns, so no index can order by it, and the widget would otherwise sort the
@@ -321,16 +426,18 @@ CREATE TABLE IF NOT EXISTS leaderboard (
 -- One index per order the page offers, each carrying the tie-breakers the table is drawn in: the preset's figure,
 -- then the rating, then the name without case. LIMIT then stops after a page's worth of rows instead of sorting
 -- the population, which is what these exist for.
-CREATE INDEX IF NOT EXISTS idx_leaderboard_total ON leaderboard(score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_mounts ON leaderboard(mounts DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_pets ON leaderboard(pets DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_toys ON leaderboard(toys DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_decor ON leaderboard(decor DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_reputations ON leaderboard(reputations DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_mplus ON leaderboard(mplus_score DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_kills ON leaderboard(honorable_kills DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_achievements ON leaderboard(achievements DESC, score DESC, display_name COLLATE NOCASE);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_collectables ON leaderboard(collectables DESC, score DESC, display_name COLLATE NOCASE);
+--
+-- The four columns after the name are the *total* order's tail, and they are here rather than left to SQLite
+-- because a metric leaderboard ranks a member by the whole of the order: a page and the place a reader is
+-- shown have to be the same ranking (metricOrder in ./leaderboardRows), and an index that stopped at the
+-- name would leave the database sorting the population for every page.
+--
+-- They are deliberately *not* created here. An index over a column this build has just added cannot be created
+-- before that column exists, and the schema below runs before the migration that adds it (see migrate) - so a
+-- statement for one of the five new figures would make a database written by an older build impossible to open
+-- at all. The migration owns every one of these orders instead (LEADERBOARD_ORDER_INDEXES, and
+-- migrateLeaderboardIndexes below): it runs on every open, after the columns are there, and creates the ones
+-- that are missing and rebuilds the ones whose shape has changed.
 -- The filters: a realm chip and a class chip are the two the page draws, and each is worth an index of its own
 -- because a filtered page still has to be ordered - the index above cannot be used for both at once.
 CREATE INDEX IF NOT EXISTS idx_leaderboard_realm ON leaderboard(region, realm_slug);
@@ -416,7 +523,21 @@ const ADDED_COLUMNS = [
   // The overall rating the six figures above weigh, stored so a history point freezes the score that
   // was computed when the reading was taken: the weights change with SCORE_VERSION, and a graph must
   // not silently re-rank old points. Old rows keep NULL - the score cannot be re-derived honestly.
-  'ALTER TABLE snapshots ADD COLUMN score INTEGER'
+  'ALTER TABLE snapshots ADD COLUMN score INTEGER',
+  // The guild a character belongs to, which the profile it was read from already carries (`./blizzard`): a fact
+  // about the character, written beside its level and its portrait, and read by the metric leaderboards' own
+  // Guild column. A row written before this build has none, which is a dash rather than a wrong name.
+  'ALTER TABLE characters ADD COLUMN guild TEXT',
+  // And the five figures a metric leaderboard of its own ranks (see the note on the `leaderboard` table): the
+  // materialised row has to hold them, or the order would be computed rather than indexed. A database written
+  // by an older build takes the columns here and its rows are rebuilt with them the moment the version stamp
+  // below stops matching (ROW_VERSION, in ./leaderboardRows).
+  'ALTER TABLE leaderboard ADD COLUMN guild TEXT',
+  'ALTER TABLE leaderboard ADD COLUMN titles INTEGER',
+  'ALTER TABLE leaderboard ADD COLUMN quests INTEGER',
+  'ALTER TABLE leaderboard ADD COLUMN recipes INTEGER',
+  'ALTER TABLE leaderboard ADD COLUMN transmogs INTEGER',
+  'ALTER TABLE leaderboard ADD COLUMN honor_level INTEGER'
 ]
 
 /**
@@ -474,6 +595,11 @@ export function migrateCharacterOwnership(connection: DatabaseSync): void {
       ilvl REAL,
       faction TEXT,
       avatar TEXT,
+      -- The guild the character was last read in, which this build keeps on the character (the added-columns
+      -- list above adds it before this runs, so an older table has it by now). It has to be named here for the
+      -- same reason the item level is: the copy below writes every column both tables have, and a rebuilt table
+      -- that has never heard of one of them would leave a row without it.
+      guild TEXT,
       profession_1 TEXT,
       profession_2 TEXT,
       is_main INTEGER NOT NULL DEFAULT 0,
@@ -617,6 +743,10 @@ function migrate(connection: DatabaseSync): void {
   // And the columns this build has taken *away* from a table.
   migrateRemovedColumns(connection)
 
+  // An index is not a column, and `CREATE INDEX IF NOT EXISTS` says nothing about one that exists in the wrong
+  // shape: a database written by an older build keeps its own orders until they are reconciled.
+  migrateLeaderboardIndexes(connection)
+
   // A unique (character_id, taken_at) makes the event-log writes race-free, but it must never be added
   // over history that already has duplicates - a duplicate is a real snapshot, and a migration must not
   // decide to discard one. The duplicates are counted first: with none the plain index is swapped for a
@@ -636,5 +766,45 @@ function migrate(connection: DatabaseSync): void {
     connection.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_snapshots_character ON snapshots(character_id, taken_at)')
   } else {
     console.warn(`[db] snapshots has ${dupes.n} duplicate (character_id, taken_at) groups; the unique index was left off to preserve history`)
+  }
+}
+
+/**
+ * Puts every order the table is read in back in the shape this build means, on a database that already has one.
+ *
+ * `CREATE INDEX IF NOT EXISTS` is a promise about a *name*, not about a definition: a database written by the
+ * build before this one already has `idx_leaderboard_mounts`, so the statement in the schema above leaves it
+ * exactly as it found it - ordering by the figure, the rating and the name, with nothing left to settle the
+ * tie the address would. That is a table that can answer the front door and cannot answer a metric leaderboard:
+ * the ranking needs the whole order, and an index that stops short of it leaves SQLite sorting the population
+ * for every page (`test/bench` measures the two).
+ *
+ * So each index is read off `sqlite_master` and compared with the statement this build would write, and the ones
+ * that differ are dropped and written again. The comparison is on the text of the statement with the whitespace
+ * and the `IF NOT EXISTS` folded out, which is what makes this idempotent: a second start finds every index it
+ * wrote and touches nothing. Dropping and rebuilding is the one way to change an index's columns in SQLite, and
+ * it is paid once - the same moment the rows themselves are rebuilt (`ROW_VERSION` in ./leaderboardRows).
+ *
+ * Exported for the test that builds a database written by the older build and migrates it (`test/unit`).
+ */
+export function migrateLeaderboardIndexes(connection: DatabaseSync): void {
+  const onFile = connection.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?")
+
+  for (const [name, column] of LEADERBOARD_ORDER_INDEXES) {
+    const wanted = leaderboardOrderIndex(name, column)
+    const found = onFile.get(name) as { sql: string | null } | undefined
+
+    if (found && found.sql && normalizeIndexSql(found.sql) === normalizeIndexSql(wanted)) continue
+
+    try {
+      if (found) connection.exec(`DROP INDEX IF EXISTS ${name}`)
+      connection.exec(wanted)
+    } catch (error) {
+      // A table this cannot be done to keeps the index it had: a read that is slower than it should be is a
+      // great deal better than a site that does not start.
+      console.warn(
+        `[db] ${name} kept its older shape: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
   }
 }

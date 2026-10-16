@@ -214,8 +214,8 @@ export default defineNuxtConfig({
    * both where the content went; `/ru/leaderboard` is the same address in the other language and answers the
    * same way. Nitro handles this before the app is rendered, so the redirect costs no render and the language
    * middleware never sees it - which is why both languages are spelled out here rather than derived from the
-   * request. A query the old link carried (`?columns=decor`, which the tiles of a character page used to send)
-   * rides along, because Nitro keeps it.
+   * request. A query an old link carried rides along, because Nitro keeps it, and the page it lands on simply has
+   * no use for it (the front door reads no query at all any more).
    */
   routeRules: {
     '/leaderboard': { redirect: { to: '/', statusCode: 301 } },

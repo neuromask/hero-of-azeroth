@@ -9,13 +9,13 @@ import { formatNumber } from '#shared/utils/formatNumber'
 // The profile the shell fetched (see the composable). The tiles and the summary are the
 // overview's alone, so everything they draw is computed here.
 import { useCharacterView } from '~/composables/characterView'
-// Where a tile leads. The query a link carries is built by the very composable the hall of fame reads
-// it back with, so a tile and the chip row - or the row of the table - that answers it can never spell the
-// same choice differently: the figure the tile prints, and the character that figure belongs to.
-import { leaderboardColumnsQuery, leaderboardRowQuery } from '~/composables/leaderboardView'
-// The figures a tile stands for are the table's own columns, so the keys below are that type rather
-// than any string: a tile added for a collection the hall of fame has no column for would not compile.
-import type { LeaderboardSort } from '#shared/data/leaderboardSchema'
+// Where a tile leads: the ranking of the figure it prints, on the character's own realm. The address is built by
+// the composable every metric page is addressed by (`metricLeaderboardPath`), so a tile and the table it opens
+// cannot spell the same scope differently.
+import { metricLeaderboardPath } from '~/composables/metricLeaderboard'
+// The figures a tile stands for are the site's own rankings, so the keys below are that type rather than any
+// string: a tile added for a figure the site ranks nowhere would not compile.
+import type { MetricLeaderboardSlug } from '#shared/data/leaderboardSchema'
 
 const { character, region, realm, name } = useCharacterView()
 const { t } = useI18n()
@@ -40,8 +40,8 @@ const mPlusColor = computed(() => mPlusQualityTextClass(character.value?.mPlusSc
 const totalScore = computed(() => character.value?.score ?? 0)
 
 interface StatTile {
-  /** The collection the tile stands for, which is also the hall of fame's own name for its column. */
-  key: LeaderboardSort
+  /** The figure the tile stands for, which is also the ranking it opens. */
+  key: MetricLeaderboardSlug
   /** File name in `~/assets/icons`, which `<AppIcon>` draws. */
   icon: string
   label: string
@@ -82,7 +82,7 @@ const tileColumns = computed<StatTile[][]>(() => {
   const noteFor = (key: string) =>
     c.pooled || !characterOwned.includes(key) ? t('accountWide') : t('perCharacter')
 
-  const tiles: Array<{ key: LeaderboardSort; icon: string; label: string; count: number; total: number }> = [
+  const tiles: Array<{ key: MetricLeaderboardSlug; icon: string; label: string; count: number; total: number }> = [
     { key: 'mounts', icon: 'mounts', label: t('mounts'), count: c.stats.mounts.count, total: c.stats.mounts.total },
     { key: 'toys', icon: 'toys', label: t('toys'), count: c.stats.toys.count, total: c.stats.toys.total },
     { key: 'reputations', icon: 'exalted-rep', label: t('reputations'), count: c.stats.reputations.count, total: c.stats.reputations.total },
@@ -105,23 +105,23 @@ const tileColumns = computed<StatTile[][]>(() => {
 })
 
 /**
- * Where a tile leads: the hall of fame with this collection's chip already lit and this character's own row
- * asked for, in the language being read.
+ * Where a tile leads: the ranking of the figure it prints, on this character's own realm.
  *
- * The hall of fame is the site's front door (`app/pages/index.vue`), so this is the one link into the table
- * that starts from a number a reader was looking at rather than from a menu - and a reader who presses a figure
- * is asking about *this* character: where do they stand among everybody on it? So the link names both halves of
- * the question, and both of them through the composable that reads them back (`leaderboardColumnsQuery` for the
- * chip, `leaderboardRowQuery` for the row), which is what keeps a tile and the table from ever spelling the
- * same choice differently. Every figure a tile prints is a figure the table has a column for: the chip they
- * find switched on is the very tile they pressed, the table is narrowed to it, and it opens on the page that
- * holds the character's row rather than on the top of the table.
+ * The tile shows one figure of one character, and the table behind it is the site's ranking of that very figure -
+ * the same figure the hall of fame has a column for and the comparison board a row for, read from the same rows
+ * (`METRIC_LEADERBOARDS` in `#shared/data/leaderboardSchema`). So pressing "Mounts 1 266" opens the mount ranking
+ * of the realm the character plays on, where the plate at the top of the page holds *their* place among the world,
+ * the region and that realm, with a press that walks the table to their row.
+ *
+ * The realm rather than the world, because the page pressed from is a character's own: the reader is asking about
+ * where they stand, and the realm is the ranking they are in the middle of. The plate's own "World" link is one
+ * press further when the answer they want is a wider one.
+ *
+ * A figure whose place the site cannot work out without asking the table something extra - the score is a column of
+ * figures rather than a statistic of the profile - is not a tile, so every tile here names a ranking that exists.
  */
-function tileUrl(key: LeaderboardSort) {
-  return {
-    path: localeUrl('/'),
-    query: { ...leaderboardColumnsQuery([key]), ...leaderboardRowQuery({ region, realm, name }) }
-  }
+function tileUrl(key: MetricLeaderboardSlug) {
+  return localeUrl(metricLeaderboardPath(key, { region, realm }))
 }
 </script>
 
@@ -169,12 +169,11 @@ function tileUrl(key: LeaderboardSort) {
                label at both breakpoints) and sits in a square box, which is the 1:1 `viewBox` every
                icon file is drawn on, so nothing is stretched.
 
-               The whole tile is a link into the hall of fame, narrowed to this collection: the
-               figure under the reader's eye is a column of that table, so the table is one press
-               away rather than a trip through a menu (`tileUrl`). It is a link rather than a button
-               because it goes somewhere, and it keeps the frame the statistics above it wear - the
-               panel is `block` here, since a link is inline by default and would otherwise lay its
-               own grid out as one. -->
+               The whole tile is a link into the ranking of the figure it prints, on this character's own realm
+               (`tileUrl`): the number under the reader's eye is the ranking's own figure, so the table is one
+               press away rather than a trip through a menu. It is a link rather than a button because it goes
+               somewhere, and it keeps the frame the statistics above it wear - the panel is `block` here, since a
+               link is inline by default and would otherwise lay its own grid out as one. -->
           <div class="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-2">
             <span class="flex min-w-0 items-center gap-2.5 text-base font-bold uppercase tracking-wider text-gray-200 sm:text-lg">
               <AppIcon :name="tile.icon" class="h-[1.725em] w-[1.725em] shrink-0" />

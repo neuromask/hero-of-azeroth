@@ -37,8 +37,9 @@ export default defineCachedEventHandler(
     }
 
     // The freshness of this reading is Nitro's to write, out of the options below: a header set in here is
-    // overwritten before the answer leaves. The plate that reads it asks with `cache-control: no-cache`
-    // (`app/components/leaderboard/LeaderboardYou.vue`), so a reader's own place is never somebody's copy of it.
+    // overwritten before the answer leaves. It is the site's own answer to where a character stands *overall* -
+    // the pages that print a place read the ranking of one figure for it
+    // (`/api/leaderboard/metric-ranks`), which asks the same question of one metric at a time.
 
     const standing = await getLeaderboardStanding({ region, realm, name })
     if (!standing) {

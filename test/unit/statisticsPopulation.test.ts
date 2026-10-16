@@ -18,6 +18,7 @@ import { fileAccountReading } from '../../server/utils/accountPool'
 import { claimGuestCharacter } from '../../server/utils/accountSync'
 import { fileTransmogReading } from '../../server/utils/profileFeed'
 import { bumpStatisticsRevision } from '../../server/utils/statisticsPopulation'
+import { dayStartOf, SECONDS_PER_DAY } from '#shared/utils/day'
 import { createMemoryDb, installUseDb, type MemoryDb } from '../helpers/memoryDb'
 
 let memory: MemoryDb
@@ -124,7 +125,7 @@ describe('the population the statistics are counted over', () => {
     expect(population()).toBe(0)
   })
 
-  it('keeps one point per change rather than one per refresh', () => {
+  it('keeps one point a day, rewriting it rather than filing a second', () => {
     account(42, [{ name: 'Main', mounts: 20, isMain: true }])
 
     fileAccountReading(42)
@@ -134,7 +135,8 @@ describe('the population the statistics are counted over', () => {
       n: 1
     })
 
-    // A reading that moves a figure files one more, and no more than one however often it is read.
+    // A reading that moves a figure rewrites the *day's* point - the day is the smallest thing the history holds -
+    // and no more than one row joins it however often the account is read inside it.
     const row = memory.db.prepare("SELECT id FROM characters WHERE name_key = 'main'").get() as { id: number }
     memory.addSnapshot({
       characterId: row.id,
@@ -149,9 +151,12 @@ describe('the population the statistics are counted over', () => {
     fileAccountReading(42)
     fileAccountReading(42)
 
-    expect(memory.db.prepare('SELECT COUNT(*) AS n FROM account_snapshots WHERE user_id = 42').get()).toMatchObject({
-      n: 2
-    })
+    const points = memory.db
+      .prepare('SELECT mounts FROM account_snapshots WHERE user_id = 42')
+      .all() as Array<{ mounts: number }>
+    expect(points).toHaveLength(1)
+    // And what the day holds is the newest thing read in it.
+    expect(points[0]).toMatchObject({ mounts: 99 })
   })
 
   it('answers a character of an account with the account\'s history, and a guest with its own', () => {
@@ -159,6 +164,12 @@ describe('the population the statistics are counted over', () => {
       { name: 'Main', mounts: 20, isMain: true },
       { name: 'Alt', mounts: 30 }
     ])
+
+    // An older day of the account's own history, put there as a build that has been running for a while would
+    // have left it: the account's curve is its own points, one a day, and not the readings of its characters.
+    memory.db
+      .prepare('INSERT INTO account_snapshots (user_id, taken_at, mounts) VALUES (42, ?, 30)')
+      .run(dayStartOf(Math.floor(Date.now() / 1000)) - SECONDS_PER_DAY + 60)
 
     const row = memory.db.prepare("SELECT id FROM characters WHERE name_key = 'main'").get() as { id: number }
     memory.addSnapshot({
@@ -175,7 +186,8 @@ describe('the population the statistics are counted over', () => {
 
     guest('stranger', 10)
 
-    // The main and the alt are two characters and one history: the account's, which is what both of them print.
+    // The main and the alt are two characters and one history: the account's, which is what both of them print -
+    // and today's reading is today's point, with yesterday's standing beside it.
     const main = readCharacterHistory('eu', 'gordunni', 'main', 'mounts')
     const alt = readCharacterHistory('eu', 'gordunni', 'alt', 'mounts')
     expect(main?.points.map((point) => point.value)).toEqual([30, 99])

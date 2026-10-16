@@ -39,6 +39,8 @@ const { useDb } = await import('../../server/utils/db')
 const { readLeaderboardPage, readLeaderboardStanding, readGlobalStats, rebuildPopulation } = await import(
   '../../server/utils/leaderboardRows'
 )
+const { readMetricLeaderboardPage, readMetricRanks } = await import('../../server/utils/leaderboardRows')
+const { metricLeaderboardOf } = await import('#shared/data/leaderboardSchema')
 const { fileDailyReading, readSnapshotDistribution } = await import('../../server/utils/characterReading')
 
 // The database is left where it is: SQLite keeps it open for the life of the process, and a folder a test cannot
@@ -98,14 +100,14 @@ function build(): void {
 
   const reading = db.prepare(
     `INSERT INTO snapshots (character_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor,
-                            reputations, honorable_kills)
-     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?)`
+                            reputations, honorable_kills, titles, quests, recipes, transmogs, honor_level)
+     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
 
   const accountReading = db.prepare(
     `INSERT INTO account_snapshots (user_id, taken_at, mplus_score, achievements, mounts, pets, toys, decor,
-                                    reputations, honorable_kills)
-     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                    reputations, honorable_kills, titles, quests, recipes, transmogs, honor_level)
+     VALUES (?, 1000000, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
 
   const user = db.prepare(
@@ -142,7 +144,14 @@ function build(): void {
       figure(index + 5, 1_100),
       figure(index + 6, 2_000),
       figure(index + 7, 210),
-      figure(index + 8, 400_000)
+      figure(index + 8, 400_000),
+      // The five figures a metric leaderboard of its own ranks, which every member of this population holds: a
+      // ranking of one of them is a ranking of everybody, which is what makes the measurements comparable.
+      figure(index + 9, 90),
+      figure(index + 10, 40_000),
+      figure(index + 11, 6_000),
+      figure(index + 12, 12_000),
+      figure(index + 13, 500)
     )
   }
 
@@ -167,7 +176,12 @@ function build(): void {
       figure(index + 5, 1_100),
       figure(index + 6, 2_000),
       figure(index + 7, 210),
-      figure(index + 8, 400_000)
+      figure(index + 8, 400_000),
+      figure(index + 9, 90),
+      figure(index + 10, 40_000),
+      figure(index + 11, 6_000),
+      figure(index + 12, 12_000),
+      figure(index + 13, 500)
     )
   }
 
@@ -331,6 +345,208 @@ describe('the hall of fame at two hundred thousand characters', () => {
       numberedSamples.push(performance.now() - started)
     }
 
+    // --- One metric leaderboard, and the three places a comparison board asks for --------------------------------
+    //
+    // The pages this build adds, measured against the same population: a page of one figure's ranking at each of its
+    // three scopes - which is the ordered walk, the scoped count and the realm menu's own facet - and the three
+    // places of both sides of a comparison, which is one request the board makes per open row
+    // (`server/api/leaderboard/metric-ranks`). The figures are ranked over the whole table and the scopes narrow it,
+    // so what is measured is the depth a reader can reach (a place at the bottom of the ranking costs the walk to
+    // it) rather than the size of a page.
+    const titles = metricLeaderboardOf('titles')!
+    const mounts = metricLeaderboardOf('mounts')!
+
+    const metricPlanSql = (column: string, scoped: boolean, indexed: boolean): string =>
+      `SELECT region, realm_slug, name_key FROM leaderboard${indexed && indexName ? ` INDEXED BY ${indexName}` : ''}
+        WHERE ${scoped ? 'region = ? AND realm_slug = ? AND ' : ''}${column} IS NOT NULL
+        ORDER BY ${column} DESC, score DESC, display_name COLLATE NOCASE ASC, region ASC, realm_slug ASC, name_key ASC
+        LIMIT 25 OFFSET 0`
+
+    const indexName = mounts.index
+
+    const metricPlans: Record<string, string[]> = {
+      'world, the read the module prepares': (
+        db
+          .prepare(`EXPLAIN QUERY PLAN ${metricPlanSql('mounts', false, true)}`)
+          .all() as { detail: string }[]
+      ).map((row) => row.detail),
+      'realm, the read the module prepares': (
+        db
+          .prepare(`EXPLAIN QUERY PLAN ${metricPlanSql('mounts', true, true)}`)
+          .all('eu', 'gordunni') as { detail: string }[]
+      ).map((row) => row.detail),
+      'realm, what the planner chooses on its own': (
+        db
+          .prepare(`EXPLAIN QUERY PLAN ${metricPlanSql('mounts', true, false)}`)
+          .all('eu', 'gordunni') as { detail: string }[]
+      ).map((row) => row.detail),
+      'a member whose figure is unknown': (
+        db
+          .prepare(
+            `EXPLAIN QUERY PLAN
+             SELECT COUNT(*) AS above FROM leaderboard
+              WHERE titles IS NOT NULL AND (
+                titles > ? OR (titles = ? AND (score > ? OR (score = ? AND (display_name < ? COLLATE NOCASE OR
+                (display_name = ? COLLATE NOCASE AND (region < ? OR (region = ? AND (realm_slug < ? OR
+                (realm_slug = ? AND name_key < ?)))))))))
+              )`
+          )
+          .all(20, 20, 5000, 5000, 'Guest150000', 'Guest150000', 'eu', 'eu', 'gordunni', 'gordunni', 'guest150000') as {
+          detail: string
+        }[]
+      ).map((row) => row.detail),
+      'the same, inside one realm': (
+        db
+          .prepare(
+            `EXPLAIN QUERY PLAN
+             SELECT COUNT(*) AS above FROM leaderboard
+              WHERE region = ? AND realm_slug = ? AND titles IS NOT NULL
+              ORDER BY titles DESC LIMIT 0`
+          )
+          .all('eu', 'gordunni') as { detail: string }[]
+      ).map((row) => row.detail)
+    }
+
+    // The board's own read: both sides of a comparison, one figure, all three places each. The keys are the two
+    // guests the rest of this load test reads - whose realms come off the list the population was spread over - and
+    // one of the accounts, which is what a comparison between a stranger and a roster character is.
+    const guestKey = (index: number): string => `eu:${REALMS[index % REALMS.length]}:guest${index}`
+    const accountKey = `eu:${REALMS[3 % REALMS.length]}:account3alt0`
+
+    const metricMeasurements = {
+      'metric: mounts, world': time(5, () => readMetricLeaderboardPage(mounts, {}, 25)),
+      'metric: mounts, world deep (5000)': time(5, () => readMetricLeaderboardPage(mounts, { page: 5_000 }, 25)),
+      'metric: mounts, EU': time(5, () => readMetricLeaderboardPage(mounts, { region: 'eu' }, 25)),
+      'metric: mounts, EU + realm': time(5, () => readMetricLeaderboardPage(mounts, { region: 'eu', realm: 'gordunni' }, 25)),
+      'metric: titles, world': time(5, () => readMetricLeaderboardPage(titles, {}, 25)),
+      'ranks: one character': time(3, () => readMetricRanks(mounts, [guestKey(150000)])),
+      'ranks: three characters': time(3, () =>
+        readMetricRanks(mounts, [guestKey(150000), guestKey(150001), accountKey])
+      )
+    }
+
+    // Where a metric page and a set of places actually spend their time, statement by statement: the page is a
+    // count and an ordered walk, and a place is three counts of the rows above a member (the world's, the region's
+    // and the realm's) beside three counts of how many members those scopes hold. Measuring the pieces separately is
+    // what says which of them an index can answer and which of them is a scan.
+    const metricCountSql = {
+      'count: mounts, world': db.prepare('SELECT COUNT(*) FROM leaderboard WHERE mounts IS NOT NULL'),
+      'count: mounts, EU': db.prepare("SELECT COUNT(*) FROM leaderboard WHERE region = 'eu' AND mounts IS NOT NULL"),
+      'count: mounts, EU + realm': db.prepare(
+        "SELECT COUNT(*) FROM leaderboard WHERE region = 'eu' AND realm_slug = 'gordunni' AND mounts IS NOT NULL"
+      )
+    }
+
+    const aboveSql = `SELECT COUNT(*) FROM leaderboard WHERE mounts IS NOT NULL AND (
+      mounts > ? OR
+      (mounts = ? AND score > ?) OR
+      (mounts = ? AND score = ? AND display_name < ? COLLATE NOCASE) OR
+      (mounts = ? AND score = ? AND display_name = ? COLLATE NOCASE AND region < ?) OR
+      (mounts = ? AND score = ? AND display_name = ? COLLATE NOCASE AND region = ? AND realm_slug < ?) OR
+      (mounts = ? AND score = ? AND display_name = ? COLLATE NOCASE AND region = ? AND realm_slug = ? AND name_key < ?)
+    )`
+
+    const aboveRow = db
+      .prepare('SELECT mounts, score, display_name, region, realm_slug, name_key FROM leaderboard WHERE region = ? AND realm_slug = ? AND name_key = ?')
+      .get('eu', 'gordunni', 'guest150000') as {
+      mounts: number
+      score: number
+      display_name: string
+      region: string
+      realm_slug: string
+      name_key: string
+    }
+
+    const aboveValues = [
+      aboveRow.mounts,
+      aboveRow.mounts,
+      aboveRow.score,
+      aboveRow.mounts,
+      aboveRow.score,
+      aboveRow.display_name,
+      aboveRow.mounts,
+      aboveRow.score,
+      aboveRow.display_name,
+      aboveRow.region,
+      aboveRow.mounts,
+      aboveRow.score,
+      aboveRow.display_name,
+      aboveRow.region,
+      aboveRow.realm_slug,
+      aboveRow.mounts,
+      aboveRow.score,
+      aboveRow.display_name,
+      aboveRow.region,
+      aboveRow.realm_slug,
+      aboveRow.name_key
+    ]
+
+    for (const [name, statement] of Object.entries(metricCountSql)) {
+      measurements[name] = time(5, () => statement.get())
+    }
+
+    // What pinning the index to the read is worth, measured rather than asserted: the same two pages with the
+    // directive taken out, which is what the planner prepares for a scoped page left to itself (a filter by the
+    // realm index and a sort of what is left, and a count that fetches every row of the scope).
+    const plannerPageSql = (scope: string): string => `SELECT region, realm_slug, name_key FROM leaderboard
+       WHERE ${scope} AND mounts IS NOT NULL
+       ORDER BY mounts DESC, score DESC, display_name COLLATE NOCASE ASC, region ASC, realm_slug ASC, name_key ASC
+       LIMIT 25 OFFSET 0`
+
+    measurements["metric: mounts, EU (planner's own)"] = time(5, () =>
+      db.prepare(plannerPageSql("region = 'eu'")).all()
+    )
+    measurements["metric: mounts, realm (planner's own)"] = time(5, () =>
+      db.prepare(plannerPageSql("region = 'eu' AND realm_slug = 'gordunni'")).all()
+    )
+
+    measurements['count: rows above (world)'] = time(5, () => db.prepare(aboveSql).get(...aboveValues))
+    measurements['count: rows above (realm)'] = time(5, () =>
+      db
+        .prepare(
+          aboveSql.replace(
+            'WHERE mounts IS NOT NULL AND',
+            "WHERE region = 'eu' AND realm_slug = 'gordunni' AND mounts IS NOT NULL AND"
+          )
+        )
+        .get(...aboveValues)
+    )
+
+    const abovePlan = (
+      db.prepare(`EXPLAIN QUERY PLAN ${aboveSql}`).all(...aboveValues) as { detail: string }[]
+    ).map((row) => row.detail)
+
+    // The places a page is drawn from, and the places the board asks for, checked at this size: the ranking of a
+    // figure everybody holds is the whole population, the one scope narrows it, and a place is the position the page
+    // itself draws that member at.
+    const metricFirst = readMetricLeaderboardPage(mounts, {}, 25)
+    const metricRealm = readMetricLeaderboardPage(mounts, { region: 'eu', realm: 'gordunni' }, 25)
+    const places = readMetricRanks(mounts, [guestKey(150000), guestKey(150001), accountKey])
+
+    expect(metricFirst.total).toBe(population)
+    expect(metricFirst.players).toHaveLength(25)
+    expect(metricRealm.total).toBeGreaterThan(0)
+    expect(metricRealm.total).toBeLessThan(population)
+    expect(metricRealm.players.every((player) => player.region === 'eu' && player.realm === 'gordunni')).toBe(true)
+
+    for (const place of places.players) {
+      expect(place.participating).toBe(true)
+      expect(place.worldRank).toBeGreaterThan(0)
+      expect(place.worldTotal).toBe(population)
+      expect(place.regionRank).toBeLessThanOrEqual(place.regionTotal)
+
+      // The place is the ranking's own: read the very page it falls on, and the row there is this member.
+      const page = Math.ceil(place.worldRank! / 25)
+      const row = readMetricLeaderboardPage(mounts, { page }, 25).players[place.worldRank! - (page - 1) * 25 - 1]
+
+      expect(row?.name).toBe(place.key.split(':')[2])
+    }
+
+    // The metric reads are reported beside the front door's own, and their plans below them: the measurements above
+    // are the page reads, and these two blocks are what says the reads are of the ranking rather than of a copy of
+    // it, and that SQLite walks an index rather than sorting two hundred thousand rows.
+    Object.assign(measurements, metricMeasurements)
+
     // The distribution twice: the first call of a metric walks the population and cuts the bars, and every call
     // after it is answered from the memo until a reading moves the data (`./statisticsPopulation`). Both numbers
     // matter, and they are very different.
@@ -391,6 +607,14 @@ describe('the hall of fame at two hundred thousand characters', () => {
         '',
         'plan of the deep page (page 5000 of the mounts order):',
         ...plan.map((row) => `  ${row.detail}`),
+        '',
+        'plans of the metric leaderboard reads:',
+        ...Object.entries(metricPlans).flatMap(([name, details]) => [
+          `  ${name}:`,
+          ...details.map((detail) => `    ${detail}`)
+        ]),
+        'plan of one place (the rows above a member):',
+        ...abovePlan.map((detail) => `  ${detail}`),
         ''
       ].join('\n')
     )
