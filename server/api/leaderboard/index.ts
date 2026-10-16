@@ -72,10 +72,21 @@ export default defineCachedEventHandler(
   async (event) => {
     const query = getQuery(event)
 
-    // Nothing about freshness is written here: a cached answer's `cache-control` is Nitro's to build out of the
-    // options below, and anything set in this handler is overwritten before the answer leaves. What a caller
-    // does about the hour that leaves behind is ask to be answered afresh - the page that reads this table sends
-    // `cache-control: no-cache` with every request (`app/composables/leaderboardView.ts`).
+    // Three caches stand between this answer and a reader, and the hour is one bound on all of them.
+    //
+    //   - **Nitro's own**, in this process: keyed on the address, the question and the stamp of the data
+    //     (`getKey` below), so a write that moves the table moves the key and the answer is read again. The hour
+    //     is a ceiling on how long an entry may live, never a promise about the figures.
+    //   - **the browser's**, out of the `cache-control` Nitro writes from `maxAge` below. The page asks with
+    //     `cache-control: no-cache` (`app/composables/leaderboardView.ts`), which is what stops the browser using
+    //     its own copy without asking the server. It does *not* make this handler skip its own cache - Nitro has
+    //     no switch for that on a cached event handler - so what actually refreshes an answer is the stamp above.
+    //   - **a proxy's or a CDN's**, if one stands in front: `max-age` is a directive a shared cache honours too,
+    //     so such a cache may hold an answer for the hour it names and knows nothing of the stamp. That is the
+    //     hour the site accepts, and part of why the presence endpoint exists beside this one
+    //     (`server/api/leaderboard/presence.get.ts`).
+    // Nothing about freshness is written in this handler: a cached answer's headers are Nitro's to build out of
+    // the options below, and anything set here is overwritten before the answer leaves.
 
     return await getLeaderboard({
       sort: parseSort(query.sort),

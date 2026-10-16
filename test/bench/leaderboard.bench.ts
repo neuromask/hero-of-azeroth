@@ -39,7 +39,7 @@ const { useDb } = await import('../../server/utils/db')
 const { readLeaderboardPage, readLeaderboardStanding, readGlobalStats, rebuildPopulation } = await import(
   '../../server/utils/leaderboardRows'
 )
-const { readSnapshotDistribution } = await import('../../server/utils/characterReading')
+const { fileDailyReading, readSnapshotDistribution } = await import('../../server/utils/characterReading')
 
 // The database is left where it is: SQLite keeps it open for the life of the process, and a folder a test cannot
 // remove is a folder the next run of it does not care about (`os.tmpdir`).
@@ -77,6 +77,13 @@ const FACTIONS = ['alliance', 'horde']
 /** A whole number that looks like a real figure, so the rating and the aggregates are of a real size. */
 function figure(seed: number, ceiling: number): number {
   return (seed * 2_654_435_761) % ceiling
+}
+
+/** The value at a percentile of a set of samples, in milliseconds. */
+function percentile(samples: number[], fraction: number): number {
+  const sorted = [...samples].sort((a, b) => a - b)
+  const at = Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))
+  return Math.round(sorted[at]! * 10) / 10
 }
 
 /** Builds the population: one reading behind every character, and one account's totals behind every account. */
@@ -215,6 +222,115 @@ describe('the hall of fame at two hundred thousand characters', () => {
       'widgets: whole table': time(3, () => readGlobalStats())
     }
 
+    // --- The place of one character (`readLeaderboardStanding`) ------------------------------------------------
+    //
+    // The one read of the table whose cost grows with the population: it numbers every member in the order the
+    // table is drawn in (`ROW_NUMBER() OVER (...)`) and reads back the row it was asked about, where a page stops
+    // after a page's worth of rows. It is asked for by the character page's own plate, once per character, and the
+    // endpoint serving it caches the answer for the hour the table is cached for
+    // (`server/api/leaderboard/[region]/[realm]/[name].get.ts`), so what is measured here is the worst case of a
+    // cold read and how much of it is SQL rather than JavaScript.
+    const standing = () => readLeaderboardStanding({ region: 'eu', realm: 'gordunni', name: 'guest150000' })
+
+    const standingCold = performance.now()
+    standing()
+    const standingColdMs = Math.round((performance.now() - standingCold) * 10) / 10
+
+    const standingSamples: number[] = []
+    for (let run = 0; run < 25; run += 1) {
+      const started = performance.now()
+      standing()
+      standingSamples.push(performance.now() - started)
+    }
+
+    // The same statement with nothing around it, so the SQL can be told from the JavaScript wrapping it.
+    const standingSql = db.prepare(
+      `SELECT COUNT(*) AS above FROM leaderboard
+        WHERE score > ? OR (score = ? AND display_name < ? COLLATE NOCASE)`
+    )
+
+    const leader = db
+      .prepare('SELECT score, display_name FROM leaderboard WHERE region = ? AND realm_slug = ? AND name_key = ?')
+      .get('eu', 'gordunni', 'guest150000') as { score: number; display_name: string }
+
+    const standingSqlSamples: number[] = []
+    for (let run = 0; run < 25; run += 1) {
+      const started = performance.now()
+      standingSql.get(leader.score, leader.score, leader.display_name)
+      standingSqlSamples.push(performance.now() - started)
+    }
+
+    const standingPlan = db
+      .prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT COUNT(*) AS above FROM leaderboard
+          WHERE score > ? OR (score = ? AND display_name < ? COLLATE NOCASE)`
+      )
+      .all(leader.score, leader.score, leader.display_name) as { detail: string }[]
+
+    // Twenty readers asking for their own place at once, then the reads a page makes beside a place, then a
+    // reading filed while both are going on - the write that maintains a row, timed against the reads around it.
+    const standingBurst = performance.now()
+    await Promise.all(Array.from({ length: 20 }, async () => standing()))
+    const standingBurstMs = Math.round(performance.now() - standingBurst)
+
+    const mixed = performance.now()
+    for (let run = 0; run < 5; run += 1) {
+      standing()
+      readLeaderboardPage({}, 25)
+      readLeaderboardPage({ sort: 'mounts', page: 5_000 }, 25)
+      readGlobalStats()
+    }
+    const mixedMs = Math.round(performance.now() - mixed)
+
+    const guest = db
+      .prepare(
+        `SELECT c.id AS id, s.mounts AS mounts FROM characters c
+           JOIN snapshots s ON s.id = (SELECT id FROM snapshots WHERE character_id = c.id ORDER BY taken_at DESC LIMIT 1)
+          WHERE c.user_id IS NULL AND c.name_key = 'guest150000' LIMIT 1`
+      )
+      .get() as { id: number; mounts: number }
+
+    const writeWhileReading = performance.now()
+    for (let run = 0; run < 5; run += 1) {
+      // The very call a character page makes, and a figure of it really moved, so a point is filed and the row is
+      // rewritten (`fileDailyReading` in ./characterReading).
+      fileDailyReading(guest.id, { stats: { mounts: { count: guest.mounts + run + 1 } } } as never)
+      standing()
+      readLeaderboardPage({}, 25)
+    }
+    const writeWhileReadingMs = Math.round(performance.now() - writeWhileReading)
+
+    // The event loop's worst pause one place-read causes: the driver is synchronous, so a statement blocks the
+    // process for as long as it runs - and a zero-delay timer scheduled just before the call says exactly how
+    // long that was.
+    let worstPause = 0
+    for (let run = 0; run < 5; run += 1) {
+      const paused = await new Promise<number>((resolve) => {
+        const scheduled = performance.now()
+        setTimeout(() => resolve(performance.now() - scheduled), 0)
+        standing()
+      })
+      worstPause = Math.max(worstPause, paused)
+    }
+
+    // The read this one replaced, kept in the load test so the change can be re-measured rather than believed: a
+    // window function numbering the whole population (`readLeaderboardStanding` explains why it is gone).
+    const numbered = db.prepare(
+      `SELECT * FROM (
+         SELECT region, realm_slug AS realm, name_key AS name,
+                ROW_NUMBER() OVER (ORDER BY score DESC, display_name COLLATE NOCASE ASC) AS rank
+           FROM leaderboard
+       ) WHERE region = ? AND realm = ? AND name = ?`
+    )
+
+    const numberedSamples: number[] = []
+    for (let run = 0; run < 25; run += 1) {
+      const started = performance.now()
+      numbered.get('eu', 'gordunni', 'guest150000')
+      numberedSamples.push(performance.now() - started)
+    }
+
     // The distribution twice: the first call of a metric walks the population and cuts the bars, and every call
     // after it is answered from the memo until a reading moves the data (`./statisticsPopulation`). Both numbers
     // matter, and they are very different.
@@ -241,6 +357,9 @@ describe('the hall of fame at two hundred thousand characters', () => {
     expect(readLeaderboardPage({ realm: 'gordunni' }, 25).total).toBeGreaterThan(0)
     expect(readLeaderboardStanding({ region: 'eu', realm: 'gordunni', name: 'guest150000' })?.total).toBe(population)
     expect(readGlobalStats().players).toBe(population)
+    // A place is a place in the whole table, and the write above moved the guest's own figure rather than its row.
+    expect(standing()?.rank).toBeGreaterThan(0)
+    expect(standing()?.player.mounts).toBe(guest.mounts + 5)
 
     const dbBytes = statSync(dbFile).size
     const walBytes = statSync(`${dbFile}-wal`).size
@@ -256,6 +375,19 @@ describe('the hall of fame at two hundred thousand characters', () => {
         '',
         ...Object.entries(measurements).map(([name, ms]) => `${name.padEnd(28)}${ms} ms`),
         `${'20 readers at once'.padEnd(28)}${burstMs} ms`,
+        '',
+        'the place of one character (readLeaderboardStanding):',
+        `  cold                      ${standingColdMs} ms`,
+        `  warm p50 / p95 / p99      ${percentile(standingSamples, 0.5)} / ${percentile(standingSamples, 0.95)} / ${percentile(standingSamples, 0.99)} ms`,
+        `  warm max                  ${Math.round(Math.max(...standingSamples) * 10) / 10} ms`,
+        `  the same SQL alone        p50 ${percentile(standingSqlSamples, 0.5)} / p95 ${percentile(standingSqlSamples, 0.95)} / p99 ${percentile(standingSqlSamples, 0.99)} ms`,
+        `  the window function it replaced p50 ${percentile(numberedSamples, 0.5)} ms`,
+        `  20 readers at once        ${standingBurstMs} ms`,
+        `  mixed with pages/widgets  ${mixedMs} ms (5 rounds)`,
+        `  a reading filed beside it ${writeWhileReadingMs} ms (5 rounds)`,
+        `  worst event-loop pause    ${Math.round(worstPause)} ms (one read)`,
+        'plan of the standing read:',
+        ...standingPlan.map((row) => `  ${row.detail}`),
         '',
         'plan of the deep page (page 5000 of the mounts order):',
         ...plan.map((row) => `  ${row.detail}`),

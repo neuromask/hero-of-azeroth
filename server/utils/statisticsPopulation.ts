@@ -31,7 +31,10 @@
  *   - `mounts`, `pets`, `toys`, `decor`, `achievements` - the best of the pool's union and the roster's
  *     readings (an account-wide collection seen through one character);
  *   - `reputations` - the pool's union alone (a stored count can still be Blizzard's old account-wide counter);
- *   - `ilvl`, `mPlusScore`, `honorLevel` - the highest any character of the account stands at, never merged;
+ *   - `mPlusScore`, `honorLevel` - the highest any character of the account stands at, never merged;
+ *   - `ilvl` - not aggregated at all, and deliberately: an item level is always one character's
+ *     (`characters.ilvl`, beside its level), an account has no figure of its own, and the row of the hall of fame
+ *     prints the one the character it is named after wears (`./leaderboardRows`);
  *   - `titles`, `quests`, `recipes` - the pool's union of earned ids, merged with the best reading;
  *   - `transmogs` - the account's wardrobe, which is one document and is not unioned;
  *   - `honorableKills` - the *sum* over the account's characters, because a kill belongs to the character that

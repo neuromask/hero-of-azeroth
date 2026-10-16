@@ -72,6 +72,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
+import { copyDatabase, DATABASE_FILES, DATABASE_NAME } from './lib/databaseCopy.mjs'
 import { sameEnv } from './lib/envFile.mjs'
 import { findSecrets, readDotenv, secretValues } from './lib/secrets.mjs'
 
@@ -105,7 +106,7 @@ const DATA_LISTING = `${DATA_DIR}/`
 const LEGACY_STORES = [{ name: 'leaderboard.json', table: 'leaderboard' }]
 
 /** The database in the copy, under the name the site keeps it in (`server/utils/db`). */
-const DATA_DATABASE = 'hoa.db'
+const DATA_DATABASE = DATABASE_NAME
 
 /**
  * True when the database in the copy just taken already holds the rows a legacy store was the only copy of.
@@ -622,11 +623,12 @@ function backupRemoteData(target, netrc) {
 
   const kept = []
   const failed = []
+  const skipped = []
 
-  for (const name of names) {
-    const local = path.join(directory, name)
-    // Retried like an upload: this kind of host throttles a burst of transfers, and a data file that is
-    // skipped because the server was briefly busy is a file the copy does not have.
+  // One file, downloaded the way every other file here is: retried like an upload, because this kind of host
+  // throttles a burst of transfers and a data file skipped because the server was briefly busy is a file the copy
+  // does not have. Answers whether the file arrived.
+  const fetchInto = (name, local, allowEmpty = false) => {
     const result = curlWithRetry([
       ...ftpArgs(target, netrc),
       '--output',
@@ -634,20 +636,52 @@ function backupRemoteData(target, netrc) {
       ftpUrl(target, `${DATA_DIR}/${name}`)
     ])
 
-    if (result.status === 0 && fs.existsSync(local) && fs.statSync(local).size > 0) {
-      kept.push({ name, bytes: fs.statSync(local).size })
-    } else {
-      failed.push(name)
+    if (result.status !== 0 || !fs.existsSync(local)) {
       fs.rmSync(local, { force: true })
+      return false
     }
+
+    // A transfer of a file the host does not have comes back as an empty file with curl none the wiser, which is
+    // why the size is what says whether anything arrived - except for a file the listing named and the caller
+    // knows may be empty, where nothing arriving and nothing being in it are different answers.
+    if (fs.statSync(local).size > 0 || allowEmpty) return true
+
+    fs.rmSync(local, { force: true })
+    return false
+  }
+
+  // The database and its log are the one pair that cannot be copied file by file, so they are copied together and
+  // folded into one file (`copyDatabase`) - and `-shm` is left where it is, being an index SQLite rebuilds.
+  const available = new Set(names)
+  const database = available.has(DATA_DATABASE) ? copyDatabase(directory, available, fetchInto) : null
+
+  if (database?.ok) {
+    const file = path.join(directory, DATA_DATABASE)
+    kept.push({ name: DATA_DATABASE, bytes: fs.statSync(file).size })
+
+    for (const name of DATABASE_FILES.slice(1)) {
+      if (available.has(name)) skipped.push({ name, reason: `folded into ${DATA_DATABASE} by the copy` })
+    }
+
+    if (database.folded && !database.folded.ok) {
+      failed.push({ name: DATA_DATABASE, reason: database.folded.reason })
+    }
+  } else if (database) {
+    failed.push({ name: DATA_DATABASE, reason: database.reason })
+  }
+
+  for (const name of names) {
+    if (DATABASE_FILES.includes(name)) continue
+
+    const local = path.join(directory, name)
+    if (fetchInto(name, local)) kept.push({ name, bytes: fs.statSync(local).size })
+    else failed.push({ name })
   }
 
   // A store the database has taken over is left out of the copy, and only when it really has it: the file stays
   // for every other answer (`databaseHolds`). This is where `leaderboard.json` stops being copied - the deploy
   // that first ships the move still keeps it, because the table is not in the database until the new build has
   // started once, and every deploy after that one leaves it out.
-  const skipped = []
-
   for (const store of LEGACY_STORES) {
     const file = path.join(directory, store.name)
     if (!fs.existsSync(file) || !databaseHolds(path.join(directory, DATA_DATABASE), store.table)) continue
@@ -1048,9 +1082,11 @@ if (SKIP_FTP) {
           log('   !! could not pack the copy into an archive; the folder beside it is what to keep')
         }
 
-        for (const name of kept.failed) {
-          log(`   !! could not read ${DATA_DIR}/${name} back`)
-          problems.push(`the copy of ${DATA_DIR}/${name} could not be read back`)
+        for (const gone of kept.failed) {
+          log(`   !! could not read ${DATA_DIR}/${gone.name} back${gone.reason ? `: ${gone.reason}` : ''}`)
+          problems.push(
+            `the copy of ${DATA_DIR}/${gone.name} could not be read back${gone.reason ? `: ${gone.reason}` : ''}`
+          )
         }
       }
     }

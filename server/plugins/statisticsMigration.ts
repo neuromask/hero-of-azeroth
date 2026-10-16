@@ -17,8 +17,19 @@
 export default defineNitroPlugin(() => {
   migrateStatistics()
     .then((moved) => {
+      // A file that is there and could not be read is reported as itself: the site keeps serving what the
+      // database already holds, and whoever runs it is told that a table has not been moved rather than left to
+      // notice it. Nothing was deleted, so a build that understands the file can still be rolled back to.
+      if (moved.error) {
+        console.error(`[statistics] the old table was not moved: ${moved.error}`)
+      }
+
       if (moved.characters || moved.accounts) {
         console.log(`[statistics] moved ${moved.characters} character(s) and ${moved.accounts} account(s)`)
+      }
+
+      if (moved.skipped) {
+        console.warn(`[statistics] ${moved.skipped} row(s) of the old table could not be placed`)
       }
 
       // And the hall of fame's own table, built here rather than by whoever reads it first. A database that has

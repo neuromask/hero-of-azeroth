@@ -18,16 +18,26 @@
  *   - `2026-10-15-21-03-34`, written by the build whose `leaderboard` still carried `capped` and whose header
  *     carried no row version, so the table has to be rebuilt rather than served.
  */
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { copyFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
+import { cleanup, remember, tempDir } from '../helpers/tempDirs'
 
 /** A backup as the checkout has it, relative to the project root. */
 const BACKUPS = 'backups'
 const PRE_GUESTS = join(BACKUPS, '2026-10-15-06-09-01', 'server-data')
 const CAPPED_TABLE = join(BACKUPS, '2026-10-15-21-03-34', 'server-data')
+
+/**
+ * The backups are one developer's own data directory and are not in the repository (`.gitignore`), so a fresh
+ * clone has none of them. The tests below therefore *skip* - explicitly, so the run says so rather than passing
+ * quietly - and the same upgrade is covered without them by `legacyUpgrade.test.ts`, which builds the shapes it
+ * needs from `test/helpers/legacyDb.ts` and never skips.
+ */
+const HAS_PRE_GUESTS_DB = existsSync(join(PRE_GUESTS, 'hoa.db'))
+const HAS_PRE_GUESTS_FILE = existsSync(join(PRE_GUESTS, 'leaderboard.json'))
+const HAS_CAPPED_DB = existsSync(join(CAPPED_TABLE, 'hoa.db'))
 
 /** How many members the population holds, spelled out here rather than asked of the code under test. */
 function populationCount(db: DatabaseSync): number {
@@ -55,14 +65,11 @@ afterEach(() => {
   // The reader this file wired up is the real, file-backed one; leaving it on the global would hand a later
   // test file a database it did not ask for (`test/helpers/memoryDb.ts` installs its own).
   delete (globalThis as Record<string, unknown>).useDb
-  if (!dir) return
 
-  try {
-    rmSync(dir, { recursive: true, force: true })
-  } catch {
-    // SQLite keeps the file open for the life of the process: the folder is left in `os.tmpdir`, exactly as the
-    // load test leaves its own for the same reason.
-  }
+  // And closed before the directory is removed, because Windows will not remove a file a connection still holds
+  // (`test/helpers/tempDirs.ts`).
+  cleanup()
+  dir = ''
 })
 
 /**
@@ -71,12 +78,16 @@ afterEach(() => {
  * The modules are reset before they are imported, so each fixture gets its own connection and its own
  * once-per-process migration memo - which is what lets two upgrades be tested in one process at all.
  */
-async function upgrade(source: string): Promise<{ db: DatabaseSync; warnings: string[] }> {
-  dir = mkdtempSync(join(tmpdir(), 'hoa-upgrade-'))
+async function upgrade(source: string, options: { database?: boolean } = {}): Promise<{ db: DatabaseSync; warnings: string[] }> {
+  dir = tempDir('hoa-upgrade-')
 
-  for (const suffix of ['', '-wal', '-shm']) {
-    if (existsSync(join(source, `hoa.db${suffix}`))) {
-      copyFileSync(join(source, `hoa.db${suffix}`), join(dir, `hoa.db${suffix}`))
+  // A database of its own is what a real upgrade is handed; leaving it out gives the migration a site whose
+  // database has never seen any of the file, which is how every row of the file gets filed and can be checked.
+  if (options.database !== false) {
+    for (const suffix of ['', '-wal', '-shm']) {
+      if (existsSync(join(source, `hoa.db${suffix}`))) {
+        copyFileSync(join(source, `hoa.db${suffix}`), join(dir, `hoa.db${suffix}`))
+      }
     }
   }
 
@@ -94,7 +105,7 @@ async function upgrade(source: string): Promise<{ db: DatabaseSync; warnings: st
 
   try {
     const { useDb } = await import('../../server/utils/db')
-    const db = useDb()
+    const db = remember(useDb())
 
     // The modules read the database through `useDb()`, which Nitro hands them as a free global; here it is wired
     // to the app's own reader, so the upgrade is the very one a deploy runs and not a stand-in for it.
@@ -118,9 +129,7 @@ function columnsOf(db: DatabaseSync, table: string): string[] {
 }
 
 describe("upgrading the site's own database", () => {
-  it('turns a database that predates guests into one the site can keep a stranger in', async () => {
-    if (!existsSync(join(PRE_GUESTS, 'hoa.db'))) return
-
+  it('turns a database that predates guests into one the site can keep a stranger in', { skip: !HAS_PRE_GUESTS_DB }, async () => {
     const { db, warnings } = await upgrade(PRE_GUESTS)
 
     // Nothing about the upgrade is a complaint: the rebuild that makes `user_id` nullable has to succeed, and a
@@ -141,9 +150,7 @@ describe("upgrading the site's own database", () => {
     expect(populationCount(db)).toBeGreaterThan(0)
   })
 
-  it('moves the table the site used to keep in a file into the database it keeps now', async () => {
-    if (!existsSync(join(PRE_GUESTS, 'leaderboard.json'))) return
-
+  it('moves the table the site used to keep in a file into the database it keeps now', { skip: !HAS_PRE_GUESTS_FILE }, async () => {
     const { db } = await upgrade(PRE_GUESTS)
     const legacy = JSON.parse(readFileSync(join(PRE_GUESTS, 'leaderboard.json'), 'utf8')) as { players: unknown[] }
 
@@ -157,12 +164,10 @@ describe("upgrading the site's own database", () => {
     // A second run - a fresh module, so the memo of the first does not stand in for the work - files nothing.
     vi.resetModules()
     const { migrateStatistics } = await import('../../server/utils/statisticsMigration')
-    expect(await migrateStatistics()).toEqual({ characters: 0, accounts: 0 })
+    expect(await migrateStatistics()).toEqual({ characters: 0, accounts: 0, skipped: 0, error: null })
   })
 
-  it('rebuilds a table written with the item-level order this build has taken away', async () => {
-    if (!existsSync(join(CAPPED_TABLE, 'hoa.db'))) return
-
+  it('rebuilds a table written with the item-level order this build has taken away', { skip: !HAS_CAPPED_DB }, async () => {
     const { db } = await upgrade(CAPPED_TABLE)
 
     expect(columnsOf(db, 'leaderboard')).not.toContain('capped')
@@ -177,9 +182,7 @@ describe("upgrading the site's own database", () => {
     expect(readLeaderboardPage({}, 100).total).toBe(populationCount(db))
   })
 
-  it('answers a history and a distribution from the upgraded database', async () => {
-    if (!existsSync(join(PRE_GUESTS, 'hoa.db'))) return
-
+  it('answers a history and a distribution from the upgraded database', { skip: !HAS_PRE_GUESTS_DB }, async () => {
     const { db } = await upgrade(PRE_GUESTS)
     const { readSnapshotDistribution } = await import('../../server/utils/characterReading')
 
@@ -198,6 +201,34 @@ describe("upgrading the site's own database", () => {
 
     expect(answer.population).toBeGreaterThan(0)
     expect(answer.positions[0]?.value).not.toBeNull()
+  })
+
+  it('reproduces the rating the site\'s own file recorded, row for row', { skip: !HAS_PRE_GUESTS_FILE }, async () => {
+    const source = join(PRE_GUESTS, 'leaderboard.json')
+
+    // A data directory with the file and nothing else, so every row of it is one the database has never seen:
+    // all of them are filed, and each filing is checked against the number the file itself recorded.
+    const { db } = await upgrade(PRE_GUESTS, { database: false })
+    const file = JSON.parse(readFileSync(source, 'utf8')) as { players: { name: string; score?: number }[] }
+
+    expect(file.players.length).toBeGreaterThan(0)
+
+    const filed = db.prepare(
+      `SELECT s.score FROM snapshots s JOIN characters c ON c.id = s.character_id WHERE c.name_key = ?`
+    )
+
+    let checked = 0
+    for (const player of file.players) {
+      const point = filed.get(player.name.toLowerCase()) as { score: number | null } | undefined
+      if (!point) continue
+
+      // The file's own score, recomputed by the formula it says wrote it (`SCORE_VERSION`): the same number, so
+      // the restored rating is the historical one rather than a value this build happens to produce today.
+      expect(point.score).toBe(player.score)
+      checked += 1
+    }
+
+    expect(checked).toBe(file.players.length)
   })
 })
 

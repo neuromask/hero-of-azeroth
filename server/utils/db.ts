@@ -237,9 +237,10 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_character ON snapshots(character_id, ta
 -- The figures are the account's totals (readAccountTotals in ./accountPool), which is what the hall of fame's
 -- row for its main prints. The levels are deliberately not all the same aggregate, and each is named where it
 -- is computed: the collections are the best of the pool's union and the roster's readings, reputations are the
--- pool's union alone, the item level, the rating and the honor level are the highest any character of the
--- account stands at, the wardrobe is the account's own document, and honorable kills are the *sum* over its
--- characters.
+-- pool's union alone, the rating and the honor level are the highest any character of the account stands at, the
+-- wardrobe is the account's own document, and honorable kills are the *sum* over its characters. The item level
+-- is deliberately none of them: it is always one character's, so it is kept on the character that wears it
+-- (characters.ilvl, beside its level) and a row of the hall of fame prints the one its own character wears.
 CREATE TABLE IF NOT EXISTS account_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

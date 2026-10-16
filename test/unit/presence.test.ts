@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { fileAccountReading } from '../../server/utils/accountPool'
 import { fileDailyReading } from '../../server/utils/characterReading'
 import { onlineLeaderboardKeys, PRESENCE_WINDOW_SECONDS, touchPresence } from '../../server/utils/presence'
-import { refreshAccountRow } from '../../server/utils/leaderboardRows'
+import { ensurePopulation, refreshAccountRow } from '../../server/utils/leaderboardRows'
 import { nowSec } from '../../server/utils/db'
 import { createMemoryDb, installUseDb, type MemoryDb } from '../helpers/memoryDb'
 
@@ -53,6 +53,11 @@ function account(userId: number, characters: Array<{ name: string; mounts: numbe
   }
 
   fileAccountReading(userId)
+
+  // The table the dot is read from is built by the site's own startup pass (`server/plugins/statisticsMigration`)
+  // and by the first read of it; a test that asks for presence without ever reading the table has to build it,
+  // exactly as a starting site does.
+  ensurePopulation()
 }
 
 describe('the online dot', () => {

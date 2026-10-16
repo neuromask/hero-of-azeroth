@@ -565,7 +565,15 @@ export function fileAccountReading(userId: number): void {
     )
     .get(userId) as (Record<string, number | null> & { taken_at: number }) | undefined
 
-  if (latest && Object.keys(next).every((key) => next[key] === latest[key])) return
+  // The totals may say what the newest point already says, in which case no point is written - but the row the
+  // table draws an account by is not made of the point alone: it is read from the character the account leads
+  // with (`./leaderboardRows`), so a re-read of that character with new gear, a new level or a new portrait moves
+  // the row without moving a single collection. The row is therefore kept true either way, and
+  // `refreshAccountRow` itself is what decides whether anything moved at all.
+  if (latest && Object.keys(next).every((key) => next[key] === latest[key])) {
+    refreshAccountRow(userId)
+    return
+  }
 
   const now = nowSec()
   const takenAt = latest && latest.taken_at >= now ? latest.taken_at + 1 : now

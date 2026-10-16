@@ -377,8 +377,14 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
       if (next[key] === null) next[key] = latest[key] ?? null
     }
 
-    // Nothing moved since the newest point, so the log keeps it as is.
-    if (Object.keys(next).every((key) => next[key] === latest[key])) return
+    // Nothing moved since the newest point, so the log keeps it as is. The row the table draws a member by is
+    // not the log, though, and it is still kept true: it is read from the character itself - its level, the item
+    // level it wears, its portrait - as well as from the newest reading, so a re-read that changed only those
+    // moves the row without moving a figure (`refreshRowOfMember`).
+    if (Object.keys(next).every((key) => next[key] === latest[key])) {
+      refreshRowOfMember(characterId)
+      return
+    }
   }
 
   // The overall rating, computed only when all six figures it weighs are present - a partial read leaves
@@ -432,11 +438,25 @@ export function fileDailyReading(characterId: number, profile: ProfileReading, r
   // the revision cannot answer from before it (`./statisticsPopulation`).
   bumpStatisticsRevision()
 
-  // And the row itself, when the character is nobody's. A guest is a member of the population in its own right
-  // and this reading is what its row holds, so the row is rewritten here rather than left for a rebuild
-  // (`./leaderboardRows`). A character an account holds is not a member of its own - the account's totals are the
-  // row - and it is the caller that files those (`fileAccountReading` in ./accountPool), which is what moves it.
-  const owner = db
+  // And the row itself, when the character is nobody's - which is the same call whether or not a point was
+  // filed above, because the row is not made of the point alone.
+  refreshRowOfMember(characterId)
+}
+
+/**
+ * Keeps the row the hall of fame draws a member by true, after a character has been read.
+ *
+ * A guest is a member of the population in its own right and its row holds this character's own figures, so the
+ * row is rewritten here rather than left for a rebuild (`./leaderboardRows`). A character an account holds is not
+ * a member of its own - the account's totals are the row - and it is the caller that files those
+ * (`fileAccountReading` in `./accountPool`), which is what moves it.
+ *
+ * The rewrite happens whether or not a point was filed, and that is the point of it being a call of its own: a
+ * row carries figures that are not metrics - the level, the item level the character wears, the portrait, the
+ * name - and a re-read that changed only one of those moves the row while the history keeps the point it had.
+ */
+function refreshRowOfMember(characterId: number): void {
+  const owner = useDb()
     .prepare('SELECT region, realm_slug, name_key, user_id FROM characters WHERE id = ?')
     .get(characterId) as { region: string; realm_slug: string; name_key: string; user_id: number | null } | undefined
 

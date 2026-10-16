@@ -58,10 +58,45 @@ const SCORE_SQL = `ROUND(
 const COLLECTABLES_SQL = `MAX(COALESCE(mounts, 0), 0) + MAX(COALESCE(pets, 0), 0)
   + MAX(COALESCE(toys, 0), 0) + MAX(COALESCE(decor, 0), 0)`
 
-/** The columns a row carries, in the order both of the shapes below select them, and the two the insert derives. */
-const ROW_COLUMNS = `user_id, region, realm_slug, name_key, realm_name, display_name, avatar, class_id, faction,
-  level, first_seen_at, updated_at, is_account, ilvl, mplus_score, honorable_kills, mounts, pets, toys, decor,
-  reputations, achievements, collectables, score`
+/**
+ * The columns a row is *made of*, in the order both of the shapes below select them: everything a member's own
+ * row and reading say. The insert derives two more beside them - the collectables the "king of collections"
+ * widget leads on and the rating the table is ordered by (`COLLECTABLES_SQL`, `SCORE_SQL`).
+ *
+ * One list rather than two strings, because the maintenance compares the row it is about to write with the one
+ * that is there (`sameRow`): a comparison that spelled its columns out again would be a comparison that could
+ * forget one.
+ */
+const SOURCE_COLUMN_NAMES = [
+  'user_id',
+  'region',
+  'realm_slug',
+  'name_key',
+  'realm_name',
+  'display_name',
+  'avatar',
+  'class_id',
+  'faction',
+  'level',
+  'first_seen_at',
+  'updated_at',
+  'is_account',
+  'ilvl',
+  'mplus_score',
+  'honorable_kills',
+  'mounts',
+  'pets',
+  'toys',
+  'decor',
+  'reputations',
+  'achievements'
+] as const
+
+/** Those columns as SQL, for the two reads that compare a row with the one about to replace it. */
+const SOURCE_COLUMNS = SOURCE_COLUMN_NAMES.join(', ')
+
+/** Every column of the table, in the order the insert writes them. */
+const ROW_COLUMNS = `${SOURCE_COLUMNS}, collectables, score`
 
 /**
  * The side a row plays for, as the table stores it: the API's own spelling folded to the one the filters ask in, and
@@ -242,20 +277,85 @@ function toPlayer(row: MemberRow): LeaderboardPlayer {
 }
 
 /**
+ * Whether two rows of the table say the same thing, column by column.
+ *
+ * `null` and a missing column are the same answer - "nothing there" - and everything else is compared as it
+ * stands. A row that is absent on one side and present on the other is never the same row.
+ */
+function sameRow(left: unknown, right: unknown): boolean {
+  if (!left || !right) return left === right
+
+  const a = left as Record<string, unknown>
+  const b = right as Record<string, unknown>
+
+  return SOURCE_COLUMN_NAMES.every((column) => (a[column] ?? null) === (b[column] ?? null))
+}
+
+/**
+ * One write in one transaction, and a write inside one joins it rather than opening a second.
+ *
+ * `SAVEPOINT` is what nests: it begins a transaction when none is open and marks a point inside one when it is,
+ * so a call made from inside another write cannot turn that write's `COMMIT` into SQLite's "cannot start a
+ * transaction within a transaction" - or, worse, have its own `ROLLBACK` undo the outer work. The row writes
+ * below are called both from a request path and from one another (`fileDailyReading` files a point and then
+ * rewrites the guest's row), which is exactly the case this exists for.
+ */
+function transact(work: () => void): void {
+  const db = useDb()
+
+  db.exec('SAVEPOINT leaderboard_row')
+  try {
+    work()
+    db.exec('RELEASE leaderboard_row')
+  } catch (error) {
+    db.exec('ROLLBACK TO leaderboard_row')
+    db.exec('RELEASE leaderboard_row')
+    throw error
+  }
+}
+
+/**
  * Rewrites one guest's row, or removes it when the character is not a member of the population any more.
  *
  * Called by the writes that move a guest: a reading filed for a character no account holds (`./characterReading`),
  * and - through `dropGuestRow` - a character an account has claimed, which stops being a member of its own the
  * moment it is one.
+ *
+ * The row is taken out and written back in one transaction, so a reader never sees the member missing and a
+ * write that fails leaves the row that was there. That matters more here than it looks: the table's version
+ * stamp would still say it was current after a half-done write, so nothing would ever rebuild the row a failure
+ * had dropped (`ensurePopulation`).
+ *
+ * A row that would say exactly what the row already says is left alone, and the revision is not moved: this is
+ * called on every reading a guest is given, and moving the revision without a change would keep the
+ * leaderboard's own hour-long cache (`server/api/leaderboard`) from ever being reused.
  */
 export function refreshGuestRow(region: string, realm: string, name: string): void {
+  // A table this build has not built yet is not maintained row by row: the next read of it builds the whole of
+  // it from the very rows this write would have gone into (`populationIsCurrent`).
+  if (!populationIsCurrent()) return
+
   const db = useDb()
   const address = [region.toLowerCase(), realm.toLowerCase(), name.toLowerCase()]
+  const where = 'c.region = ? AND c.realm_slug = ? AND c.name_key = ?'
 
-  // Deleted first, so that a character that has left the population - claimed by an account, taken out of the
-  // table with it - leaves nothing behind; then written back, if it is still a member.
-  db.prepare('DELETE FROM leaderboard WHERE user_id IS NULL AND region = ? AND realm_slug = ? AND name_key = ?').run(...address)
-  db.prepare(writeRows(GUEST_ROWS('c.region = ? AND c.realm_slug = ? AND c.name_key = ?'))).run(...address)
+  const stored = db
+    .prepare(
+      `SELECT ${SOURCE_COLUMNS} FROM leaderboard
+        WHERE user_id IS NULL AND region = ? AND realm_slug = ? AND name_key = ?`
+    )
+    .get(...address)
+
+  const next = db.prepare(`SELECT ${SOURCE_COLUMNS} FROM (${GUEST_ROWS(where)})`).get(...address)
+
+  if (sameRow(stored, next)) return
+
+  transact(() => {
+    // Deleted first, so that a character that has left the population - claimed by an account, taken out of the
+    // table with it - leaves nothing behind; then written back, if it is still a member.
+    db.prepare('DELETE FROM leaderboard WHERE user_id IS NULL AND region = ? AND realm_slug = ? AND name_key = ?').run(...address)
+    db.prepare(writeRows(GUEST_ROWS(where))).run(...address)
+  })
 
   bumpStatisticsRevision()
 }
@@ -267,21 +367,44 @@ export function refreshGuestRow(region: string, realm: string, name: string): vo
  * (`/api/profile/main`), it asked to be left out of the table (`/api/profile/fame`), a character of it was claimed
  * (`./profileFeed`). The row is found by the account rather than by an address, because naming a different main
  * changes the address the row is written under.
+ *
+ * A row that would say exactly what the row already says is left alone, and the revision is not moved - the same
+ * reason the guest's row is (`refreshGuestRow`): this is called on every character read an account is given, and
+ * a write that moved the revision without changing a figure would keep the table's cache from ever being reused.
+ * The comparison is what makes that safe: the row is still read from the character the account leads with, so a
+ * change to *that* character - its item level, its level, its portrait, its name - moves the row even when not a
+ * single collection did (`./accountPool`).
  */
 export function refreshAccountRow(userId: number): void {
+  // The same as a guest's row: nothing is maintained in a table this build has not built yet (`populationIsCurrent`).
+  if (!populationIsCurrent()) return
+
   const db = useDb()
 
-  db.prepare('DELETE FROM leaderboard WHERE user_id = ?').run(userId)
-  db.prepare(writeRows(ACCOUNT_ROWS('u.id = ?'))).run(userId)
+  const stored = db.prepare(`SELECT ${SOURCE_COLUMNS} FROM leaderboard WHERE user_id = ?`).get(userId)
+  const next = db.prepare(`SELECT ${SOURCE_COLUMNS} FROM (${ACCOUNT_ROWS('u.id = ?')})`).get(userId)
+
+  if (sameRow(stored, next)) return
+
+  transact(() => {
+    db.prepare('DELETE FROM leaderboard WHERE user_id = ?').run(userId)
+    db.prepare(writeRows(ACCOUNT_ROWS('u.id = ?'))).run(userId)
+  })
 
   bumpStatisticsRevision()
 }
 
-/** Takes a member out of the table without writing it back, which is what a claim does to a guest's row. */
+/**
+ * Takes a member out of the table without writing it back, which is what a claim does to a guest's row.
+ *
+ * The revision moves whether or not a row was there to take out, and that is deliberate: the population moved
+ * when the character changed owner, and the table is only one of the aggregates keyed on that revision - a
+ * distribution and a history are read from the same rows and must not be answered from before the claim just
+ * because the character's row had not been materialised yet (`./statisticsPopulation`).
+ */
 export function dropGuestRow(region: string, realm: string, name: string): void {
-  const db = useDb()
-
-  db.prepare('DELETE FROM leaderboard WHERE user_id IS NULL AND region = ? AND realm_slug = ? AND name_key = ?')
+  useDb()
+    .prepare('DELETE FROM leaderboard WHERE user_id IS NULL AND region = ? AND realm_slug = ? AND name_key = ?')
     .run(region.toLowerCase(), realm.toLowerCase(), name.toLowerCase())
 
   bumpStatisticsRevision()
@@ -339,6 +462,27 @@ export function rebuildPopulation(): number {
 }
 
 /**
+ * Whether the table holds the population as this build means it.
+ *
+ * One question, asked by both ends of the maintenance: the read that builds the whole table when it is stale
+ * (`ensurePopulation`) and the writes that keep one row of it true (`refreshGuestRow`, `refreshAccountRow`). A
+ * write into a table this build has not built yet is a row thrown away a moment later - the next read rebuilds
+ * the whole of it from the very rows the write would have gone into - and a revision moved for a change nobody
+ * ever saw, which is why the writes ask this first rather than after.
+ *
+ * The answer is two header fields, which is what makes asking it cheap: the weights' version (`user_version`,
+ * `SCORE_VERSION`) and the row's own (`application_id`, `ROW_VERSION`).
+ */
+function populationIsCurrent(): boolean {
+  const db = useDb()
+
+  const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number }
+  const { application_id: rows } = db.prepare('PRAGMA application_id').get() as { application_id: number }
+
+  return version === SCORE_VERSION && rows === ROW_VERSION
+}
+
+/**
  * Makes sure the table holds the population before anything reads it.
  *
  * Two things can leave it stale, and both are one-off costs paid on the first read after they happen:
@@ -350,11 +494,7 @@ export function rebuildPopulation(): number {
  * Everything else is maintained as it moves, by the writes above, so this is a header read on the steady path.
  */
 export function ensurePopulation(): void {
-  const db = useDb()
-
-  const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number }
-  const { application_id: rows } = db.prepare('PRAGMA application_id').get() as { application_id: number }
-  if (version === SCORE_VERSION && rows === ROW_VERSION) return
+  if (populationIsCurrent()) return
 
   rebuildPopulation()
 }
@@ -477,9 +617,17 @@ export function readLeaderboardPage(query: LeaderboardQuery, perPage: number): O
 /**
  * Where one member stands in the overall table, or nothing at all for a character the table does not draw.
  *
- * The place is counted by the table itself - a window function numbering the population in the very order the page
- * is drawn in, read back at one address - rather than by asking how many rows sort above the character: the two
- * orders are one expression, so a place and a page cannot disagree about who is ahead of whom.
+ * The place is counted by the table itself - how many members sort strictly above this one, plus one - and the
+ * comparison is the page's own order written as a predicate: the rating first, then the name without case
+ * (`SORT_COLUMNS.total`). The two therefore cannot disagree about who is ahead of whom, which is the property a
+ * place has to have, and it is why the order below is spelled out here rather than derived from the page's.
+ *
+ * Counted rather than numbered, and that is a measurement rather than a taste: a window function has to number
+ * the whole population for every reader - at two hundred thousand members, 329 ms of SQL against 9 ms, and the
+ * synchronous driver means that is the event loop blocked for a third of a second per call. This walks the index
+ * only as far as the character's own row (`idx_leaderboard_total`). The one difference a reader can see is a tie:
+ * two members with the same rating *and* the same name share a place rather than being given two arbitrary ones,
+ * which is what a tie means.
  *
  * The address is compared as it is stored, folded to lower case: a caller arrives with the name a page printed, and
  * a row is keyed by the name an address carries.
@@ -491,22 +639,23 @@ export function readLeaderboardStanding(
   ensurePopulation()
 
   const row = db
-    .prepare(
-      `SELECT * FROM (
-         SELECT ${READ_COLUMNS}, ROW_NUMBER() OVER (ORDER BY ${SORT_COLUMNS.total}) AS rank
-         FROM leaderboard
-       )
-       WHERE region = ? AND realm = ? AND name = ?`
-    )
+    .prepare(`SELECT ${READ_COLUMNS} FROM leaderboard WHERE region = ? AND realm = ? AND name = ?`)
     .get(character.region.toLowerCase(), character.realm.toLowerCase(), character.name.toLowerCase()) as
-    | (MemberRow & { rank: number })
+    | MemberRow
     | undefined
 
   if (!row) return null
 
+  const { above } = db
+    .prepare(
+      `SELECT COUNT(*) AS above FROM leaderboard
+        WHERE score > ? OR (score = ? AND display_name < ? COLLATE NOCASE)`
+    )
+    .get(row.score, row.score, row.display_name) as { above: number }
+
   const { total } = db.prepare('SELECT COUNT(*) AS total FROM leaderboard').get() as { total: number }
 
-  return { player: toPlayer(row), rank: row.rank, total }
+  return { player: toPlayer(row), rank: above + 1, total }
 }
 
 /**
