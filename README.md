@@ -262,8 +262,8 @@ the whole family off, and every block is drawn where the animation was going to 
 | --- | --- |
 | `app/pages/index.vue` | The front door, which is the hall of fame: the search in the navigation row, the menu of the site's thirteen rankings, the ten plates about the population, and the breakdown of the population as a whole under them. It draws no table: the rows live in the rankings the menu leads to |
 | `app/pages/privacy.vue` | The privacy policy: what is collected, what a sign-in stores, and what the counters are |
-| `app/pages/about.vue` | About the site: what it is, the four things it does, and the fact that it is free |
-| `app/pages/legal.vue` | The legal and trademark notice: whose game this is, and whose site this is not |
+| `app/pages/about.vue` | About the site: the story of the project, the six things it does, what it stands on, and where to start |
+| `app/pages/legal.vue` | The legal and trademark notice: whose game this is, whose site this is not, and where the data comes from |
 | `app/pages/admin.vue` | The admin panel: the metric maxima the comparison board measures a row against, and the page copy the store keeps - open to the accounts the site lists as administrators, and to nobody else |
 | `app/error.vue` | The page an address that matched nothing is answered with - and the page a render that broke is answered with: the site's own frame and the plate in `app/components/SiteMissing.vue`, which a character the site could not read is given as well |
 | `app/pages/[region]/[realm]/[name].vue` | The character shell: header, tabs, share / download, refresh |

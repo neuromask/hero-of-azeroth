@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <defs>
+    <style>
+      .cls-1 { fill: #fff; }
+    </style>
+  </defs>
+  <!-- A disc with the "i" cut out of it: the plainest mark there is for "about this". -->
+  <path
+    class="cls-1"
+    fill-rule="evenodd"
+    d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-.05 3.6a1.55 1.55 0 1 1 0 3.1 1.55 1.55 0 0 1 0-3.1Zm-1.05 5h2.2v7.4h-2.2Z"
+  />
+</svg>

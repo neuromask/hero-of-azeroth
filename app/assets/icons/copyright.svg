@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <defs>
+    <style>
+      .cls-1 { fill: #fff; }
+    </style>
+  </defs>
+  <!-- A ring with the "C" of a copyright mark inside it: the mark a right is named by. -->
+  <path
+    class="cls-1"
+    fill-rule="evenodd"
+    d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 1.7a8.3 8.3 0 1 1 0 16.6 8.3 8.3 0 0 1 0-16.6Z"
+  />
+  <path class="cls-1" d="M15.11 8.89A4.4 4.4 0 1 0 15.11 15.11L13.7 13.7A2.4 2.4 0 1 1 13.7 10.3Z" />
+</svg>

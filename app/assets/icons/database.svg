@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <defs>
+    <style>
+      .cls-1 { fill: #fff; }
+    </style>
+  </defs>
+  <!-- A stack of discs with two seams cut out of it: the mark of where an answer was read from. -->
+  <path
+    class="cls-1"
+    fill-rule="evenodd"
+    d="M12 2.6c-4.42 0-8 1.25-8 2.8v13.2c0 1.55 3.58 2.8 8 2.8s8-1.25 8-2.8V5.4c0-1.55-3.58-2.8-8-2.8ZM4 9.1c0 1.05 3.58 1.9 8 1.9s8-.85 8-1.9c0-1.05-3.58-1.9-8-1.9s-8 .85-8 1.9Zm0 4.9c0 1.05 3.58 1.9 8 1.9s8-.85 8-1.9c0-1.05-3.58-1.9-8-1.9s-8 .85-8 1.9Z"
+  />
+</svg>

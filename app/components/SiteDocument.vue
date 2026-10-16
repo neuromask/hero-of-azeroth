@@ -19,6 +19,12 @@
  * guessed at either would be inventing references. They are styled by the paragraph they land in, so a page
  * writes plain anchors and never the treatment: the slot's content is compiled by the page, but the classes
  * are the frame's.
+ *
+ * A page may also put something *before* its prose (the `intro` slot) and give a section a glyph beside its
+ * heading (`icon`): the about page opens with the mark and the tagline it is summed up by, and the notice
+ * marks its four short sections with the site's own white glyphs (`app/assets/icons`). Both are additions to
+ * what a document has always been rather than a second kind of document: a page that hands over neither - the
+ * policy does - is drawn exactly as it was drawn before either existed.
  */
 withDefaults(
   defineProps<{
@@ -46,7 +52,7 @@ withDefaults(
      * the about page opens with its introduction and goes on to a shelf of cards, and a frame that could only
      * print headings and paragraphs would have to be taught about cards next.
      */
-    sections?: { title?: string; body: string }[]
+    sections?: { title?: string; body: string; icon?: string }[]
   }>(),
   { sections: () => [] }
 )
@@ -82,6 +88,12 @@ const paragraphs = (body: string) => String(t(body)).split('\n\n')
           {{ t(updated) }}
         </p>
 
+        <!-- What a page that is laid out rather than written opens with, over its prose: the about page's own
+             mark and tagline. A document that is only prose hands over nothing, and an empty slot draws
+             nothing - and the spacing around it is the page's own, because it is the page that knows what it
+             put there (the about page's own `mb-6`). -->
+        <slot name="intro" />
+
         <!-- The date sits above the first heading, so the first section only starts a step below it when
              there is one to be read past. -->
         <section
@@ -89,7 +101,13 @@ const paragraphs = (body: string) => String(t(body)).split('\n\n')
           :key="section.title || index"
           :class="index === 0 ? (updated ? 'mt-3' : '') : 'mt-6'"
         >
-          <h2 v-if="section.title" class="text-sm font-bold text-white sm:text-base">{{ t(section.title) }}</h2>
+          <!-- The heading, and the glyph a section may be marked by. The glyph is the site's own white file
+               (`app/assets/icons`), a step above the words it stands beside, and a section that carries none
+               is drawn exactly as it was before there was one. -->
+          <div v-if="section.title" class="flex items-center gap-2">
+            <AppIcon v-if="section.icon" :name="section.icon" class="h-5 w-5 shrink-0 opacity-80" />
+            <h2 class="min-w-0 text-sm font-bold text-white sm:text-base">{{ t(section.title) }}</h2>
+          </div>
 
           <p
             v-for="(paragraph, line) in paragraphs(section.body)"
