@@ -472,6 +472,12 @@ const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wid
       <HeaderTools variant="panel" />
     </div>
 
+    <!-- A page's own switch, in the place a character page puts the character's views. The admin panel hands its
+         two halves over here (`app/pages/admin.vue`), so the tabs stand in the navigation row rather than in a
+         second row of their own - the row is the site's one row, and a page that has something of its own to
+         switch says it there. -->
+    <slot name="leading" />
+
     <!-- The character's own entries, on a screen wide enough to hold them: the profile under the
          character's own name, the two menus, the journal and the feed. The name is the tab's visible text and
          `tabOverview` leads its accessible name, so the entry says both which page it opens and whose it

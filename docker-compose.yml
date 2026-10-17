@@ -1,0 +1,53 @@
+# A trial copy of the site, run on the machine it is being built on.
+#
+#   docker compose up --build -d    # build the image and start it
+#   docker compose logs -f          # [env], [data] and the requests
+#   docker compose down             # stop it; the `hoa-data` volume is kept
+#
+# Then http://localhost:3100 (and http://localhost:3100/ru for the Russian
+# side). `docker compose down -v` also throws the database away.
+name: hero-of-azeroth
+
+services:
+  app:
+    build: .
+    image: hero-of-azeroth:local
+    container_name: hero-of-azeroth
+    restart: unless-stopped
+
+    # The Blizzard credentials and the session key. Read per request, exactly as
+    # a real host does it (`server/utils/runtimeEnv`), so the image never
+    # carries them. The file is gitignored and already present in a checkout.
+    env_file:
+      - .env
+
+    environment:
+      # Named again so a `PORT` added to `.env` later cannot move the server
+      # away from the port this file publishes.
+      HOST: "0.0.0.0"
+      PORT: "3100"
+      # Where `server/utils/appPaths` keeps everything that survives a restart.
+      NUXT_DATA_DIR: /data
+      # Canonical links, hreflang and the sign-in callback are built on this
+      # host (`nuxt.config.ts`), so a trial copy must not advertise the
+      # production one.
+      NUXT_PUBLIC_SITE_URL: ${NUXT_PUBLIC_SITE_URL:-http://localhost:3100}
+      # Card rendering allocates outside the V8 heap; both figures are the ones
+      # the README's memory note recommends for a small host. The heap cap is
+      # generous on purpose - a desktop has more than 416 MiB.
+      MALLOC_ARENA_MAX: "2"
+      NODE_OPTIONS: "--max-old-space-size=512"
+
+    ports:
+      # The left side is what the browser opens, the right side is the
+      # container's. Change the first when 3100 is taken:
+      #   HOST_PORT=3200 docker compose up -d
+      - "${HOST_PORT:-3100}:3100"
+
+    volumes:
+      # The site's data - the SQLite database, the character index and the hall
+      # of fame's table - and the only state a restart must not lose.
+      - hoa-data:/data
+
+volumes:
+  hoa-data:

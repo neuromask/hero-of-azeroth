@@ -70,20 +70,23 @@ const paragraphs = (body: string) => String(t(body)).split('\n\n')
     <SiteBackdrop :image="image" />
 
     <!-- The heading and its one line are messages like every label of the site, so they are keys here and
-         translated once, where the header draws them. The row under them is the site's own navigation, which
-         the header draws for a page that has none of its own (`app/components/SiteNav.vue`). -->
-    <SiteHeader :title="t(title)" :meta="t(meta)" />
+         translated once, where the header draws them. The row under them is that same site navigation
+         (`app/components/SiteNav.vue`), with the three documents handed to it: they are one set, and the row is
+         where the site's own pages belong - the place a character page puts the character's own views
+         (`app/components/DocumentNav.vue`). -->
+    <SiteHeader :title="t(title)" :meta="t(meta)">
+      <SiteNav :label="t(title)">
+        <template #leading>
+          <DocumentNav />
+        </template>
+      </SiteNav>
+    </SiteHeader>
 
-    <div
-      class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4 lg:grid lg:max-w-5xl lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-x-6"
-    >
-      <!-- The rail of documents and the article are one arrangement, cut the way the shelves cut theirs: a
-           column on a phone - the rail above, the article under it - and a rail of 13rem beside the article
-           from `lg` up, where a window is wide enough to hold both. The measure the pair takes is the 64rem the
-           container is capped at, which leaves the article the 48rem a column of prose wants. -->
-      <DocumentNav class="mb-4 lg:mb-0" />
-
-      <article class="hoa-panel min-w-0 p-5 sm:p-7">
+    <div class="relative z-10 container mx-auto w-full flex-1 px-4 pt-4">
+      <!-- The article is the page, now that the rail is gone: the width the rail used to take is the article's,
+           so the column of prose is the 64rem the container itself is capped at rather than the 48rem left over
+           beside a column of links. -->
+      <article class="hoa-panel mx-auto min-w-0 max-w-5xl p-5 sm:p-7">
         <p v-if="updated" class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
           {{ t(updated) }}
         </p>

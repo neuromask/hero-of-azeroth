@@ -1035,6 +1035,77 @@ server overwrites `X-Forwarded-For`. The file is read out of that directory when
 The variables are read per request (`useRuntimeConfig()`), so changing them needs a restart, not a
 rebuild — and shipping a new version is another `npm run deploy`.
 
+### Running it in Docker
+
+A trial copy can be built and run from a checkout with Docker Desktop (WSL 2 backend) — the image runs
+the same `npm run build` the FTP upload does, and serves the same Nitro `node-server` entry:
+
+```bash
+docker compose up --build -d     # http://localhost:3100
+docker compose logs -f           # [env], [data] and the requests
+docker compose down              # stop it; the `hoa-data` volume keeps the database
+```
+
+`Dockerfile` builds on Node 24 / Debian: the pinned `linux-x64` builds of `sharp` and
+`@resvg/resvg-js` in `package.json` are glibc ones (Alpine would need the musl builds), and
+`node:sqlite` needs Node 22.5 or newer. `docker-compose.yml` reads the checkout's `.env` at run time,
+so the credentials never enter the image, publishes port `3100` (override with `HOST_PORT=3200`), and
+mounts the named volume `hoa-data` at `/data` — that is `NUXT_DATA_DIR`, the directory
+`server/utils/appPaths` otherwise puts beside the built server.
+
+A fresh volume is an empty site: the schema is created on first use (`server/utils/db.ts`), and looking
+a character up fills the table. To start from the data this checkout already has, stop the container
+first — the process must not be writing while the files are copied — and copy them into the volume:
+
+```powershell
+docker compose down
+docker run --rm -v hero-of-azeroth_hoa-data:/data -v "${PWD}/server/data:/seed:ro" `
+  node:24-bookworm-slim sh -c "cp -a /seed/. /data/ && chown -R node:node /data"
+docker compose up -d
+```
+
+The trial pages still load the production tag manager (`NUXT_PUBLIC_GTM_ID` defaults to it); set that
+variable to a container of your own if the trial should not be counted.
+
+The same files run on an Apple Silicon Mac under OrbStack. The base image is multi-arch, and the
+`--force` in the `Dockerfile`'s `npm ci` is what lets an arm64 machine install the x64 binaries this
+project pins for the FTP host, while `sharp` and `@resvg/resvg-js` supply their own arm64 binaries
+through their optional dependencies — so the build on an M1 is native `linux/arm64`, nothing is
+emulated. OrbStack publishes forwarded ports to the LAN by default and gives the container the domain
+`hero-of-azeroth.orb.local`, so on the Mac itself the site opens without a port number. To make the
+Mac a small server rather than a session:
+
+```bash
+orb config set app.start_at_login true   # OrbStack comes back after a reboot
+```
+
+`restart: unless-stopped` in the compose file then brings the container back with it. The build is
+the one thing that needs more than OrbStack's default 4 GB: Nitro's server bundle peaks just above
+2 GB and the engine aborts it with SIGABRT, so the builder stage raises Node's heap to 3 GB
+(`NODE_OPTIONS` in the `Dockerfile`) and the VM needs room for it — `orb config set memory_mib 6144`,
+then `orb stop` and start the app again, because the setting is applied on the next start. The
+running site itself stays around 250 MB. Signing in with
+Battle.net needs the address Battle.net knows: a reader on the LAN reaches the site by the Mac's name,
+but Blizzard accepts a plain `http` callback only on `localhost`, so the way to sign in from another
+machine is a tunnel — `ssh -L 3100:localhost:3100 <mac>` and then `http://localhost:3100`.
+
+### Driving the Mac from this checkout
+
+`scripts/docker-mac.ps1` builds and runs the site on a Mac on the same network, from Windows:
+
+```powershell
+./scripts/docker-mac.ps1 up -Remote 192.168.8.97 -User <mac-account>
+./scripts/docker-mac.ps1 logs
+```
+
+It creates the `macmini` Docker context over SSH once, then sends this checkout's sources to the
+Mac's own engine on every run — the Mac needs no clone, no git and no `node_modules`, and the `.env`
+is read here, so the credentials never sit on it. Remote Login has to be on, and `docker` has to be
+reachable in a non-interactive SSH session (add `export PATH="/usr/local/bin:$HOME/.orbstack/bin:$PATH"`
+to `~/.zshenv` on the Mac if it is not). Windows has no mDNS resolver, so the Mac's Bonjour name does
+not resolve from it: pass the address, `-Remote 192.168.8.97`. The context is created once, so every
+later run can leave `-Remote` out. `rebuild`, `down`, `ps` and `check` are the other actions.
+
 ### Living inside the host's memory
 
 The host gives the process **416 MiB**, and the Node heap is the smaller half of what it spends. A card is drawn by

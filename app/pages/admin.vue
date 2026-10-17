@@ -46,6 +46,24 @@ const { data: profile } = await useFetch<{ user: { battletag: string | null; isA
 const user = computed(() => profile.value?.user ?? null)
 const isAdmin = computed(() => user.value?.isAdmin === true)
 
+/**
+ * Which half of the panel is being read.
+ *
+ * The page carries two jobs that used to stand one after the other: what the running site says about itself
+ * (the process, the database, the background pass, Blizzard's counters, the log and the maintenance actions),
+ * and the settings an operator owns (the stated maxima and the stored copy). They are switched from the site's
+ * navigation row - `app/components/SiteNav.vue` hands a page the `leading` slot in the place a character page
+ * puts the character's views - so the panel switches where the rest of the site navigates, and a reader never
+ * scrolls past a maintenance action to reach a text field.
+ */
+const tab = ref<'system' | 'content'>('system')
+
+/** The two halves, and the words the row wears for them; the order is the order they are drawn in. */
+const adminTabs = [
+  { id: 'system' as const, labelKey: 'adminTabSystem' },
+  { id: 'content' as const, labelKey: 'adminTabContent' }
+]
+
 usePageSeo({
   title: () => t('adminTitle'),
   description: () => t('adminDescription'),
@@ -803,7 +821,39 @@ async function runOptimize(): Promise<void> {
   >
     <SiteBackdrop :image="backdrop" />
 
-    <SiteHeader :title="t('adminTitle')" :meta="t('adminMeta')" />
+    <SiteHeader :title="t('adminTitle')" :meta="t('adminMeta')">
+      <!-- The panel's two halves are switched from the navigation row, in the place a character page puts the
+           character's views: one row for the whole site, so the panel adds no second bar under it. The switch is
+           drawn only for an administrator - a signed-out visitor is offered the way in below instead. -->
+      <SiteNav :label="t('adminTitle')">
+        <template #leading>
+          <div
+            v-if="isAdmin"
+            class="flex items-center gap-2"
+            role="tablist"
+            :aria-label="t('adminTabsAria')"
+          >
+            <button
+              v-for="item in adminTabs"
+              :id="`admin-tab-${item.id}`"
+              :key="item.id"
+              type="button"
+              role="tab"
+              class="hoa-tab hoa-liquid-glass"
+              :class="{ 'hoa-tab-active': tab === item.id }"
+              :aria-selected="tab === item.id"
+              :aria-controls="`admin-panel-${item.id}`"
+              :tabindex="tab === item.id ? 0 : -1"
+              @click="tab = item.id"
+              @keydown.left.prevent="tab = 'system'"
+              @keydown.right.prevent="tab = 'content'"
+            >
+              {{ t(item.labelKey) }}
+            </button>
+          </div>
+        </template>
+      </SiteNav>
+    </SiteHeader>
 
     <main class="relative z-10 container mx-auto w-full flex-1 px-4 pb-10 pt-4">
       <!-- The way in, drawn exactly as the account page draws it: the panel is an account's, so a reader who is
@@ -829,8 +879,8 @@ async function runOptimize(): Promise<void> {
         <!-- The top row: the panel's name, whether the diagnostics endpoint is answering, when it last did, and
              the one control that asks it again. The status is drawn rather than implied - a panel that cannot say
              whether it is current is a panel an operator has to guess about. -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 class="text-lg font-bold text-white sm:text-xl">{{ t('adminDashboardTitle') }}</h1>
+        <div v-if="tab === 'system'" class="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 class="text-lg font-bold text-white sm:text-xl">{{ t('adminTabSystem') }}</h2>
 
           <span class="hoa-panel inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold">
             <span class="h-1.5 w-1.5 rounded-full bg-current" :class="connectionClasses" aria-hidden="true" />
@@ -851,10 +901,20 @@ async function runOptimize(): Promise<void> {
           </button>
         </div>
 
-        <p v-if="diagnosticsFailed" class="text-[11px] font-semibold text-amber-300">
+        <p v-if="tab === 'system' && diagnosticsFailed" class="text-[11px] font-semibold text-amber-300">
           {{ t('adminStale') }}
         </p>
 
+        <!-- The system half: the process, the database, the background pass, Blizzard's counters, the log and the
+             maintenance actions. The navigation row switches between this and the settings, so neither is read
+             while looking for the other. -->
+        <div
+          v-if="tab === 'system'"
+          id="admin-panel-system"
+          role="tabpanel"
+          aria-labelledby="admin-tab-system"
+          class="space-y-6"
+        >
         <!-- The overview: six figures, and under each the fact that makes it readable. Nothing here is a total
              the server cannot measure - a figure it does not have is a dash, never a zero. -->
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1483,6 +1543,16 @@ async function runOptimize(): Promise<void> {
           </div>
         </section>
 
+        </div>
+
+        <div
+          v-else
+          id="admin-panel-content"
+          role="tabpanel"
+          aria-labelledby="admin-tab-content"
+          class="space-y-6"
+        >
+        <h2 class="text-lg font-bold text-white sm:text-xl">{{ t('adminTabContent') }}</h2>
         <!-- The maxima the comparison board measures a row against. Only the figures whose size nobody publishes,
              and only those: a collection's total arrives with its own reading and is never stated here. -->
         <section class="hoa-panel rounded-2xl p-4 sm:p-5">
@@ -1572,6 +1642,7 @@ async function runOptimize(): Promise<void> {
 
           <p v-if="saved" class="text-xs font-semibold text-emerald-400">{{ t('adminSaved') }}</p>
           <p v-else-if="failed" class="text-xs font-semibold text-red-400">{{ t('adminSaveFailed') }}</p>
+        </div>
         </div>
       </div>
     </main>

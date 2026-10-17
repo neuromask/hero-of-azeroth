@@ -239,6 +239,17 @@ export default defineNuxtConfig({
   nitro: {
     serverAssets: [{ baseName: 'icons', dir: '../app/assets/icons' }],
     /**
+     * `lru-cache` is bundled rather than left in `node_modules`.
+     *
+     * Nitro traces the files a package's ESM entry reaches, and `lru-cache` 11 answers a bare import
+     * through `main` (`dist/commonjs/index.min.js`) - a file the trace never copied. The bundle then held
+     * the package's `package.json` and its ESM files and no `main`, so the one route that imported it at
+     * runtime (`/api/admin/diagnostics`) answered `ERR_MODULE_NOT_FOUND` on the host while every caller
+     * bundled at build time was fine. Inlining the package removes the lookup, and with it the class of
+     * failure: what the server imports is in the server's own chunks.
+     */
+    externals: { inline: ['lru-cache'] },
+    /**
      * Where a cached endpoint's answers are kept, and the only thing a mount is used for here: the
      * characters the site has rendered are one JSON document in the app's own data directory, written
      * directly by `server/utils/characterIndex`.
