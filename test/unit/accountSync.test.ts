@@ -312,6 +312,53 @@ describe('a pass and the characters it cannot read', () => {
     expect(parkedCharacters(memory)).toHaveLength(5)
   })
 
+  it('does not read again a character it has just read when its figures did not move', async () => {
+    // The production incident: a character whose newest snapshot is two days old, and whose figures have not
+    // changed since. A read files no new snapshot (nothing moved), so before the fix the character stayed "due"
+    // and was read again on every pass - ten characters, a hundred and twenty Blizzard calls, every three minutes.
+    const memory = withDueCharacters([{ name: 'steady', level: 80 }])
+    const id = (memory.db.prepare('SELECT id FROM characters').get() as { id: number }).id
+    memory.addSnapshot({
+      characterId: id,
+      takenAt: Math.floor(Date.now() / 1000) - 2 * 86400,
+      mplus: 2500,
+      achievements: 11000,
+      mounts: 1200,
+      pets: 1400,
+      toys: 900,
+      decor: 90,
+      reputations: 50,
+      titles: 5,
+      quests: 100,
+      recipes: 30,
+      transmogs: 0,
+      honorableKills: 0,
+      honorLevel: 0
+    })
+
+    getCharacter.mockResolvedValue(readableProfile)
+    const { runSyncPass, countDueCharacters } = await import('../../server/utils/accountSync')
+
+    // The first pass reads it, and the reading says what the site already had.
+    expect(await runSyncPass('timer', 5)).toEqual({ checked: 1, updated: 0, skipped: 1, errors: 0 })
+    expect(memory.db.prepare('SELECT COUNT(*) AS count FROM snapshots').get()).toEqual({ count: 1 })
+
+    // The next tick: the character was read a moment ago, so it is not due - and the panel's estimate agrees.
+    expect(countDueCharacters()).toBe(0)
+    expect(await runSyncPass('timer', 5)).toEqual({ checked: 0, updated: 0, skipped: 0, errors: 0 })
+    expect(getCharacter).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads a character again once its last read is a day old', async () => {
+    const memory = withDueCharacters([{ name: 'stale', level: 80 }])
+    memory.db.prepare('UPDATE characters SET stats_read_at = ?').run(Math.floor(Date.now() / 1000) - 86400 - 60)
+
+    getCharacter.mockResolvedValue(readableProfile)
+    const { runSyncPass } = await import('../../server/utils/accountSync')
+
+    expect((await runSyncPass('timer', 5))?.checked).toBe(1)
+  })
+
   it('keeps reading the rest of the batch after one character fails', async () => {
     withDueCharacters([
       { name: 'bad1', level: 80 },

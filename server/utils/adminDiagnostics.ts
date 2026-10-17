@@ -25,6 +25,7 @@
  */
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
+import { isMainThread } from 'node:worker_threads'
 import {
   BLIZZARD_BUCKET_COUNT,
   BLIZZARD_BUCKET_MS,
@@ -34,8 +35,11 @@ import {
   DIAGNOSTIC_LOG_LIMIT,
   DIAGNOSTIC_REPEAT_WINDOW_MS,
   DIAGNOSTICS_TTL_MS,
+  EXTERNAL_TARGETS,
   SYNC_INTERVAL_MS,
   type AdminDiagnostics,
+  type ExternalCallReport,
+  type ExternalTarget,
   type BlizzardBucket,
   type BlizzardCategory,
   type BlizzardCategoryReport,
@@ -130,6 +134,25 @@ const bySource = new Map<
     lastError: string | null
   }
 >()
+
+/**
+ * Requests to Blizzard's web hosts (`./externalFetch`), keyed by a two-word vocabulary - never a URL - and kept out
+ * of every API figure above.
+ */
+const byExternal = new Map<ExternalTarget, { calls: number; ok: number; failed: number; timeouts: number; sumMs: number }>()
+
+/** Counts one request to a non-API host. */
+export function recordExternalCall(input: { target: ExternalTarget; ok: boolean; timeout?: boolean; durationMs: number }): void {
+  if (!(EXTERNAL_TARGETS as readonly string[]).includes(input.target)) return
+
+  const row = byExternal.get(input.target) ?? { calls: 0, ok: 0, failed: 0, timeouts: 0, sumMs: 0 }
+  row.calls += 1
+  row.sumMs += Number.isFinite(input.durationMs) ? Math.max(0, Math.round(input.durationMs)) : 0
+  if (input.ok) row.ok += 1
+  else row.failed += 1
+  if (input.timeout) row.timeouts += 1
+  byExternal.set(input.target, row)
+}
 
 /** The last hour of process memory in twelve fixed slots, keyed the same way the Blizzard buckets are. */
 const memorySlots = new Map<number, MemorySample>()
@@ -613,7 +636,20 @@ function blizzardReport(): BlizzardReport {
           lastError: origin.lastError
         }
       }),
-    toleratedAbsences: blizzard.toleratedAbsences
+    toleratedAbsences: blizzard.toleratedAbsences,
+    external: (EXTERNAL_TARGETS as readonly ExternalTarget[])
+      .filter((target) => (byExternal.get(target)?.calls ?? 0) > 0)
+      .map((target): ExternalCallReport => {
+        const row = byExternal.get(target)!
+        return {
+          target,
+          calls: row.calls,
+          ok: row.ok,
+          failed: row.failed,
+          timeouts: row.timeouts,
+          averageMs: row.calls ? Math.round(row.sumMs / row.calls) : null
+        }
+      })
   }
 }
 
@@ -750,6 +786,21 @@ function databaseReport(): AdminDiagnostics['database'] {
 }
 
 /**
+ * Which isolate is answering, read from facts rather than guessed.
+ *
+ * `nuxt dev` runs Nitro inside a worker thread of the CLI process and tags it with `NITRO_DEV_WORKER_ID`; there
+ * `process.memoryUsage()` hands back the *worker's* heap beside the *whole process's* RSS. Measured on this
+ * project: a dev process at 4 GiB RSS whose worker reported a 33-46 MiB heap, while the CLI's main isolate held
+ * 1.4 GiB of heap and the worker's error handler held a 4 GiB WebAssembly memory - none of it visible in the heap
+ * figures the panel printed. Saying which case this is, is what keeps that reading from being taken for a leak in
+ * the server, or the server's own figures from being taken for the process's.
+ */
+export function runtimeKind(): 'node-server' | 'nitro-dev-worker' | 'worker-thread' {
+  if (isMainThread) return 'node-server'
+  return process.env.NITRO_DEV_WORKER_ID ? 'nitro-dev-worker' : 'worker-thread'
+}
+
+/**
  * What the runtime says about itself, sampled the way the Blizzard counters are.
  *
  * The sample is taken *here* - once per diagnostics build, i.e. at most once per twenty-second window - so a
@@ -789,6 +840,10 @@ function systemReport(): AdminDiagnostics['system'] {
     startedAt: Math.floor(Date.now() / 1000 - process.uptime()),
     uptimeSeconds: Math.round(process.uptime()),
     node: process.version,
+    pid: process.pid,
+    arch: process.arch,
+    platform: process.platform,
+    runtime: runtimeKind(),
     memory: {
       rssBytes: memory.rss,
       heapUsedBytes: memory.heapUsed,
@@ -857,6 +912,7 @@ export function clearAdminDiagnostics(): void {
   byCategory.clear()
   byStatus.clear()
   bySource.clear()
+  byExternal.clear()
   memorySlots.clear()
   peakRssBytes = 0
 

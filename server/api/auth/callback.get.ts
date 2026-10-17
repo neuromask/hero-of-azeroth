@@ -33,8 +33,11 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const tokens = await exchangeCode(event, region, code)
-    const info = await getUserInfo(region, tokens.access_token)
+    // The handshake itself is the account's read too: two Battle.net requests per sign-in, counted as such.
+    const { tokens, info } = await runWithBlizzardSource('account_refresh', async () => {
+      const tokens = await exchangeCode(event, region, code)
+      return { tokens, info: await getUserInfo(region, tokens.access_token) }
+    })
     const now = nowSec()
     const db = useDb()
 

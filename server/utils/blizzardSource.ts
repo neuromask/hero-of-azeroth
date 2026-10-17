@@ -41,3 +41,13 @@ export function runWithBlizzardSource<T>(source: BlizzardSource | string, run: (
 export function characterReadSource(force: boolean): BlizzardSource {
   return force ? 'profile_refresh' : 'profile_read'
 }
+
+/**
+ * The source of a shelf or a feed beside the profile: collections, achievements, reputations, the activity feed and
+ * the wardrobe tray. Kept apart from `profile_read` because they are opened as pages and panels of their own, and a
+ * profile view that also opens three shelves is four rows of traffic, not one. A forced read is still the Refresh
+ * button, whatever it refreshes.
+ */
+export function collectionReadSource(force: boolean): BlizzardSource {
+  return force ? 'profile_refresh' : 'collection_read'
+}

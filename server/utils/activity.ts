@@ -18,7 +18,7 @@
  * a card its icon - so a read the catalogue cannot answer is bounded and retried. The feed itself
  * is what changes person to person, and it is the endpoint that keeps it (see the route).
  */
-import { getBlizzardToken } from './blizzard'
+import { callBlizzard, getBlizzardToken } from './blizzard'
 import { activityAccent, activityType } from '#shared/utils/activity'
 import type { ActivityFeed, ActivityItem } from '#shared/utils/activity'
 import catalog from './achievement-meta.json'
@@ -145,16 +145,27 @@ function sleep(ms: number): Promise<void> {
  * of the whole feed failing over one lookup.
  */
 async function fetchStatic(url: string, headers: Record<string, string>, attempt = 0): Promise<any> {
-  const response = await $fetch.raw<any>(url, { headers, ignoreResponseError: true }).catch(() => null)
-  // A status of 0 is a call that never landed at all; 429 and 5xx are Blizzard asking for a moment.
-  const status = response?.status || 0
+  // Through the one wrapper (`callBlizzard`): the fifteen-second deadline and the counters. `retry: 0` because this
+  // function is the retry - ofetch's own silent retry would make one attempt here two requests upstream.
+  try {
+    return (await callBlizzard<any>(url, { headers, retry: 0 })) ?? null
+  } catch (error) {
+    // A status of 0 is a call that never landed at all; 429 and 5xx are Blizzard asking for a moment.
+    const status = statusOf(error)
 
-  if ((status === 0 || status === 429 || status >= 500) && attempt < META_ATTEMPTS) {
-    await sleep(250 * (attempt + 1))
-    return fetchStatic(url, headers, attempt + 1)
+    if ((status === 0 || status === 429 || status >= 500) && attempt < META_ATTEMPTS) {
+      await sleep(250 * (attempt + 1))
+      return fetchStatic(url, headers, attempt + 1)
+    }
+
+    return null
   }
+}
 
-  return status === 200 ? response?._data ?? null : null
+/** The upstream status a failed call carries, or `0` for one that never got an answer. */
+function statusOf(error: unknown): number {
+  const failure = error as { statusCode?: number; status?: number; response?: { status?: number } } | null
+  return Number(failure?.statusCode || failure?.status || failure?.response?.status || 0)
 }
 
 /**
@@ -257,7 +268,12 @@ export async function getAchievementFeed(
   const baseUrl = `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}`
   const ns = `namespace=profile-${region}&locale=${locale}`
 
-  const data = await $fetch<any>(`${baseUrl}/achievements?${ns}`, { headers })
+  // The character's own achievement list (`/profile/wow/character/{realm}/{name}/achievements`, Blizzard's profile
+  // API): the one document of the feed that has to be read per character. It used to be a bare `$fetch` - no
+  // deadline, so a Blizzard that never answered held the feed (and the page waiting on it) open indefinitely, and no
+  // counter, so a feed's request was missing from the panel's total. A failure is thrown as it arrives and mapped by
+  // the route exactly as before (`mapBlizzardError`); the endpoint's SWR store is what deduplicates two readers.
+  const data = await callBlizzard<any>(`${baseUrl}/achievements?${ns}`, { headers })
 
   // Newest first, and only the ones that carry a moment: an achievement without a
   // `completed_timestamp` has not been earned, and there is nothing to place on the timeline.

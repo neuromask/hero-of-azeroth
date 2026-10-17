@@ -10,19 +10,22 @@ import type { H3Event } from 'h3'
 // rule of `server/utils/runtimeEnv`, and importing it keeps these modules working under the unit tests.
 import { privateSetting } from './runtimeEnv'
 import type { BlizzardRegion } from './params'
-
-/** How long any call to Battle.net is given before the site stops waiting for it. */
-const BNET_TIMEOUT_MS = 15_000
+// The one wrapper every Blizzard request goes through: the fifteen-second deadline and the counters behind the
+// admin panel. Imported directly, like the rest of this module's dependencies.
+import { callBlizzard } from './blizzard'
 
 /**
- * The one place Battle.net is called, so that every call carries the deadline above.
+ * The one place Battle.net is called on a reader's behalf.
  *
- * These are the OAuth hosts (`battle.net`), not the game-data API `callBlizzard` wraps, but a connection
- * Battle.net never answers would hold a sign-in or a renewal open just the same - so the same fifteen-second
- * bound is applied.
+ * These calls - the code exchange, a renewal, `userinfo` and the account endpoints - used to be a `$fetch` of their
+ * own with the same deadline but no counter, so a sign-in's requests were invisible in the panel's total. They now
+ * go through `callBlizzard`, which keeps the same fifteen-second bound, rethrows a failure exactly as it arrived
+ * (the classification below and in `server/api/auth` reads the raw ofetch error) and files the request under the
+ * `oauth` or `account` category. The reader's token never reaches the counters: they keep a category word and a
+ * status, not a URL or a header.
  */
-function callBnet<T>(url: string, options: Record<string, unknown> = {}): Promise<T> {
-  return $fetch(url, { timeout: BNET_TIMEOUT_MS, ...options }) as Promise<T>
+function callBnet<T>(url: string, options: Record<string, unknown> = {}, category?: string): Promise<T> {
+  return callBlizzard<T>(url, options, category)
 }
 
 /** What the token endpoint answers. `refresh_token` is optional: Battle.net does not always send one. */
@@ -151,7 +154,7 @@ export async function exchangeCode(event: H3Event, region: BlizzardRegion, code:
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri })
-  })
+  }, 'oauth')
 }
 
 /**
@@ -169,7 +172,7 @@ export async function refreshAccessToken(region: BlizzardRegion, refreshToken: s
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken })
-  })
+  }, 'oauth')
 }
 
 /**

@@ -36,11 +36,14 @@ const BLIZZARD_TIMEOUT_MS = 15_000
  * caller - the answer is handed back untouched and a failure is re-thrown exactly as it arrived, so nothing
  * about the site's own error handling, retries or caching can be moved by a panel watching it.
  */
-export function callBlizzard<T>(url: string, options: Record<string, unknown> = {}): Promise<T> {
+export function callBlizzard<T>(
+  url: string,
+  options: Record<string, unknown> = {},
+  category: string = endpointCategory(url)
+): Promise<T> {
   // Typed by the caller rather than by `$fetch`'s inference off the request: every call below names the shape
   // it expects, and this hands that answer back unchanged.
   const startedAtMs = Date.now()
-  const category = endpointCategory(url)
   // Read once, here: the tag belongs to the call chain, and the counters below are the only place it is kept.
   const source = currentBlizzardSource()
 
@@ -57,14 +60,19 @@ export function callBlizzard<T>(url: string, options: Record<string, unknown> = 
       // A 404 is Blizzard answering honestly about a character that is not there, so it is not a diagnostic:
       // filing one per mistyped name would bury the failures that say something is wrong with the site.
       if (status !== 404) {
-        const refused = status === 401 || status === 403
+        // A refusal of a *reader's* token (their sign-in, a renewal, their account endpoints) is about that reader,
+        // not about the site's credentials, and must not be filed as the operator's emergency.
+        const readerFlow = category === 'oauth' || category === 'account'
+        const refused = !readerFlow && (status === 401 || status === 403)
 
         recordDiagnostic({
           level: timeout || status >= 500 || refused ? 'error' : 'warn',
           category: 'blizzard',
           // A refused credential is the one failure that belongs to whoever runs the site rather than to a
           // reader, so it says so instead of looking like an outage or a missing character.
-          message: refused
+          message: readerFlow && (status === 401 || status === 403 || (status >= 400 && status < 500))
+            ? 'Battle.net refused a reader’s token'
+            : refused
             ? 'Blizzard refused the site’s credentials'
             : timeout
               ? 'Blizzard call ran past its deadline'
@@ -85,8 +93,13 @@ export function callBlizzard<T>(url: string, options: Record<string, unknown> = 
  * holding a URL, a realm or a name: the category is a word out of a closed list, derived here and thrown away
  * with the URL (see `BLIZZARD_CATEGORIES` in `#shared/data/adminDiagnostics`).
  */
-function endpointCategory(url: string): string {
+export function endpointCategory(url: string): string {
+  // The site's own client-credentials token is `token`. The reader's code exchange and renewal post to the same URL
+  // and say so themselves (`callBnet` in `./bnetOAuth` passes `oauth`); `userinfo` is told apart here.
   if (url.includes('/oauth/token')) return 'token'
+  if (url.includes('/oauth/')) return 'oauth'
+  if (url.includes('/profile/user/wow')) return 'account'
+  if (url.includes('/achievements?') || url.endsWith('/achievements')) return 'achievements'
   if (url.includes('/realm/index')) return 'realms'
   if (url.includes('/data/wow/')) return 'index'
   if (url.includes('/character-media')) return 'media'
@@ -179,7 +192,100 @@ function upstreamFailure(err: unknown, what = 'character'): never {
   throw createError({ statusCode: 502, statusMessage: 'The Blizzard API could not be reached' })
 }
 
+/**
+ * How long a *transient* upstream failure is remembered before the same document is asked for again.
+ *
+ * Measured against a mock upstream answering 503: every server-rendered front page asked for the site's token
+ * sixteen times (four realm lists in each region, each with its own token request, none of them shared) and waited
+ * ~650 ms for the refusal - and the next page did exactly the same. With an upstream that does not answer at all,
+ * each front page waited thirty seconds. A short memory of the failure turns that into one attempt per window,
+ * while the error itself is still the answer: nothing is replaced by an empty list or an invented token.
+ */
+export const TRANSIENT_FAILURE_MS = 30_000
+
+/** The ceiling for a `Retry-After` the site honours, so a hostile header cannot park a document for an hour. */
+const MAX_FAILURE_MS = 5 * 60_000
+
+/**
+ * How long a failure may be remembered, or `0` when it must not be.
+ *
+ * Only the failures that say nothing about the request are remembered: a 5xx, a timeout, a connection that never
+ * answered, and a 429 (for as long as Blizzard's own `Retry-After` asks, within the ceiling). A refused credential is
+ * deliberately *not* - it is the one failure an operator has to see on every request until it is fixed - and neither
+ * is a 404 or any other answer about the thing asked for.
+ */
+export function transientFailureMs(err: unknown): number {
+  const failure = err as {
+    name?: string
+    cause?: unknown
+    data?: { reason?: string; retryAfter?: string | number }
+    response?: { headers?: { get?: (name: string) => string | null } }
+  }
+
+  if (failure?.data?.reason === 'auth') return 0
+
+  const status = upstreamStatus(err)
+  if (status === 401 || status === 403) return 0
+
+  if (status === 429) {
+    const header = failure?.data?.retryAfter ?? failure?.response?.headers?.get?.('retry-after')
+    const seconds = Number(header)
+    return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, MAX_FAILURE_MS) : TRANSIENT_FAILURE_MS
+  }
+
+  if (status >= 500 || isTimeout(err)) return TRANSIENT_FAILURE_MS
+
+  // No status at all: a dead connection (`fetch failed`, an ofetch `FetchError` without a response) is transient;
+  // anything else - a bug, a parse error - is not the upstream's and is not remembered.
+  if (status === 0 && (failure?.name === 'FetchError' || (err instanceof TypeError && failure?.cause !== undefined))) {
+    return TRANSIENT_FAILURE_MS
+  }
+
+  return 0
+}
+
+/** The token request in flight per region, so a burst of first requests asks Battle.net once. */
+const pendingTokens = new Map<string, Promise<string>>()
+
+/** A transient token failure, rethrown as it was until `until` (milliseconds). */
+const tokenFailures = new Map<string, { error: unknown; until: number }>()
+
 export async function getBlizzardToken(region = 'eu') {
+  const now = Math.floor(Date.now() / 1000)
+
+  if (cachedToken && cachedToken.expires_at > now + 60) {
+    return cachedToken.access_token
+  }
+
+  const failed = tokenFailures.get(region)
+  if (failed && failed.until > Date.now()) throw failed.error
+
+  const running = pendingTokens.get(region)
+  if (running) return running
+
+  const request = requestBlizzardToken(region)
+    .then(
+      (token) => {
+        tokenFailures.delete(region)
+        return token
+      },
+      (error: unknown) => {
+        const wait = transientFailureMs(error)
+        if (wait > 0) tokenFailures.set(region, { error, until: Date.now() + wait })
+        else tokenFailures.delete(region)
+        throw error
+      }
+    )
+    .finally(() => {
+      pendingTokens.delete(region)
+    })
+
+  pendingTokens.set(region, request)
+  return request
+}
+
+/** The one request for the site's own client-credentials token, mapped like every other failure. */
+async function requestBlizzardToken(region: string): Promise<string> {
   const config = useRuntimeConfig()
   // Ask the environment first, then the config Nitro froze while loading: the `.env` beside the server is
   // read into the environment as the process starts (`server/utils/runtimeEnv`), which is after that copy was
@@ -188,10 +294,6 @@ export async function getBlizzardToken(region = 'eu') {
   const clientId = privateSetting('NUXT_BLIZZARD_CLIENT_ID', config.blizzardClientId)
   const clientSecret = privateSetting('NUXT_BLIZZARD_CLIENT_SECRET', config.blizzardClientSecret)
   const now = Math.floor(Date.now() / 1000)
-
-  if (cachedToken && cachedToken.expires_at > now + 60) {
-    return cachedToken.access_token
-  }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
 
@@ -278,6 +380,18 @@ const REALM_SPECIAL = /^rdb-|arena-pass|auxiliary/i
 
 const cachedRealms = new Map<string, { data: Realm[]; expires_at: number }>()
 
+/**
+ * The realm lists being read, and the transient failures of the last read, per region and language.
+ *
+ * Every server-rendered page that draws the search box or a realm name asks for the list, and the front page asks
+ * for it twice over (`realm-list` and `hoa-realm-names`), each in two languages and two regions - eight reads of four
+ * documents on a cold process. They now share one read per document, and a list that could not be read is not asked
+ * for again by every page inside `TRANSIENT_FAILURE_MS`. A failure is never stored as an empty list: the caller gets
+ * the error, as before, and the page draws what it draws without a list.
+ */
+const pendingRealms = new Map<string, Promise<Realm[]>>()
+const realmFailures = new Map<string, { error: unknown; until: number }>()
+
 export async function getRealms(region = 'eu', locale = 'en_US'): Promise<Realm[]> {
   const now = Math.floor(Date.now() / 1000)
   const cacheKey = `${region}:${locale}`
@@ -287,6 +401,36 @@ export async function getRealms(region = 'eu', locale = 'en_US'): Promise<Realm[
     return cached.data
   }
 
+  const failed = realmFailures.get(cacheKey)
+  if (failed && failed.until > Date.now()) throw failed.error
+
+  const running = pendingRealms.get(cacheKey)
+  if (running) return running
+
+  const read = readRealms(region, locale, cacheKey)
+    .then(
+      (realms) => {
+        realmFailures.delete(cacheKey)
+        return realms
+      },
+      (error: unknown) => {
+        const wait = transientFailureMs(error)
+        if (wait > 0) realmFailures.set(cacheKey, { error, until: Date.now() + wait })
+        else realmFailures.delete(cacheKey)
+        throw error
+      }
+    )
+    .finally(() => {
+      pendingRealms.delete(cacheKey)
+    })
+
+  pendingRealms.set(cacheKey, read)
+  return read
+}
+
+/** One read of a region's realm index, filtered and cached for the day. */
+async function readRealms(region: string, locale: string, cacheKey: string): Promise<Realm[]> {
+  const now = Math.floor(Date.now() / 1000)
   const token = await getBlizzardToken(region)
   const data = await callBlizzard<any>(
     `https://${region}.api.blizzard.com/data/wow/realm/index?namespace=dynamic-${region}`,

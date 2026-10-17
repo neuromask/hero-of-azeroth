@@ -16,8 +16,12 @@
  */
 import { recordDiagnostic } from '../utils/adminDiagnostics'
 
+import { runWithBlizzardSource } from '../utils/blizzardSource'
+
 export default defineNitroPlugin(() => {
-  migrateStatistics()
+  // The migration and the rebuild read SQLite and the old JSON table only. The tag is what would make a Blizzard
+  // request added here later visible as startup work rather than as `other`.
+  runWithBlizzardSource('startup', () => migrateStatistics())
     .then((moved) => {
       // A file that is there and could not be read is reported as itself: the site keeps serving what the
       // database already holds, and whoever runs it is told that a table has not been moved rather than left to

@@ -388,6 +388,14 @@ const systemRows = computed<DetailRow[]>(() => {
   return [
     { label: t('adminRowUptime'), value: duration(data?.system.uptimeSeconds) },
     { label: t('adminRowNode'), value: data?.system.node ?? '—' },
+    {
+      label: t('adminRowProcess'),
+      value: data?.system.pid ? `PID ${data.system.pid} · ${data.system.platform}/${data.system.arch}` : '—'
+    },
+    {
+      label: t('adminRowRuntime'),
+      value: data?.system.runtime ? t(`adminRuntime_${data.system.runtime.replace(/-/g, '_')}`) : '—'
+    },
     { label: t('adminRowMemoryRss'), value: bytes(memory?.rssBytes) },
     { label: t('adminRowPeakRss'), value: bytes(memory?.peakRssBytes) },
     { label: t('adminRowHeapUsed'), value: bytes(memory?.heapUsedBytes) },
@@ -1012,6 +1020,25 @@ async function runOptimize(): Promise<void> {
                     <span class="text-gray-600">·</span>
                     <span :class="row.failed ? 'text-red-300' : 'text-gray-500'">{{ num(row.failed) }}</span>
                     <span v-if="row.lastError" class="text-red-300/80">({{ row.lastError }})</span>
+                  </span>
+                </li>
+              </ul>
+            </template>
+            <!-- Blizzard's web hosts (the Armoury page, the render CDN): not the API and not in the total above. -->
+            <template v-if="diagnostics?.blizzardApi.external?.length">
+              <p class="mt-3 text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminBlizzardExternal') }}</p>
+              <ul class="mt-1 space-y-0.5">
+                <li
+                  v-for="row in diagnostics.blizzardApi.external"
+                  :key="row.target"
+                  class="flex items-baseline justify-between gap-2 text-[11px]"
+                  :title="`${t('adminBlizzardAvg')}: ${milliseconds(row.averageMs)}`"
+                >
+                  <span class="min-w-0 truncate font-mono text-gray-400">{{ row.target }}</span>
+                  <span class="shrink-0 tabular-nums text-gray-300">
+                    {{ num(row.calls) }}
+                    <span class="text-gray-600">·</span>
+                    <span :class="row.failed ? 'text-red-300' : 'text-gray-500'">{{ num(row.failed) }}</span>
                   </span>
                 </li>
               </ul>

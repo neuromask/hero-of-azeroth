@@ -15,6 +15,9 @@
  * which is why it is not used: the silhouette would be visible next to the
  * render instead of hidden behind it.
  */
+// The web hosts are not the API: their requests carry a deadline and a counter of their own (`./externalFetch`).
+import { callExternal } from './externalFetch'
+
 export const ARMORY_CDN = 'https://render.worldofwarcraft.com'
 
 /**
@@ -226,7 +229,7 @@ async function readJournalFromArmoury(key: string, region: string, realm: string
     `${ARMORY_SITE}/${ARMORY_LOCALE}/character/${region}/${realm}/${encodeURIComponent(name)}/collections/mounts`
 
   try {
-    const page = await $fetch<string>(url, {
+    const page = await callExternal<string>('armory_page', url, {
       headers: { 'user-agent': 'Mozilla/5.0 (compatible; heroofazeroth.com)' },
       responseType: 'text',
       timeout: 10000
@@ -265,7 +268,7 @@ export async function resolveArmoryBackground(look: ArmoryLook): Promise<string>
 
   for (const url of candidates) {
     try {
-      const image = await $fetch<ArrayBuffer>(url, { responseType: 'arrayBuffer' })
+      const image = await callExternal<ArrayBuffer>('render_cdn', url, { responseType: 'arrayBuffer' })
       if (image && image.byteLength > 0) {
         backgroundCache.set(key, url)
         return url

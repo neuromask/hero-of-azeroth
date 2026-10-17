@@ -12,7 +12,14 @@
  * the combobox show a Russian realm under either spelling and match what the visitor
  * types in either language.
  */
-export default defineEventHandler(async (event) => {
+import type { H3Event } from 'h3'
+// The realm list is its own source in the panel: every page with a search box or a realm name asks for it, and on a
+// cold process it is most of what the first front page costs (`server/utils/blizzardSource`).
+import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+
+export default defineEventHandler((event) => runWithBlizzardSource('realm_list', () => readRealmList(event)))
+
+async function readRealmList(event: H3Event) {
   const query = getQuery(event)
   const locale = (query.locale as string) || 'en_US'
   const requested = query.region === 'eu' || query.region === 'us' ? (query.region as 'eu' | 'us') : ''
@@ -35,10 +42,12 @@ export default defineEventHandler(async (event) => {
       }))
     })
   } catch (err: any) {
-    console.error('[realms] failed:', err)
+    // One line, not the whole error: during an outage every page asks for the list, and a remembered failure
+    // (`getRealms`) is rethrown to each of them - the stack of the first attempt would otherwise be printed per page.
+    console.error(`[realms] failed: ${err?.statusCode || ''} ${err?.statusMessage || err?.message || 'unknown error'}`)
     throw createError({
       statusCode: err.statusCode || 500,
       statusMessage: err.message || err.statusMessage || 'Failed to fetch realm list'
     })
   }
-})
+}

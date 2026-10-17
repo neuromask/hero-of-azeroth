@@ -13,9 +13,13 @@
  * A failure here is a site that serves pages but does not scan: the start is therefore logged rather than thrown,
  * and the panel shows the scanner as stopped - which is the honest state, not a silent one.
  */
+import { runWithBlizzardSource } from '../utils/blizzardSource'
+
 export default defineNitroPlugin(() => {
   try {
-    startCharacterScan()
+    // Arming the timer makes no request. Anything that ever did here would be startup work, and is tagged as such;
+    // the timer's own passes set `background_scan` for themselves (`runSyncPass`), which replaces this tag.
+    runWithBlizzardSource('startup', () => startCharacterScan())
   } catch (error) {
     console.error(`[sync] the character scanner did not start: ${error instanceof Error ? error.message : String(error)}`)
     recordDiagnostic({ level: 'error', category: 'sync', message: 'character scanner did not start' })

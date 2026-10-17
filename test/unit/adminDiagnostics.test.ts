@@ -509,6 +509,32 @@ describe('the memory the panel reports', () => {
     expect(memory.samples.every((sample) => sample.rssBytes > 0)).toBe(true)
   })
 
+  it('names the process and the isolate it was measured in, so the RSS can be matched to the OS', async () => {
+    const system = buildAdminDiagnostics().system
+
+    expect(system.pid).toBe(process.pid)
+    expect(system.arch).toBe(process.arch)
+    expect(system.platform).toBe(process.platform)
+    // vitest runs this file in a worker thread or a child process; either way the answer is a fact about it.
+    const { isMainThread } = await import('node:worker_threads')
+    expect(system.runtime).toBe(isMainThread ? 'node-server' : 'worker-thread')
+    // Nothing private rides along: no path, no command line, no environment.
+    expect(JSON.stringify(system)).not.toContain(process.cwd().replace(/\\/g, '\\\\'))
+  })
+
+  it('tells a nuxt dev worker apart from the built server', async () => {
+    const { runtimeKind } = await import('../../server/utils/adminDiagnostics')
+    const { isMainThread } = await import('node:worker_threads')
+    const previous = process.env.NITRO_DEV_WORKER_ID
+    process.env.NITRO_DEV_WORKER_ID = '1'
+    try {
+      expect(runtimeKind()).toBe(isMainThread ? 'node-server' : 'nitro-dev-worker')
+    } finally {
+      if (previous === undefined) delete process.env.NITRO_DEV_WORKER_ID
+      else process.env.NITRO_DEV_WORKER_ID = previous
+    }
+  })
+
   it('fills one slot per window rather than one per build inside it', () => {
     buildAdminDiagnostics()
     buildAdminDiagnostics()

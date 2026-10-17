@@ -162,10 +162,19 @@ export const BLIZZARD_SOURCES = [
   'background_scan',
   'profile_sync',
   'profile_read',
+  // A character's shelves and feeds beside the profile itself: collections, achievements, reputations, the
+  // activity feed and the wardrobe tray (`server/api/{collections,achievements,reputations,activity,transmog}`).
+  'collection_read',
   'profile_refresh',
   'account_refresh',
   'admin_manual_refresh',
   'card_render',
+  // The realm list every page with a search box or a realm name asks for (`server/api/realms.get.ts`) - on a cold
+  // process the first front page is most of the traffic before any timer has ticked.
+  'realm_list',
+  // Work a plugin starts as the process boots (`server/plugins/*`). It makes no Blizzard call today; the tag is
+  // there so that one added later is visible as itself rather than as `other`.
+  'startup',
   'other'
 ] as const
 
@@ -210,6 +219,11 @@ export interface BlizzardBucket {
  */
 export const BLIZZARD_CATEGORIES = [
   'token',
+  // The reader's own Battle.net token flow (code exchange, renewal, userinfo) and the account endpoints read with
+  // it (`/profile/user/wow...`) - counted here because they are Blizzard requests, told apart from the site's own.
+  'oauth',
+  'account',
+  'achievements',
   'profile',
   'media',
   'collections',
@@ -278,6 +292,27 @@ export interface BlizzardReport {
    * part of that number an operator does not have to act on.
    */
   toleratedAbsences: number
+  /**
+   * Requests to Blizzard's *web* hosts, which are not the API and are not in any figure above: the Armoury page a
+   * mount journal is read from, and the render CDN the card's artwork comes from. Kept apart so the API counters
+   * stay what they say they are.
+   */
+  external: ExternalCallReport[]
+}
+
+/** The non-API hosts the site reads, as a closed vocabulary. */
+export const EXTERNAL_TARGETS = ['armory_page', 'render_cdn'] as const
+
+export type ExternalTarget = (typeof EXTERNAL_TARGETS)[number]
+
+/** One row of the non-API breakdown. */
+export interface ExternalCallReport {
+  target: ExternalTarget
+  calls: number
+  ok: number
+  failed: number
+  timeouts: number
+  averageMs: number | null
 }
 
 /** One file the database is made of, with the access error told apart from an absent file. */
@@ -325,6 +360,22 @@ export interface SystemReport {
   startedAt: number
   uptimeSeconds: number
   node: string
+  /** The OS process id, so the RSS below can be checked against the OS for the very same process. */
+  pid: number
+  /** `process.arch` and `process.platform`, e.g. `x64` / `linux`. */
+  arch: string
+  platform: string
+  /**
+   * Where the figures below were read, which decides how they may be read together.
+   *
+   *   - `node-server`: the built server (`.output/server/index.mjs`), one isolate in one process: the heap figures
+   *     and the RSS describe the same thing.
+   *   - `nitro-dev-worker`: `nuxt dev`, where Nitro runs in a *worker thread* of the CLI process. `heap*` and
+   *     `external` are the worker's own isolate, while `rss` is the whole process - Vite, the file watchers and the
+   *     CLI's own heap included. A large RSS beside a small heap is then expected and says nothing about the server.
+   *   - `worker-thread`: any other worker thread, with the same caveat.
+   */
+  runtime: 'node-server' | 'nitro-dev-worker' | 'worker-thread'
   memory: {
     rssBytes: number
     heapUsedBytes: number

@@ -13,6 +13,7 @@ import type { PngBand, PngBounds } from './png'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { callExternal } from './externalFetch'
 
 const CARD_WIDTH = 1200
 const CARD_HEIGHT = 630
@@ -649,7 +650,7 @@ function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: nu
 async function loadBackground(url: string): Promise<string> {
   if (!url) return ''
   try {
-    const image = await $fetch<ArrayBuffer>(url, { responseType: 'arrayBuffer' })
+    const image = await callExternal<ArrayBuffer>('render_cdn', url, { responseType: 'arrayBuffer' })
     if (!image || !image.byteLength) return ''
     const data = toDataUri(Buffer.from(image), url.endsWith('.png') ? 'image/png' : 'image/jpeg')
     // The class artwork is a character-free scene, so it simply covers the card:
@@ -673,7 +674,7 @@ async function loadBackground(url: string): Promise<string> {
 async function loadRender(url: string): Promise<string> {
   if (!url) return ''
   try {
-    const image = Buffer.from(await $fetch<ArrayBuffer>(url, { responseType: 'arrayBuffer' }))
+    const image = Buffer.from(await callExternal<ArrayBuffer>('render_cdn', url, { responseType: 'arrayBuffer' }))
     const bounds = pngAlphaBounds(image)
     const box = bounds || DEFAULT_RENDER_BOX
 

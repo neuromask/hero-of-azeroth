@@ -8,13 +8,13 @@
  * request, which the header's Refresh button sends, waits for a freshly built feed instead.
  */
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
-import { characterReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import { collectionReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 import type { H3Event } from 'h3'
 
 const feeds = createSwrCache<ActivityFeed>(2 * 60 * 60 * 1000, 256)
 
 export default defineEventHandler((event) =>
-  runWithBlizzardSource(characterReadSource(parseBoolFlag(getQuery(event).force)), () => readActivity(event))
+  runWithBlizzardSource(collectionReadSource(parseBoolFlag(getQuery(event).force)), () => readActivity(event))
 )
 
 /** The feed itself, under the tag its caller earned: a page view, or the reader's own Refresh. */

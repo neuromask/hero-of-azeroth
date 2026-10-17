@@ -442,12 +442,22 @@ const DUE_PREDICATE = `NOT EXISTS (
     SELECT 1 FROM snapshots s
      WHERE s.character_id = c.id AND s.taken_at > ?
   )
+  AND (c.stats_read_at IS NULL OR c.stats_read_at <= ?)
   AND (c.sync_retry_at IS NULL OR c.sync_retry_at <= ?)
   AND c.user_id IS NOT NULL`
 
-/** The two moments the predicate is asked about, in the order its placeholders appear. */
-function dueMoments(): [number, number] {
-  return [nowSec() - 86400, nowSec()]
+/**
+ * The three moments the predicate is asked about, in the order its placeholders appear.
+ *
+ * The second one is the read itself. A snapshot is written only when a figure *moved* (`fileDailyReading`), so a
+ * character whose figures stood still keeps a newest snapshot older than a day however often it is read - and
+ * without this condition it stayed due straight after being read, and (with `last_seen_at` just bumped by that
+ * read) sorted to the front of the very next batch. Measured on a copy of the production database: a day of
+ * three-minute passes spent 4 800 full reads on 22 characters instead of reading the 315 the scan exists for.
+ */
+function dueMoments(): [number, number, number] {
+  const now = nowSec()
+  return [now - 86400, now - 86400, now]
 }
 
 /**

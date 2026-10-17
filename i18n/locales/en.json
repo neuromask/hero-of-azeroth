@@ -497,6 +497,11 @@
   "adminErrorsEmpty": "Nothing has been recorded since the process started.",
   "adminRowUptime": "Uptime",
   "adminRowNode": "Node.js",
+  "adminRowProcess": "Process",
+  "adminRowRuntime": "Measured in",
+  "adminRuntime_node_server": "built server (one isolate: heap and RSS describe the same process)",
+  "adminRuntime_nitro_dev_worker": "nuxt dev worker (heap is the worker's; RSS includes Vite and the CLI)",
+  "adminRuntime_worker_thread": "worker thread (heap is the worker's; RSS is the whole process)",
   "adminRowMemoryRss": "Resident memory (RSS)",
   "adminRowHeapUsed": "Heap used",
   "adminRowHeapTotal": "Heap total",
@@ -642,5 +647,6 @@
   "adminJobReasonStartup": "Runs once as the process starts; nothing schedules it.",
   "adminJobReasonManual": "A maintenance button, never a schedule.",
   "adminBlizzardBySource": "By source",
+  "adminBlizzardExternal": "Web hosts (not the API)",
   "adminSyncSourceManual": "admin"
 }

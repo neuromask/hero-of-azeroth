@@ -32,7 +32,7 @@ import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 import type { H3Event } from 'h3'
 
 export default defineEventHandler((event) =>
-  runWithBlizzardSource('profile_read', () => readTransmogs(event))
+  runWithBlizzardSource('collection_read', () => readTransmogs(event))
 )
 
 /** The tray's one figure, read under the tag of the page that asked for it. */
