@@ -1035,6 +1035,33 @@ server overwrites `X-Forwarded-For`. The file is read out of that directory when
 The variables are read per request (`useRuntimeConfig()`), so changing them needs a restart, not a
 rebuild — and shipping a new version is another `npm run deploy`.
 
+### Living inside the host's memory
+
+The host gives the process **416 MiB**, and the Node heap is the smaller half of what it spends. A card is drawn by
+native libraries — `@resvg/resvg-js` and `sharp`/libvips — which allocate *outside* the V8 heap, where the garbage
+collector neither sees them nor is woken by them; and glibc keeps what they release in per-thread arenas rather than
+handing it back to the kernel. That is why RSS climbs while cards are being drawn and then **settles instead of
+falling**: the freed memory is real, but the process does not return it.
+
+Two settings keep that high-water mark low, and both have to be in the environment the process is started with —
+neither can be changed from inside it:
+
+```bash
+MALLOC_ARENA_MAX=2 NODE_OPTIONS=--max-old-space-size=192 node server/index.mjs
+```
+
+- `MALLOC_ARENA_MAX=2` — one arena per thread is one arena per rendering thread, each holding its own freed blocks.
+  Two of them is all this process needs, and it is the single largest difference to RSS.
+- `--max-old-space-size=192` — the heap is capped below the ceiling, so V8 collects before the *process* is the thing
+  that runs out. The site's own caches are byte-bounded (`server/utils/lruStore`, `server/utils/swrCache`), so this is
+  a guard rather than a diet.
+
+What a card costs is bounded on purpose: the render is rasterised **once** (text widths are measured in a half-scale
+document whose ink is read straight off the rasteriser's pixels), the model is cut out of Blizzard's 1600×1200 canvas
+and only that crop is embedded, the class backdrop is downscaled to the width it is drawn at and kept per class, and
+one rasteriser pass runs at a time (`server/utils/taskGate`). The finished JPEG and the heavy shelves live in SQLite
+(`server/utils/sqliteStore`), not in the heap.
+
 ### Where the site keeps its data
 
 Everything the site writes lives in one directory: the SQLite database (`server/data/hoa.db`) — which holds

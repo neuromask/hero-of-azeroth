@@ -1,4 +1,4 @@
-import { Resvg, renderAsync } from '@resvg/resvg-js'
+import { renderAsync } from '@resvg/resvg-js'
 import type { ResvgRenderOptions } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
 // The bounded cache the downscaled backdrops are kept in, and the gate that lets one card at a time hold the
@@ -12,8 +12,8 @@ import { formatNumber } from '#shared/utils/formatNumber'
 // remembered name all read one table (see `shared/utils/wow-class.ts`).
 import { classColorHex } from '#shared/utils/wow-class'
 import type { CharacterData, CharacterStat } from './blizzard'
-import { pngAlphaBandBounds, pngAlphaBounds } from './png'
-import type { PngBand, PngBounds } from './png'
+import { inkBandBounds, inkBounds } from './alphaInk'
+import type { InkBand, InkBounds } from './alphaInk'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -270,24 +270,26 @@ function loadFontFiles(): string[] {
  */
 let resvgOptions: ResvgRenderOptions | undefined
 
+/**
+ * The renderer's own settings, built once.
+ *
+ * `loadSystemFonts` is the expensive half of a pass and the reason a pass costs what it does: every `Resvg`
+ * instance builds a font database of its own, and asking for the machine's faces reads and indexes *all* of them,
+ * on every card, for a document that is set in Gilroy alone. The faces the card is drawn from are handed over as
+ * files instead (`fontFiles`), and they carry both the alphabets the site writes in - Latin and Cyrillic - so the
+ * system is consulted only when those files could not be found at all.
+ */
 function rasterOptions(): ResvgRenderOptions {
-  resvgOptions ??= {
-    font: { loadSystemFonts: true, defaultFontFamily: 'Gilroy', fontFiles: loadFontFiles() },
-    fitTo: { mode: 'width' as const, value: CARD_WIDTH }
-  }
+  resvgOptions ??= (() => {
+    const fontFiles = loadFontFiles()
+
+    return {
+      font: { loadSystemFonts: fontFiles.length === 0, defaultFontFamily: 'Gilroy', fontFiles },
+      fitTo: { mode: 'width' as const, value: CARD_WIDTH }
+    }
+  })()
 
   return resvgOptions
-}
-
-/**
- * Rasterises a document to pixels, the way the card is rasterised - *synchronously*, on the event loop.
- *
- * Kept only for the one caller that cannot wait: `measuredTextWidth`, which is asked from inside the layout code
- * for a run `measureBatch` did not plan for (and which a card almost never needs). Everything that draws a card
- * goes through `rasteriseAsync` below.
- */
-function rasterise(svg: string) {
-  return new Resvg(svg, rasterOptions()).render()
 }
 
 /**
@@ -307,16 +309,8 @@ const renderGate = createTaskGate(1, 12)
  * nothing else on the server is served. The async form does the same work on a worker thread and hands the
  * pixels back, which is what keeps a burst of cards from stalling every other request.
  */
-function rasteriseAsync(svg: string) {
-  return renderGate.run(() => renderAsync(svg, rasterOptions()))
-}
-
-/**
- * A document rendered to PNG bytes, which is what a measurement probe is: the ink of that
- * render is what a width of text is read from.
- */
-function renderSvg(svg: string): Buffer {
-  return rasterise(svg).asPng()
+function rasteriseAsync(svg: string, options: ResvgRenderOptions = rasterOptions()) {
+  return renderGate.run(() => renderAsync(svg, options))
 }
 
 /**
@@ -440,6 +434,19 @@ const MEASURE_BAND_HEIGHT = 1.8
 const MEASURE_BAND_BASELINE = 1.3
 
 /**
+ * The scale a measurement document is drawn at.
+ *
+ * A width is linear in the size the run is set at, so the whole document - canvas, sizes, letter spacing and the
+ * bands themselves - is drawn at half scale and every width read back is doubled. What that buys is memory: the
+ * pass holds a 600x~500 canvas (1.2 MB of RGBA) rather than a 1200x~1000 one (4.9 MB), for a number that comes out
+ * the same to within a pixel at full size.
+ */
+const MEASURE_SCALE = 0.5
+
+/** The width the measurement document is drawn at, which its own text is centred on. */
+const measureWidth = Math.round(CARD_WIDTH * MEASURE_SCALE)
+
+/**
  * Measures every run in `requests` that has no width yet, in one rasteriser pass.
  *
  * A card needs about twenty widths. Measured one at a time, each costs what drawing the whole
@@ -474,25 +481,26 @@ async function measureBatch(requests: MeasureRequest[]): Promise<void> {
 
   if (!missing.length) return
 
-  const bands: PngBand[] = []
+  const bands: InkBand[] = []
   const texts: string[] = []
   let height = 0
 
   for (const request of missing) {
-    const band = Math.ceil(request.size * MEASURE_BAND_HEIGHT)
+    const band = Math.ceil(request.size * MEASURE_BAND_HEIGHT * MEASURE_SCALE)
     bands.push({ top: height, height: band })
-    texts.push(`<text x="${CARD_WIDTH / 2}" y="${height + request.size * MEASURE_BAND_BASELINE}" font-size="${request.size}" font-weight="700" letter-spacing="${request.letterSpacing}" text-anchor="middle" fill="#ffffff">${esc(request.value)}</text>`)
+    texts.push(`<text x="${measureWidth / 2}" y="${height + request.size * MEASURE_BAND_BASELINE * MEASURE_SCALE}" font-size="${request.size * MEASURE_SCALE}" font-weight="700" letter-spacing="${request.letterSpacing * MEASURE_SCALE}" text-anchor="middle" fill="#ffffff">${esc(request.value)}</text>`)
     height += band
   }
 
-  const document = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${height}" font-family="${FONT_FAMILY}">${texts.join('')}</svg>`
+  const document = `<svg xmlns="http://www.w3.org/2000/svg" width="${measureWidth}" height="${height}" font-family="${FONT_FAMILY}">${texts.join('')}</svg>`
 
-  let bounds: (PngBounds | null)[] = missing.map(() => null)
+  let bounds: (InkBounds | null)[] = missing.map(() => null)
 
   try {
-    // Drawn off the event loop and through the same gate as the card, then decoded and measured; the PNG is a
-    // local of this expression and is unreachable as soon as the bands are read out of it.
-    bounds = pngAlphaBandBounds((await rasteriseAsync(document)).asPng(), bands)
+    // Drawn off the event loop and through the same gate as the card. The ink is read off the rasteriser's own
+    // RGBA - no PNG is encoded, inflated or un-filtered on the way - and the widths are scaled back up.
+    const image = await rasteriseAsync(document, { ...rasterOptions(), fitTo: { mode: 'width', value: measureWidth } })
+    bounds = inkBandBounds(image.pixels, image.width, image.height, { channels: 4 }, bands)
   } catch {
     // A document the rasteriser will not draw is not worth failing a card over: the widths below
     // fall back to the estimate, which is what `measuredTextWidth` does for a run it cannot draw.
@@ -502,7 +510,7 @@ async function measureBatch(requests: MeasureRequest[]): Promise<void> {
     const ink = bounds[index]
     measuredWidths.set(
       widthKey(request.value, request.size, request.letterSpacing),
-      ink ? ink.w : textWidth(request.value, request.size)
+      ink ? ink.w / MEASURE_SCALE : textWidth(request.value, request.size)
     )
   })
 }
@@ -512,10 +520,10 @@ function measuredTextWidth(value: string, fontSize: number, letterSpacing = 0): 
   const cached = measuredWidths.get(key)
   if (cached !== undefined) return cached
 
-  const height = Math.ceil(fontSize * 3)
-  const probe = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${height}" font-family="${FONT_FAMILY}"><text x="${CARD_WIDTH / 2}" y="${fontSize * 2}" font-size="${fontSize}" font-weight="700" letter-spacing="${letterSpacing}" text-anchor="middle" fill="#ffffff">${esc(value)}</text></svg>`
-  const bounds = value ? pngAlphaBounds(renderSvg(probe)) : null
-  const width = bounds ? bounds.w : textWidth(value, fontSize)
+  // A run `measureBatch` did not plan for falls back to the estimate rather than to a rasteriser pass of its own:
+  // drawing is a hundred milliseconds and megabytes of native memory, and a guess of this run's width moves a
+  // heading by a pixel. The planned runs - every run a card is about to draw - are measured exactly.
+  const width = textWidth(value, fontSize)
 
   measuredWidths.set(key, width)
   return width
@@ -787,20 +795,62 @@ async function loadRender(url: string): Promise<string> {
   try {
     // `Buffer.from(arrayBuffer)` is a view over the download, not a copy: one allocation for the whole render.
     const image = Buffer.from(await callExternal<ArrayBuffer>('render_cdn', url, { responseType: 'arrayBuffer' }))
-    // The bounds are read off a decode that is local to this call - the 1600x1200 RGBA it makes (7.7 MB) is
-    // garbage the moment the box has been measured.
-    const bounds = pngAlphaBounds(image)
-    const box = bounds || DEFAULT_RENDER_BOX
+    const lib = await loadSharp()
+    const box = (lib ? await inkOf(lib, image) : null) ?? DEFAULT_RENDER_BOX
 
     const scale = Math.min(RENDER_BODY_HEIGHT / box.h, RENDER_MAX_WIDTH / box.w)
-    const drawWidth = SOURCE_WIDTH * scale
-    const drawHeight = SOURCE_HEIGHT * scale
     const x = RENDER_CENTER_X - (box.x + box.w / 2) * scale
     const y = CARD_HEIGHT + RENDER_CUT * box.h * scale - (box.y + box.h) * scale
+    const crop = lib ? cropOf(box) : null
 
-    return `<image href="${toDataUri(image, 'image/png')}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${drawWidth.toFixed(2)}" height="${drawHeight.toFixed(2)}" preserveAspectRatio="none"/>`
+    // Without `sharp` there is no cheap way to find or cut the model out of the canvas, so the whole thing is
+    // embedded on the fallback box - a card a little off-centre beats no card.
+    if (!lib || !crop) {
+      const drawWidth = SOURCE_WIDTH * scale
+      const drawHeight = SOURCE_HEIGHT * scale
+      return `<image href="${toDataUri(image, 'image/png')}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${drawWidth.toFixed(2)}" height="${drawHeight.toFixed(2)}" preserveAspectRatio="none"/>`
+    }
+
+    // Only the box the model occupies is embedded. The canvas is 1600x1200 and the model fills a fraction of it,
+    // so the rasteriser would decode 7.7 MB of RGBA - and hold it while the card is drawn - to paint mostly
+    // nothing: the crop is a fifth of that, and the base64 that carries it a fifth of the document.
+    const cropped = await lib(image).extract(crop).png({ compressionLevel: 9 }).toBuffer()
+
+    // The placed image is the piece of the canvas that was cut out, at the place that piece had on it.
+    return `<image href="${toDataUri(cropped, 'image/png')}" x="${(x + crop.left * scale).toFixed(2)}" y="${(y + crop.top * scale).toFixed(2)}" width="${(crop.width * scale).toFixed(2)}" height="${(crop.height * scale).toFixed(2)}" preserveAspectRatio="none"/>`
   } catch {
     return ''
+  }
+}
+
+/**
+ * Where the model's ink is on the render's canvas, read from the alpha channel alone.
+ *
+ * `sharp` extracts that channel - 1600x1200 bytes, against the 7.7 MB of RGBA the whole picture would take, and
+ * against the two more copies a PNG decode of it used to make - and the box is read off it here. The picture
+ * itself is decoded once, by libvips, on the way to that answer.
+ */
+async function inkOf(lib: typeof import('sharp').default, image: Buffer): Promise<InkBounds | null> {
+  const { data, info } = await lib(image)
+    .ensureAlpha()
+    .extractChannel('alpha')
+    .raw({ depth: 'uchar' })
+    .toBuffer({ resolveWithObject: true })
+
+  return inkBounds(data, info.width, info.height, { channels: 1, alphaOffset: 0 })
+}
+
+/** The part of the canvas to cut out: the model's box with a margin, kept inside the canvas. */
+function cropOf(box: { x: number; y: number; w: number; h: number }): { left: number; top: number; width: number; height: number } {
+  const pad = Math.max(2, Math.round(Math.max(box.w, box.h) * 0.02))
+  const left = Math.max(0, Math.min(box.x - pad, SOURCE_WIDTH - 1))
+  const top = Math.max(0, Math.min(box.y - pad, SOURCE_HEIGHT - 1))
+
+  return {
+    left,
+    top,
+    width: Math.max(1, Math.min(box.w + pad * 2, SOURCE_WIDTH - left)),
+    height: Math.max(1, Math.min(box.h + pad * 2, SOURCE_HEIGHT - top))
   }
 }
 
