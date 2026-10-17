@@ -698,6 +698,20 @@ const scanRowStatus = computed(() => {
   return t('adminJobStatusArmed')
 })
 
+/**
+ * The last failure as one line - the category and when it happened - built here rather than in the template.
+ *
+ * Assembled in one string because the figure sits in a right-aligned cell: two interpolations separated by a
+ * template newline are condensed into no space at all by Vue's whitespace handling, which is exactly how
+ * `Ошибка:никогда` happens. One string cannot lose its own separator.
+ */
+const lastErrorText = computed(() => {
+  const sync = diagnostics.value?.sync
+
+  if (!sync?.lastErrorCategory) return t('adminNever')
+  return sync.lastErrorAt ? `${sync.lastErrorCategory} · ${clock(sync.lastErrorAt)}` : sync.lastErrorCategory
+})
+
 /** The interval, as the panel prints it: the stored milliseconds in minutes. */
 function minutes(ms: number | null | undefined): string {
   if (typeof ms !== 'number' || !Number.isFinite(ms)) return '—'
@@ -1086,52 +1100,61 @@ async function runOptimize(): Promise<void> {
             </div>
           </div>
 
-          <!-- What the last pass did: the *batch*, not the schedule. The counters are the same ones the Background
-               sync section prints, shown here because the switch and the thing it switched on should be read in
-               one place. -->
-          <div class="mt-3 grid gap-x-4 gap-y-1 text-[11px] sm:grid-cols-2 lg:grid-cols-3">
-            <p>
-              <span class="text-gray-500">{{ t('adminRowSyncLastStart') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ clock(diagnostics?.sync.lastStartAt) }}</span>
-            </p>
-            <p>
-              <span class="text-gray-500">{{ t('adminRowSyncLastFinish') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ clock(diagnostics?.sync.lastFinishAt) }}</span>
-            </p>
-            <p>
-              <span class="text-gray-500">{{ t('adminRowSyncDuration') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ milliseconds(diagnostics?.sync.lastDurationMs) }}</span>
-            </p>
-            <p>
-              <span class="text-gray-500">{{ t('adminRowSyncTicks') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.timerTicks) }}</span>
-              <span class="text-gray-500">· {{ t('adminRowSyncTicksSkipped') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.timerSkipped) }}</span>
-            </p>
-            <p class="sm:col-span-2">
-              <span class="text-gray-500">{{ t('adminRowSyncChecked') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.checked) }}</span>
-              <span class="text-gray-500">· {{ t('adminRowSyncUpdated') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.updated) }}</span>
-              <span class="text-gray-500">· {{ t('adminRowSyncSkipped') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.skipped) }}</span>
-              <span class="text-gray-500">· {{ t('adminRowSyncErrors') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.errors) }}</span>
-            </p>
-            <p class="sm:col-span-2 lg:col-span-3">
-              <span class="text-gray-500">{{ t('adminRowSyncParked') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.parked) }}</span>
-              <span class="text-gray-500">· {{ t('adminRowSyncNextRetry') }}:</span>
-              <span class="tabular-nums text-gray-300">{{ clock(diagnostics?.sync.nextRetryAt) }}</span>
-              <span class="text-gray-500">· {{ t('adminRowSyncLastError') }}:</span>
-              <span class="text-gray-300">
-                {{ diagnostics?.sync.lastErrorCategory ?? t('adminNever') }}
-                <span v-if="diagnostics?.sync.lastErrorAt" class="tabular-nums">
-                  · {{ clock(diagnostics?.sync.lastErrorAt) }}
-                </span>
-              </span>
-            </p>
-          </div>
+          <!-- What the last pass did: the *batch*, not the schedule. One label/value pair per cell, so the figures
+               line up as columns instead of running together in a sentence - the same shape the System and Database
+               sections use. -->
+          <dl class="mt-3 grid gap-x-6 text-[11px] sm:grid-cols-2 lg:grid-cols-3">
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncLastStart') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ clock(diagnostics?.sync.lastStartAt) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncLastFinish') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ clock(diagnostics?.sync.lastFinishAt) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncDuration') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ milliseconds(diagnostics?.sync.lastDurationMs) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncTicks') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ num(diagnostics?.sync.timerTicks) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncTicksSkipped') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ num(diagnostics?.sync.timerSkipped) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncChecked') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ num(diagnostics?.sync.checked) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncUpdated') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ num(diagnostics?.sync.updated) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncSkipped') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ num(diagnostics?.sync.skipped) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncErrors') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ num(diagnostics?.sync.errors) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncParked') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ num(diagnostics?.sync.parked) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncNextRetry') }}</dt>
+              <dd class="shrink-0 tabular-nums text-gray-300">{{ clock(diagnostics?.sync.nextRetryAt) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
+              <dt class="min-w-0 truncate text-gray-500">{{ t('adminRowSyncLastError') }}</dt>
+              <dd class="min-w-0 truncate text-right tabular-nums text-gray-300" :title="lastErrorText">
+                {{ lastErrorText }}
+              </dd>
+            </div>
+          </dl>
 
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <button
