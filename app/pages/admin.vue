@@ -194,7 +194,10 @@ function startPolling(): void {
   poller = setInterval(() => {
     // The timer is left running and does nothing while the tab is hidden, so a return to the tab is immediate
     // (`onVisibility` asks once, at once) rather than up to twenty seconds away.
-    if (!document.hidden) void loadDiagnostics()
+    if (!document.hidden) {
+      void loadDiagnostics()
+      void loadAutomation()
+    }
   }, POLL_MS)
 }
 
@@ -211,6 +214,7 @@ function onVisibility(): void {
   }
 
   void loadDiagnostics()
+  void loadAutomation()
   startPolling()
 }
 
@@ -218,6 +222,7 @@ onMounted(() => {
   if (!isAdmin.value) return
 
   void loadDiagnostics()
+  void loadAutomation()
   startPolling()
   document.addEventListener('visibilitychange', onVisibility)
 })
@@ -425,7 +430,9 @@ const syncRows = computed<DetailRow[]>(() => {
       ? t('adminSyncSourceTimer')
       : state?.source === 'on-demand'
         ? t('adminSyncSourceOnDemand')
-        : '—'
+        : state?.source === 'manual'
+          ? t('adminSyncSourceManual')
+          : '—'
 
   const lastError = state?.lastErrorCategory
     ? `${state.lastErrorCategory} · ${clock(state.lastErrorAt)}`
@@ -501,9 +508,220 @@ const databaseRows = computed<DetailRow[]>(() => {
 /** The table counts, keyed by the table's own name - an identifier, and the one thing here not translated. */
 const tableCounts = computed(() => Object.entries(diagnostics.value?.database.rows ?? {}))
 
+/** What `/api/admin/automation` answers: the stored settings, the scheduler's own state, and what a pass would cost. */
+interface AutomationView {
+  settings: { characterScan: { enabled: boolean; intervalMs: number; batchSize: number } }
+  scheduler: {
+    enabled: boolean
+    armed: boolean
+    intervalMs: number
+    batchSize: number
+    nextRunAt: number | null
+    lastTickAt: number | null
+    appliedAt: number
+  }
+  limits: { intervalsMs: number[]; batchMin: number; batchMax: number; requestsPerCharacter: number }
+  estimate: { due: number; batchSize: number; potentialRequests: number }
+}
+
+/** What the save answered: the settings as stored, and the scheduler as it now stands. */
+interface AutomationSaveAnswer {
+  settings: AutomationView['settings']
+  scheduler: AutomationView['scheduler']
+}
+
+const automation = ref<AutomationView | null>(null)
+const automationLoading = ref(false)
+const automationFailed = ref(false)
+
+/**
+ * The form's own state, kept apart from the polling on purpose.
+ *
+ * A panel that refreshes its figures every twenty seconds must not overwrite a field somebody is halfway through
+ * editing - so the draft is filled once, refilled only when the server's settings have changed *and* the form has
+ * no unsaved edits (`automationDirty`), and refilled after a save, which is the moment the server's answer is the
+ * truth the operator asked for.
+ */
+const automationDraft = reactive({ enabled: true, intervalMs: 180_000, batchSize: 10 })
+/** The settings the draft was filled from, so "unsaved changes" is a comparison rather than a guess. */
+const automationServer = ref<AutomationView['settings'] | null>(null)
+
+const automationDirty = computed(() => {
+  const server = automationServer.value?.characterScan
+  if (!server) return false
+
+  return (
+    automationDraft.enabled !== server.enabled ||
+    automationDraft.intervalMs !== server.intervalMs ||
+    automationDraft.batchSize !== server.batchSize
+  )
+})
+
+const automationSaving = ref(false)
+/** What the last save answered, kept so the panel can show "3 min → 5 min" rather than only the new value. */
+const automationSaved = ref<{ from: AutomationView['settings']; to: AutomationView['settings'] } | null>(null)
+const automationSaveErrors = ref<string[]>([])
+const automationSaveFailed = ref(false)
+
+/** The manual pass: its confirmation, its state, and what it answered. */
+const runConfirming = ref(false)
+const runState = ref<'idle' | 'running' | 'done' | 'busy' | 'failed' | 'throttled'>('idle')
+const runResult = ref<{
+  counters: { checked: number; updated: number; skipped: number; errors: number }
+  due: number
+} | null>(null)
+
+/** Writes the server's settings into the form - only when there is nothing to lose. */
+function fillAutomationDraft(settings: AutomationView['settings']) {
+  automationServer.value = settings
+  automationDraft.enabled = settings.characterScan.enabled
+  automationDraft.intervalMs = settings.characterScan.intervalMs
+  automationDraft.batchSize = settings.characterScan.batchSize
+}
+
+async function loadAutomation(): Promise<void> {
+  if (!isAdmin.value) return
+
+  automationLoading.value = true
+  try {
+    const answer = await $fetch<AutomationView>('/api/admin/automation')
+    const firstFill = automationServer.value === null
+    const serverChanged = JSON.stringify(answer.settings) !== JSON.stringify(automationServer.value)
+
+    automation.value = answer
+    automationFailed.value = false
+
+    // The first answer fills the form; a later one only when the form is clean and the server moved (a second
+    // administrator's save, a deploy). An operator's half-typed change is never thrown away by a poll.
+    if (firstFill || (!automationDirty.value && serverChanged)) fillAutomationDraft(answer.settings)
+  } catch {
+    automationFailed.value = true
+  } finally {
+    automationLoading.value = false
+  }
+}
+
+/**
+ * Saves the form.
+ *
+ * The three answers are told apart rather than collapsed into "failed": a 400 names the fields the server refused
+ * (an interval it does not offer, a batch beyond the pass's ceiling), a 429 is "you just saved", and anything else
+ * is the site having a bad moment. On success the panel shows what changed and what the scheduler now says.
+ */
+async function saveAutomation(): Promise<void> {
+  if (automationSaving.value) return
+
+  const from = automationServer.value
+  automationSaving.value = true
+  automationSaveErrors.value = []
+  automationSaveFailed.value = false
+
+  try {
+    const answer = await $fetch<AutomationSaveAnswer>('/api/admin/automation', {
+      method: 'POST',
+      body: {
+        characterScan: {
+          enabled: automationDraft.enabled,
+          intervalMs: automationDraft.intervalMs,
+          batchSize: automationDraft.batchSize
+        }
+      }
+    })
+
+    automationSaved.value = from ? { from, to: answer.settings } : null
+    fillAutomationDraft(answer.settings)
+    if (automation.value) {
+      automation.value = { ...automation.value, settings: answer.settings, scheduler: answer.scheduler }
+    }
+
+    // The estimate follows the batch, so the card is re-read rather than recomputed here.
+    await loadAutomation()
+    await loadDiagnostics()
+  } catch (error) {
+    const failure = error as { statusCode?: number; data?: { errors?: string[] } }
+
+    if (Number(failure?.statusCode) === 400) automationSaveErrors.value = failure?.data?.errors ?? ['body']
+    else automationSaveFailed.value = true
+  } finally {
+    automationSaving.value = false
+  }
+}
+
+/** Runs one batch of the scanner, after the operator has confirmed what it may cost. */
+async function runScanNow(): Promise<void> {
+  if (runState.value === 'running') return
+
+  runConfirming.value = false
+  runState.value = 'running'
+  runResult.value = null
+
+  try {
+    const answer = await $fetch<{
+      counters: { checked: number; updated: number; skipped: number; errors: number }
+      due: number
+    }>('/api/admin/automation/run', { method: 'POST' })
+
+    runResult.value = answer
+    runState.value = 'done'
+    await loadAutomation()
+    await loadDiagnostics()
+  } catch (error) {
+    const status = Number((error as { statusCode?: number })?.statusCode)
+    runState.value = status === 409 ? 'busy' : status === 429 ? 'throttled' : 'failed'
+  }
+}
+
+/**
+ * The jobs this site really runs, as the panel draws them.
+ *
+ * Every row is a thing found in the codebase (a `setTimeout`/`setInterval`, a Nitro plugin's startup work, the
+ * endpoints that read on a request), and the ones that are not periodic say so instead of pretending to be jobs.
+ * Only the scanner has a control, because only the scanner is ours to schedule: a reader's page read and the
+ * sign-in's roster read are the reader's actions, and a switch that stopped them would be a switch that stopped
+ * the site.
+ */
+const AUTOMATION_JOBS = [
+  { id: 'character_scan', nameKey: 'adminJobScan', kindKey: 'adminJobKindPeriodic', managed: true, reasonKey: '' },
+  { id: 'profile_sync', nameKey: 'adminJobProfileSync', kindKey: 'adminJobKindRequest', managed: false, reasonKey: 'adminJobReasonReader' },
+  { id: 'account_refresh', nameKey: 'adminJobAccountRefresh', kindKey: 'adminJobKindRequest', managed: false, reasonKey: 'adminJobReasonSignIn' },
+  { id: 'profile_reads', nameKey: 'adminJobProfileReads', kindKey: 'adminJobKindRequest', managed: false, reasonKey: 'adminJobReasonReader' },
+  { id: 'statistics_migration', nameKey: 'adminJobMigration', kindKey: 'adminJobKindStartup', managed: false, reasonKey: 'adminJobReasonStartup' },
+  { id: 'db_optimize', nameKey: 'adminJobOptimize', kindKey: 'adminJobKindManual', managed: false, reasonKey: 'adminJobReasonManual' }
+] as const
+
+/** How the scanner's own row reads, from the live state rather than from the settings it was saved with. */
+const scanRowStatus = computed(() => {
+  const running = diagnostics.value?.sync.running
+
+  if (running) return t('adminJobStatusRunning')
+  if (!automation.value?.scheduler.armed) return t('adminJobStatusPaused')
+  return t('adminJobStatusArmed')
+})
+
+/** The interval, as the panel prints it: the stored milliseconds in minutes. */
+function minutes(ms: number | null | undefined): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '—'
+  return `${Math.round(ms / 60_000)} ${t('adminAutomationMinutes')}`
+}
+
+/** The job's status word, from its kind - and, for the scanner, from the live scheduler rather than the setting. */
+function jobStatus(job: (typeof AUTOMATION_JOBS)[number]): string {
+  if (job.id === 'character_scan') return scanRowStatus.value
+  if (job.kindKey === 'adminJobKindStartup') return t('adminJobStatusAtStartup')
+  if (job.kindKey === 'adminJobKindManual') return t('adminJobStatusManual')
+  return t('adminJobStatusOnRequest')
+}
+
+/** When the job runs: an interval for the scanner, and a sentence for everything that is not a schedule. */
+function jobSchedule(job: (typeof AUTOMATION_JOBS)[number]): string {
+  if (job.id === 'character_scan') return minutes(automation.value?.scheduler.intervalMs)
+  if (job.kindKey === 'adminJobKindStartup') return t('adminJobScheduleStartup')
+  if (job.kindKey === 'adminJobKindManual') return t('adminJobScheduleManual')
+  return t('adminJobScheduleRequest')
+}
+
 /**
  * The two maintenance actions, each its own POST to its own endpoint.
- *
  * They are the only things on this page that write besides the settings form, so they are drawn as such: a
  * button that stands down while it runs (a second press cannot start a second run), a result that says what
  * happened rather than that something did, and an explicit confirmation in front of the database step, which is
@@ -761,8 +979,298 @@ async function runOptimize(): Promise<void> {
                 </li>
               </ul>
             </template>
+
+            <!-- And *who* asked. This is the row that answers "why is the total this big when the timer has not
+                 ticked yet": a page read, a card, a sign-in and the scanner each have their own line, and
+                 anything nobody has classified is `other` rather than quietly pooled. -->
+            <template v-if="diagnostics?.blizzardApi.bySource.length">
+              <p class="mt-3 text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminBlizzardBySource') }}</p>
+              <ul class="mt-1 space-y-0.5">
+                <li
+                  v-for="row in diagnostics.blizzardApi.bySource"
+                  :key="row.source"
+                  class="flex items-baseline justify-between gap-2 text-[11px]"
+                  :title="`${t('adminBlizzardLastCall')}: ${clock(row.lastCallAt)} · ${t('adminBlizzardAvg')}: ${milliseconds(row.averageMs)}`"
+                >
+                  <span class="min-w-0 truncate font-mono text-gray-400">{{ row.source }}</span>
+                  <span class="shrink-0 tabular-nums text-gray-300">
+                    {{ num(row.calls) }}
+                    <span class="text-gray-600">·</span>
+                    <span :class="row.failed ? 'text-red-300' : 'text-gray-500'">{{ num(row.failed) }}</span>
+                    <span v-if="row.lastError" class="text-red-300/80">({{ row.lastError }})</span>
+                  </span>
+                </li>
+              </ul>
+            </template>
           </section>
         </div>
+
+        <!-- The one job the site schedules: what it is set to, what it is doing, and how to run one batch by hand.
+             Nothing here spends a Blizzard request until a button says so, and the estimate says what that button
+             may cost before it is pressed. -->
+        <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">
+              {{ t('adminAutomationTitle') }}
+            </h2>
+            <span
+              class="hoa-panel rounded-full px-2.5 py-1 text-[11px] font-semibold"
+              :class="automation?.scheduler.armed ? 'text-emerald-300' : 'text-amber-300'"
+            >
+              {{ automation?.scheduler.armed ? t('adminScanArmed') : t('adminScanPaused') }}
+            </span>
+            <span v-if="automationDirty" class="text-[11px] font-semibold text-amber-300">
+              {{ t('adminScanUnsaved') }}
+            </span>
+            <span v-if="automationFailed" class="text-[11px] font-semibold text-red-400">
+              {{ t('adminScanLoadFailed') }}
+            </span>
+          </div>
+          <p class="mt-1 text-[11px] leading-relaxed text-gray-500">{{ t('adminAutomationHint') }}</p>
+
+          <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <!-- On or paused: the one switch, and it says what pressing it does rather than what state it is in. -->
+            <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <p class="text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminScanState') }}</p>
+              <button
+                type="button"
+                class="hoa-tab hoa-liquid-glass mt-1 w-full px-3 py-1.5 text-xs font-semibold"
+                :class="{ 'hoa-tab-active': automationDraft.enabled }"
+                :disabled="!automation"
+                @click="automationDraft.enabled = !automationDraft.enabled"
+              >
+                {{ automationDraft.enabled ? t('adminScanTogglePause') : t('adminScanToggleEnable') }}
+              </button>
+              <p class="mt-1 text-[10px] text-gray-500">
+                {{ automationDraft.enabled ? t('adminScanEnabledHint') : t('adminScanPausedHint') }}
+              </p>
+            </div>
+
+            <label class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <span class="text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminScanInterval') }}</span>
+              <select
+                v-model.number="automationDraft.intervalMs"
+                class="mt-1 w-full rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 text-xs font-semibold text-white outline-none focus:border-wow-gold/60"
+                :disabled="!automation"
+              >
+                <option v-for="option in automation?.limits.intervalsMs ?? []" :key="option" :value="option">
+                  {{ minutes(option) }}
+                </option>
+              </select>
+            </label>
+
+            <label class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <span class="text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminScanBatch') }}</span>
+              <input
+                v-model.number="automationDraft.batchSize"
+                type="number"
+                inputmode="numeric"
+                :min="automation?.limits.batchMin ?? 1"
+                :max="automation?.limits.batchMax ?? 10"
+                :disabled="!automation"
+                class="mt-1 w-full rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 text-xs font-semibold tabular-nums text-white outline-none focus:border-wow-gold/60"
+              >
+              <p class="mt-1 text-[10px] text-gray-500">
+                {{ t('adminScanBatchRange') }} {{ num(automation?.limits.batchMin) }}–{{ num(automation?.limits.batchMax) }}
+              </p>
+            </label>
+
+            <div class="rounded-xl border border-white/10 bg-black/20 p-3">
+              <p class="text-[11px] uppercase tracking-wider text-gray-500">{{ t('adminScanNextRun') }}</p>
+              <p class="mt-1 text-sm font-semibold tabular-nums text-gray-100">
+                {{ clock(automation?.scheduler.nextRunAt) }}
+              </p>
+              <p class="mt-1 text-[10px] text-gray-500">
+                {{ t('adminScanLastTick') }}: {{ clock(automation?.scheduler.lastTickAt) }}
+              </p>
+            </div>
+          </div>
+
+          <!-- What the last pass did: the *batch*, not the schedule. The counters are the same ones the Background
+               sync section prints, shown here because the switch and the thing it switched on should be read in
+               one place. -->
+          <div class="mt-3 grid gap-x-4 gap-y-1 text-[11px] sm:grid-cols-2 lg:grid-cols-3">
+            <p>
+              <span class="text-gray-500">{{ t('adminRowSyncLastStart') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ clock(diagnostics?.sync.lastStartAt) }}</span>
+            </p>
+            <p>
+              <span class="text-gray-500">{{ t('adminRowSyncLastFinish') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ clock(diagnostics?.sync.lastFinishAt) }}</span>
+            </p>
+            <p>
+              <span class="text-gray-500">{{ t('adminRowSyncDuration') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ milliseconds(diagnostics?.sync.lastDurationMs) }}</span>
+            </p>
+            <p>
+              <span class="text-gray-500">{{ t('adminRowSyncTicks') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.timerTicks) }}</span>
+              <span class="text-gray-500">· {{ t('adminRowSyncTicksSkipped') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.timerSkipped) }}</span>
+            </p>
+            <p class="sm:col-span-2">
+              <span class="text-gray-500">{{ t('adminRowSyncChecked') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.checked) }}</span>
+              <span class="text-gray-500">· {{ t('adminRowSyncUpdated') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.updated) }}</span>
+              <span class="text-gray-500">· {{ t('adminRowSyncSkipped') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.skipped) }}</span>
+              <span class="text-gray-500">· {{ t('adminRowSyncErrors') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.errors) }}</span>
+            </p>
+            <p class="sm:col-span-2 lg:col-span-3">
+              <span class="text-gray-500">{{ t('adminRowSyncParked') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ num(diagnostics?.sync.parked) }}</span>
+              <span class="text-gray-500">· {{ t('adminRowSyncNextRetry') }}:</span>
+              <span class="tabular-nums text-gray-300">{{ clock(diagnostics?.sync.nextRetryAt) }}</span>
+              <span class="text-gray-500">· {{ t('adminRowSyncLastError') }}:</span>
+              <span class="text-gray-300">
+                {{ diagnostics?.sync.lastErrorCategory ?? t('adminNever') }}
+                <span v-if="diagnostics?.sync.lastErrorAt" class="tabular-nums">
+                  · {{ clock(diagnostics?.sync.lastErrorAt) }}
+                </span>
+              </span>
+            </p>
+          </div>
+
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="hoa-tab hoa-liquid-glass px-4 py-2 text-xs font-semibold"
+              :disabled="automationSaving || !automation"
+              @click="saveAutomation"
+            >
+              {{ automationSaving ? t('adminScanSaving') : t('adminScanSave') }}
+            </button>
+
+            <!-- The server's own answer, not the form's: what changed, and what the scheduler says now. -->
+            <p v-if="automationSaved" class="text-[11px] font-semibold text-emerald-400">
+              {{ t('adminScanSaved') }}:
+              {{ minutes(automationSaved.from.characterScan.intervalMs) }} →
+              {{ minutes(automationSaved.to.characterScan.intervalMs) }},
+              {{ num(automationSaved.from.characterScan.batchSize) }} →
+              {{ num(automationSaved.to.characterScan.batchSize) }} ·
+              {{ automationSaved.to.characterScan.enabled ? t('adminScanArmed') : t('adminScanPaused') }} ·
+              {{ t('adminScanNextRun') }} {{ clock(automation?.scheduler.nextRunAt) }}
+            </p>
+            <p v-else-if="automationSaveErrors.length" class="text-[11px] font-semibold text-red-400">
+              {{ t('adminScanInvalid') }}: <span class="font-mono">{{ automationSaveErrors.join(', ') }}</span>
+            </p>
+            <p v-else-if="automationSaveFailed" class="text-[11px] font-semibold text-red-400">
+              {{ t('adminScanSaveFailed') }}
+            </p>
+          </div>
+
+          <!-- One batch, on demand. It is the scanner's own batch: the same due characters, the same saved batch
+               size, the same retry state and the same one-pass-at-a-time claim - so a press can never read more
+               than one batch and can never run beside the timer. -->
+          <div class="mt-4 rounded-xl border border-wow-gold/25 bg-wow-gold/[0.06] p-3">
+            <p class="text-xs font-bold text-wow-goldLight">{{ t('adminRunTitle') }}</p>
+            <p class="mt-0.5 text-[11px] leading-relaxed text-gray-400">{{ t('adminRunHint') }}</p>
+            <p class="mt-1 text-[11px] text-gray-300">
+              {{ t('adminRunEstimate') }}: {{ num(automation?.estimate.due) }} {{ t('adminRunDue') }} ·
+              {{ num(automation?.estimate.batchSize) }} × {{ num(automation?.limits.requestsPerCharacter) }} ≈
+              {{ num(automation?.estimate.potentialRequests) }} {{ t('adminRunRequests') }}
+            </p>
+
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <template v-if="!runConfirming">
+                <button
+                  type="button"
+                  class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs font-semibold"
+                  :disabled="runState === 'running' || !automation"
+                  @click="runConfirming = true"
+                >
+                  {{ runState === 'running' ? t('adminRunRunning') : t('adminRunGo') }}
+                </button>
+              </template>
+
+              <template v-else>
+                <button
+                  type="button"
+                  class="hoa-tab hoa-liquid-glass hoa-tab-active px-3 py-1.5 text-xs font-semibold"
+                  @click="runScanNow"
+                >
+                  {{ t('adminRunConfirm') }}
+                </button>
+                <button
+                  type="button"
+                  class="hoa-tab hoa-liquid-glass px-3 py-1.5 text-xs font-semibold"
+                  @click="runConfirming = false"
+                >
+                  {{ t('adminCancel') }}
+                </button>
+                <span class="basis-full text-[11px] font-semibold text-amber-300">{{ t('adminRunWarning') }}</span>
+              </template>
+
+              <p v-if="runState === 'done' && runResult" class="basis-full text-[11px] font-semibold text-emerald-400">
+                {{ t('adminRunDone') }}: {{ t('adminRowSyncChecked') }} {{ num(runResult.counters.checked) }},
+                {{ t('adminRowSyncUpdated') }} {{ num(runResult.counters.updated) }},
+                {{ t('adminRowSyncSkipped') }} {{ num(runResult.counters.skipped) }},
+                {{ t('adminRowSyncErrors') }} {{ num(runResult.counters.errors) }} ·
+                {{ t('adminRunRemaining') }} {{ num(runResult.due) }}
+              </p>
+              <p v-else-if="runState === 'busy'" class="text-[11px] font-semibold text-amber-300">
+                {{ t('adminRunBusy') }}
+              </p>
+              <p v-else-if="runState === 'throttled'" class="text-[11px] font-semibold text-amber-300">
+                {{ t('adminRunThrottled') }}
+              </p>
+              <p v-else-if="runState === 'failed'" class="text-[11px] font-semibold text-red-400">
+                {{ t('adminRunFailed') }}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Every automation the site really has, one row each - including the ones the panel cannot switch, with
+             the reason rather than a dead toggle. It is the inventory the code was searched for, drawn from the
+             live state: the scanner's row reads the same scheduler and the same pass counters as the card above. -->
+        <section class="hoa-panel rounded-2xl p-4 sm:p-5">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-white sm:text-base">{{ t('adminJobsTitle') }}</h2>
+          <p class="mt-1 text-[11px] leading-relaxed text-gray-500">{{ t('adminJobsHint') }}</p>
+
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full min-w-[36rem] text-left text-[11px]">
+              <thead class="text-[10px] uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th class="py-1 pr-3 font-semibold">{{ t('adminJobsColName') }}</th>
+                  <th class="py-1 pr-3 font-semibold">{{ t('adminJobsColStatus') }}</th>
+                  <th class="py-1 pr-3 font-semibold">{{ t('adminJobsColSchedule') }}</th>
+                  <th class="py-1 pr-3 font-semibold">{{ t('adminJobsColLastRun') }}</th>
+                  <th class="py-1 pr-3 font-semibold">{{ t('adminJobsColResult') }}</th>
+                  <th class="py-1 font-semibold">{{ t('adminJobsColControl') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="job in AUTOMATION_JOBS" :key="job.id" class="border-t border-white/5 align-top">
+                  <td class="py-1.5 pr-3">
+                    <span class="font-semibold text-gray-100">{{ t(job.nameKey) }}</span>
+                    <span class="block text-[10px] text-gray-500">{{ t(job.kindKey) }}</span>
+                  </td>
+                  <td class="py-1.5 pr-3 text-gray-300">{{ jobStatus(job) }}</td>
+                  <td class="py-1.5 pr-3 tabular-nums text-gray-300">{{ jobSchedule(job) }}</td>
+                  <td class="py-1.5 pr-3 tabular-nums text-gray-300">
+                    {{ job.id === 'character_scan' ? clock(diagnostics?.sync.lastStartAt) : '—' }}
+                  </td>
+                  <td class="py-1.5 pr-3 tabular-nums text-gray-300">
+                    <template v-if="job.id === 'character_scan'">
+                      {{ num(diagnostics?.sync.checked) }} / {{ num(diagnostics?.sync.errors) }}
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="py-1.5 text-gray-400">
+                    <span v-if="job.managed">{{ t('adminJobsControlCard') }}</span>
+                    <span v-else>
+                      {{ t('adminJobNotManaged') }}
+                      <span class="block text-[10px] text-gray-500">{{ t(job.reasonKey) }}</span>
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <!-- The last twenty entries of the in-process log: a note, a worry or a failure, with the category
              that says which part of the site filed it. The buffer is bounded and dies with the process. -->

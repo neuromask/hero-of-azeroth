@@ -15,6 +15,9 @@ import { recordDiagnostic, recordSyncError, beginSyncPass, finishSyncPass } from
 // How long a character that failed is left alone - the thing that stops the same unreadable five from taking
 // every pass for ever (`./syncRetry`).
 import { clearCharacterSyncFailure, parkCharacterSyncFailure } from './syncRetry'
+// The tag every Blizzard call of a pass carries, so the panel can tell the timer's traffic from a page's
+// (`./blizzardSource`).
+import { runWithBlizzardSource } from './blizzardSource'
 // The reading's own shape, so the outcome the background pass counts can say what the profile was without
 // repeating `CharacterData`'s thirty fields here.
 import type { CharacterData } from './blizzard'
@@ -423,6 +426,55 @@ interface DueCharacter extends CharacterRow {
 }
 
 /**
+ * Who a pass may read, as one predicate - shared by the pass itself and by the panel's estimate.
+ *
+ * Written once because the two must not disagree: an estimate computed from a slightly different condition is an
+ * operator being told a different number than the pass will act on. It is the *conditions* only - the caller adds
+ * its own scope and its own `LIMIT`/`COUNT`.
+ *
+ *   - a character whose newest reading is missing or a day old, and
+ *   - one the retry state is not holding back (a character Blizzard refused gains no reading, so without this it
+ *     stayed due for ever and took a slot in every batch - see `./syncRetry`), and
+ *   - one an account holds: a guest's reading is taken when somebody opens the page, and a background pass that
+ *     refreshed strangers would spend the site's quota on nobody's roster.
+ */
+const DUE_PREDICATE = `NOT EXISTS (
+    SELECT 1 FROM snapshots s
+     WHERE s.character_id = c.id AND s.taken_at > ?
+  )
+  AND (c.sync_retry_at IS NULL OR c.sync_retry_at <= ?)
+  AND c.user_id IS NOT NULL`
+
+/** The two moments the predicate is asked about, in the order its placeholders appear. */
+function dueMoments(): [number, number] {
+  return [nowSec() - 86400, nowSec()]
+}
+
+/**
+ * How many characters a pass would take right now.
+ *
+ * One `COUNT` on the predicate the pass uses, which is what the panel shows before a manual run - an estimate an
+ * operator can trust because it is the very condition the pass will act on. It reads the database and nothing
+ * else: no Blizzard call, no cache, no second connection.
+ */
+export function countDueCharacters(userId?: number): number {
+  try {
+    const scope = userId ? 'AND c.user_id = ?' : ''
+    const params: unknown[] = dueMoments()
+    if (userId) params.push(userId)
+
+    const row = useDb()
+      .prepare(`SELECT COUNT(*) AS count FROM characters c WHERE ${DUE_PREDICATE} ${scope}`)
+      .get(...(params as never[])) as { count: number } | undefined
+
+    return Number(row?.count || 0)
+  } catch {
+    // A panel that cannot count is a panel with a dash in it, not a broken page.
+    return 0
+  }
+}
+
+/**
  * Refreshes a handful of characters whose newest reading is missing or a day old.
  *
  * The sign-in writes names, not figures, so this is what fills item levels, M+ ratings and
@@ -438,7 +490,7 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
   let due: DueCharacter[]
   try {
     const scope = userId ? 'AND c.user_id = ?' : ''
-    const params: unknown[] = [nowSec() - 86400, nowSec()]
+    const params: unknown[] = dueMoments()
     if (userId) params.push(userId)
     params.push(limit)
 
@@ -446,21 +498,7 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
       .prepare(
         `SELECT c.id, c.user_id, c.region, c.realm_slug, c.name, c.name_key, c.is_main
            FROM characters c
-          WHERE NOT EXISTS (
-                  SELECT 1 FROM snapshots s
-                   WHERE s.character_id = c.id AND s.taken_at > ?
-                )
-                -- And the characters the retry state has parked are left out entirely, which is the whole point
-                -- of it: a character Blizzard has just refused gains no reading, so without this it stayed due
-                -- for ever, took a slot in every batch (the order below is fixed), and hid every character
-                -- behind it. It is not "skipped" - it is not looked at, and the panel counts it apart
-                -- (see syncRetry, and "parked" in the diagnostics).
-                AND (c.sync_retry_at IS NULL OR c.sync_retry_at <= ?)
-                -- The accounts' characters only: a guest's reading is taken when somebody opens the page, and
-                -- a background pass that refreshed strangers would spend the site's Blizzard quota on nobody's
-                -- roster. Guests are also the ones this pass cannot finish for - there is no account to hand the
-                -- result to.
-                AND c.user_id IS NOT NULL
+          WHERE ${DUE_PREDICATE}
                 ${scope}
           ORDER BY c.is_main DESC, COALESCE(c.level, 0) DESC, c.last_seen_at DESC
           LIMIT ?`
@@ -508,21 +546,30 @@ export async function syncDueCharacters(limit = 5, locale = 'en_US', userId?: nu
  * (`./adminDiagnostics`), which is the only place that remembers them - nothing here writes a status row.
  */
 export async function runSyncPass(
-  source: 'timer' | 'on-demand',
+  source: 'timer' | 'on-demand' | 'manual',
   limit = 5,
   locale = 'en_US',
   userId?: number
 ): Promise<SyncPassCounters | null> {
   if (!beginSyncPass(source)) return null
 
-  try {
-    const counters = await syncDueCharacters(limit, locale, userId)
-    finishSyncPass(source, counters)
-    return counters
-  } catch {
-    recordSyncError('sync')
-    recordDiagnostic({ level: 'error', category: 'sync', message: 'background sync pass failed' })
-    finishSyncPass(source, { checked: 0, updated: 0, skipped: 0, errors: 1 })
-    return null
-  }
+  /**
+   * Everything this pass spends is attributed to the thing that asked for it. The site's own timer and an
+   * administrator's manual pass are the *scanner* - the same batch, whoever started it, and the panel's sync card
+   * says which - while a page asking for its roster is its own source (`./blizzardSource`).
+   */
+  const blizzardSource = source === 'on-demand' ? 'profile_sync' : 'background_scan'
+
+  return runWithBlizzardSource(blizzardSource, async () => {
+    try {
+      const counters = await syncDueCharacters(limit, locale, userId)
+      finishSyncPass(source, counters)
+      return counters
+    } catch {
+      recordSyncError('sync')
+      recordDiagnostic({ level: 'error', category: 'sync', message: 'background sync pass failed' })
+      finishSyncPass(source, { checked: 0, updated: 0, skipped: 0, errors: 1 })
+      return null
+    }
+  })
 }

@@ -12,6 +12,9 @@ import { randomUUID } from 'node:crypto'
 import type { BlizzardRegion } from '~~/server/utils/params'
 import type { SessionData } from '~~/server/utils/session'
 import { debugLog } from '~~/server/utils/logger'
+// The two reads below are the account's own, and are counted under `account_refresh`
+// (`server/utils/blizzardSource`).
+import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 
 /** How long the sign-in survives before it has to be repeated. */
 const SESSION_SECONDS = 60 * 60 * 24 * 30
@@ -75,7 +78,11 @@ export default defineEventHandler(async (event) => {
     // never fails the sign-in: the reader lands on their profile, where the roster's own button
     // retries it, and the log says what came back.
     try {
-      const sync = await upsertAccountCharacters(user.id, region, tokens.access_token)
+      // Tagged as the account's own read, so the panel can tell the sign-in's cost from the timer's
+      // (`server/utils/blizzardSource`).
+      const sync = await runWithBlizzardSource('account_refresh', () =>
+        upsertAccountCharacters(user.id, region, tokens.access_token)
+      )
       debugLog('[auth/callback] roster', JSON.stringify(sync))
     } catch (syncError: any) {
       console.error('[auth/callback] roster read failed:', syncError?.data || syncError?.message || syncError)
@@ -89,7 +96,7 @@ export default defineEventHandler(async (event) => {
     // And the account's own collections, which is what the profile's totals are read from: they are
     // the account's, not a character's, so this is the one place the true numbers come from.
     try {
-      await syncAccountCollections(user.id, region, tokens.access_token)
+      await runWithBlizzardSource('account_refresh', () => syncAccountCollections(user.id, region, tokens.access_token))
     } catch (collectionsError: any) {
       console.error(
         '[auth/callback] collections read failed:',

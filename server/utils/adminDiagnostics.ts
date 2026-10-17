@@ -29,6 +29,7 @@ import {
   BLIZZARD_BUCKET_COUNT,
   BLIZZARD_BUCKET_MS,
   BLIZZARD_CATEGORIES,
+  BLIZZARD_SOURCES,
   DIAGNOSTIC_CATEGORIES,
   DIAGNOSTIC_LOG_LIMIT,
   DIAGNOSTIC_REPEAT_WINDOW_MS,
@@ -39,6 +40,8 @@ import {
   type BlizzardCategory,
   type BlizzardCategoryReport,
   type BlizzardReport,
+  type BlizzardSource,
+  type BlizzardSourceReport,
   type BlizzardStatusCount,
   type DatabaseFileReport,
   type DiagnosticCategory,
@@ -69,8 +72,8 @@ export interface DiagnosticBuffers {
   sync: SyncReport
 }
 
-/** Which of the two passes ran: the site's own timer, or a page asking for its roster. */
-export type SyncSource = 'timer' | 'on-demand'
+/** Which of the three things started a pass: the site's own timer, a page, or an administrator. */
+export type SyncSource = 'timer' | 'on-demand' | 'manual'
 
 /** The log: a ring of at most `DIAGNOSTIC_LOG_LIMIT` entries, oldest first. */
 const log: DiagnosticEntry[] = []
@@ -103,6 +106,30 @@ const buckets = new Map<number, { calls: number; failed: number; sumMs: number }
  */
 const byCategory = new Map<BlizzardCategory, { calls: number; ok: number; failed: number; sumMs: number }>()
 const byStatus = new Map<number, number>()
+
+/**
+ * The same counters cut by *what asked* for the call, keyed by the closed vocabulary in
+ * `#shared/data/adminDiagnostics` - eight possible keys, so this map cannot grow with traffic either.
+ *
+ * `lastError` is a word (`timeout`, `rate-limited`, `server-5xx`, `client-4xx`, `network`) and never a status
+ * body or a URL: an operator needs to know which *kind* of failure a source is having, not what Blizzard said
+ * about a character.
+ */
+const bySource = new Map<
+  BlizzardSource,
+  {
+    calls: number
+    ok: number
+    failed: number
+    rateLimited: number
+    timeouts: number
+    serverErrors: number
+    sumMs: number
+    lastCallAt: number | null
+    lastMs: number | null
+    lastError: string | null
+  }
+>()
 
 /** The last hour of process memory in twelve fixed slots, keyed the same way the Blizzard buckets are. */
 const memorySlots = new Map<number, MemorySample>()
@@ -290,6 +317,8 @@ export function recordBlizzardCall(input: {
   status?: number
   timeout?: boolean
   category?: BlizzardCategory | string
+  /** What asked for the call (`./blizzardSource`); an unattributed call is `other`. */
+  source?: BlizzardSource | string
 }): void {
   const now = Date.now()
   const at = nowSec()
@@ -300,6 +329,9 @@ export function recordBlizzardCall(input: {
   const duration = Number.isFinite(input.durationMs) ? Math.max(0, Math.round(input.durationMs)) : 0
   const category = (BLIZZARD_CATEGORIES as readonly string[]).includes(String(input.category))
     ? (input.category as BlizzardCategory)
+    : 'other'
+  const source = (BLIZZARD_SOURCES as readonly string[]).includes(String(input.source))
+    ? (input.source as BlizzardSource)
     : 'other'
 
   blizzard.total += 1
@@ -313,7 +345,7 @@ export function recordBlizzardCall(input: {
   bucket.calls += 1
   bucket.sumMs += duration
 
-  // The two breakdowns are keyed by a closed vocabulary, so they are bounded by construction.
+  // The three breakdowns are keyed by a closed vocabulary, so they are bounded by construction.
   const cut = byCategory.get(category) ?? { calls: 0, ok: 0, failed: 0, sumMs: 0 }
   cut.calls += 1
   cut.sumMs += duration
@@ -321,26 +353,65 @@ export function recordBlizzardCall(input: {
 
   byStatus.set(status, (byStatus.get(status) ?? 0) + 1)
 
+  // And the attribution: the same call counted under the thing that asked for it, so "sixty-five requests and no
+  // timer ticks" has an answer rather than a shrug.
+  const origin = bySource.get(source) ?? {
+    calls: 0,
+    ok: 0,
+    failed: 0,
+    rateLimited: 0,
+    timeouts: 0,
+    serverErrors: 0,
+    sumMs: 0,
+    lastCallAt: null,
+    lastMs: null,
+    lastError: null
+  }
+  origin.calls += 1
+  origin.sumMs += duration
+  origin.lastCallAt = at
+  origin.lastMs = duration
+
   if (input.ok) {
     blizzard.ok += 1
     blizzard.lastOkAt = at
     cut.ok += 1
+    origin.ok += 1
   } else {
     bucket.failed += 1
     blizzard.failed += 1
     cut.failed += 1
+    origin.failed += 1
+    origin.lastError = failureReason({ status, timeout: Boolean(input.timeout) })
 
-    if (input.timeout) blizzard.timeouts += 1
-    else if (status === 429) blizzard.rateLimited += 1
-    else if (status >= 500) blizzard.serverErrors += 1
+    if (input.timeout) {
+      blizzard.timeouts += 1
+      origin.timeouts += 1
+    } else if (status === 429) {
+      blizzard.rateLimited += 1
+      origin.rateLimited += 1
+    } else if (status >= 500) {
+      blizzard.serverErrors += 1
+      origin.serverErrors += 1
+    }
 
     blizzard.lastErrorCategory = 'blizzard'
   }
 
+  bySource.set(source, origin)
   buckets.set(slot, bucket)
 
   const cutoff = slotOf(now) - (BLIZZARD_BUCKET_COUNT - 1) * BLIZZARD_BUCKET_MS
   for (const held of buckets.keys()) if (held < cutoff) buckets.delete(held)
+}
+
+/** The kind of failure, as one word an operator can act on - never the status body. */
+function failureReason(input: { status: number; timeout: boolean }): string {
+  if (input.timeout) return 'timeout'
+  if (input.status === 429) return 'rate-limited'
+  if (input.status >= 500) return 'server-5xx'
+  if (input.status >= 400) return 'client-4xx'
+  return 'network'
 }
 
 /**
@@ -523,6 +594,25 @@ function blizzardReport(): BlizzardReport {
     byStatus: [...byStatus.entries()]
       .map(([status, calls]): BlizzardStatusCount => ({ status, calls }))
       .sort((left, right) => right.calls - left.calls),
+    // The attribution, in the same order as the vocabulary so two readings of the panel compare row by row.
+    bySource: (BLIZZARD_SOURCES as readonly BlizzardSource[])
+      .filter((source) => (bySource.get(source)?.calls ?? 0) > 0)
+      .map((source): BlizzardSourceReport => {
+        const origin = bySource.get(source)!
+        return {
+          source,
+          calls: origin.calls,
+          ok: origin.ok,
+          failed: origin.failed,
+          rateLimited: origin.rateLimited,
+          timeouts: origin.timeouts,
+          serverErrors: origin.serverErrors,
+          lastCallAt: origin.lastCallAt,
+          lastMs: origin.lastMs,
+          averageMs: origin.calls ? Math.round(origin.sumMs / origin.calls) : null,
+          lastError: origin.lastError
+        }
+      }),
     toleratedAbsences: blizzard.toleratedAbsences
   }
 }
@@ -766,6 +856,7 @@ export function clearAdminDiagnostics(): void {
   buckets.clear()
   byCategory.clear()
   byStatus.clear()
+  bySource.clear()
   memorySlots.clear()
   peakRssBytes = 0
 

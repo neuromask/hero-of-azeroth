@@ -10,10 +10,25 @@
 import type { CharacterData } from '~~/server/utils/blizzard'
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
 import { bumpProfileRevision } from '~~/server/utils/profileRevision'
+// The tag every Blizzard call of this request carries - a page view, or the reader's own Refresh
+// (`server/utils/blizzardSource`), which is what the panel cuts its API counters by.
+import { characterReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import type { H3Event } from 'h3'
 
 const profiles = createSwrCache<CharacterData>(2 * 60 * 60 * 1000)
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler((event) =>
+  runWithBlizzardSource(characterReadSource(parseBoolFlag(getQuery(event).force)), () => readCharacter(event))
+)
+
+/**
+ * The read itself, under the tag its caller earned.
+ *
+ * `?force=true` is the Refresh button and is counted apart from an ordinary page view: it is the one public act
+ * that spends the site's quota on purpose, and an operator reading the panel should be able to see how much of
+ * the traffic was a person pressing a button rather than a crawler opening a page.
+ */
+async function readCharacter(event: H3Event) {
   const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
   const locale = apiLocale(query)
@@ -82,4 +97,4 @@ export default defineEventHandler(async (event) => {
   } catch (err) {
     mapBlizzardError(err, 'character')
   }
-})
+}

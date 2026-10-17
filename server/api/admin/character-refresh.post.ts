@@ -22,6 +22,9 @@
  */
 // The shape one read answers with, named explicitly so the endpoint does not depend on a global for a type.
 import type { CharacterRefresh } from '~~/server/utils/accountSync'
+// An administrator's own press, counted apart from the timer and from a reader's page view.
+import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import type { H3Event } from 'h3'
 
 /** The name this endpoint takes in the single manual-operation slot both maintenance actions share. */
 const MANUAL_OPERATION = 'character-refresh'
@@ -57,7 +60,7 @@ export default defineEventHandler(async (event) => {
 
     let read: CharacterRefresh
     try {
-      read = await refreshCharacterStatsWithOutcome(row)
+      read = await runWithBlizzardSource('admin_manual_refresh', () => refreshCharacterStatsWithOutcome(row))
     } catch (error) {
       recordManualRefresh('failed')
       recordDiagnostic({

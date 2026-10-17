@@ -1,50 +1,23 @@
 /**
- * Fills in the stats a sign-in could not wait for, on a timer.
+ * Starts the site's one periodic job, from whatever the settings say.
  *
- * The sign-in writes names, not figures: an account with thirty alts is one light account summary
- * at sign-in, and everything expensive - item level, M+ rating, collections - is left to this pass
- * and to the profile page's own on-demand read (`server/api/profile/sync.post.ts`). A handful of
- * characters every few minutes is what keeps the work off every request path while still filling a
- * roster in on its own.
+ * The timer itself lives in `server/utils/characterScanScheduler.ts`, because it is now something an administrator
+ * can stop, slow down or re-batch while the site is running - and a plugin body runs once and has no way back into
+ * a timer it created. This file is the wiring: read the stored settings, put them into force, and let the
+ * scheduler own the single timer from there (`applyCharacterScan` is what every save calls too).
  *
- * It is a plugin rather than a Nitro task because the built `node-server` is what actually runs on
- * the host: a plugin's timer needs no scheduler, no external cron and no task runtime, and
- * `unref` keeps it from holding the process open on its own.
+ * Deliberately a plugin rather than a Nitro task: the built `node-server` is what actually runs on the host, and a
+ * plugin needs no scheduler, no external cron and no task runtime. The scheduler's timer is `unref`'d, so it is
+ * never the reason the process stays up by itself.
  *
- * This is not a queue, and it says so: there is no task list and no backlog - the pass simply reads the
- * characters whose newest reading is missing or a day old, ten at a time, and the next tick takes the next ten.
- * What the timer *does* keep is the pass's own state, in the diagnostics module (`server/utils/adminDiagnostics`):
- * whether a pass is running, what started it, and how many characters it read, moved, found unchanged and
- * failed on. The panel prints exactly that, and never a "queue length" there is nothing behind.
- *
- * The claim (`beginSyncPass`, taken by `runSyncPass`) is shared with the on-demand run, so a page asking for its
- * roster while the timer is mid-pass is *refused* rather than given a second pass over the same characters: one
- * claim, one pass, whichever of the two asked for it.
+ * A failure here is a site that serves pages but does not scan: the start is therefore logged rather than thrown,
+ * and the panel shows the scanner as stopped - which is the honest state, not a silent one.
  */
-import { SYNC_BATCH, SYNC_INTERVAL_MS } from '#shared/data/adminDiagnostics'
-
 export default defineNitroPlugin(() => {
-  const timer = setInterval(() => {
-    // The pass takes the claim itself, and answers `null` when one is already running - the timer's own or a
-    // page's - which is the whole of what this tick has to do in that case.
-    //
-    // The tick is counted either way (`recordTimerTick`), and that is a deliberate addition rather than
-    // bookkeeping: a pass that never ran because the timer never fired and a pass that was refused because the
-    // previous one was still running look *identical* in a count of passes, and they are entirely different
-    // incidents - one is a stalled event loop, the other is a pass that has hung. The panel now prints both
-    // numbers, so the next operator does not have to infer which one they are looking at.
-    //
-    // The `catch` is not decoration. A rejected promise nobody handles is, since Node 15, a process that *dies*
-    // - and this is the one promise in the site that nothing awaits. A pass that cannot even be started is
-    // therefore filed and the timer left running, rather than taking the whole site down with it on a tick
-    // nobody was watching.
-    void runSyncPass('timer', SYNC_BATCH)
-      .then((counters) => recordTimerTick(counters === null))
-      .catch(() => {
-        recordDiagnostic({ level: 'error', category: 'sync', message: 'background sync pass could not be started' })
-      })
-  }, SYNC_INTERVAL_MS)
-
-  // The timer must never be the reason the process stays up by itself.
-  timer.unref?.()
+  try {
+    startCharacterScan()
+  } catch (error) {
+    console.error(`[sync] the character scanner did not start: ${error instanceof Error ? error.message : String(error)}`)
+    recordDiagnostic({ level: 'error', category: 'sync', message: 'character scanner did not start' })
+  }
 })

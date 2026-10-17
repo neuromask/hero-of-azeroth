@@ -3,6 +3,9 @@ import { ACHIEVEMENT_POINTS_TOTAL } from './achievements'
 // The process's own counters and log, written beside every call this module makes and read by the admin
 // panel's diagnostics (`server/utils/adminDiagnostics`). A plain import, like the rest of this file's.
 import { recordBlizzardCall, recordDiagnostic, recordToleratedAbsence } from './adminDiagnostics'
+// What asked for the call being made, carried down the async chain by the entry point that knows
+// (`server/utils/blizzardSource`).
+import { currentBlizzardSource } from './blizzardSource'
 // Imported rather than auto-imported: the environment in front of the frozen runtime config is a rule of this
 // module's own (`server/utils/runtimeEnv`), and a plain import keeps it working under the unit tests, which
 // have no Nitro globals to install.
@@ -38,16 +41,18 @@ export function callBlizzard<T>(url: string, options: Record<string, unknown> = 
   // it expects, and this hands that answer back unchanged.
   const startedAtMs = Date.now()
   const category = endpointCategory(url)
+  // Read once, here: the tag belongs to the call chain, and the counters below are the only place it is kept.
+  const source = currentBlizzardSource()
 
   return ($fetch(url, { timeout: BLIZZARD_TIMEOUT_MS, ...options }) as Promise<T>).then(
     (answer) => {
-      recordBlizzardCall({ ok: true, durationMs: Date.now() - startedAtMs, category })
+      recordBlizzardCall({ ok: true, durationMs: Date.now() - startedAtMs, category, source })
       return answer
     },
     (error: unknown) => {
       const status = upstreamStatus(error)
       const timeout = isTimeout(error)
-      recordBlizzardCall({ ok: false, durationMs: Date.now() - startedAtMs, status, timeout, category })
+      recordBlizzardCall({ ok: false, durationMs: Date.now() - startedAtMs, status, timeout, category, source })
 
       // A 404 is Blizzard answering honestly about a character that is not there, so it is not a diagnostic:
       // filing one per mistyped name would bury the failures that say something is wrong with the site.

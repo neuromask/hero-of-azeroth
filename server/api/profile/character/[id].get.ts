@@ -7,7 +7,17 @@
  * single reading - and the second click on the same character is served from the site's two-hour
  * profile cache by the reader below.
  */
+import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import type { H3Event } from 'h3'
+
 export default defineEventHandler(async (event) => {
+  // A character opened from the account's own roster is still a *profile read* for the panel: the tag is what the
+  // counters are cut by, and this is not the timer's work (`server/utils/blizzardSource`).
+  return runWithBlizzardSource('profile_read', () => readOwnCharacter(event))
+})
+
+/** The read itself, under the tag of the page that asked for it. */
+async function readOwnCharacter(event: H3Event) {
   const user = await requireUser(event)
   const id = Number(getRouterParam(event, 'id'))
   const locale = (getQuery(event).locale as string) || 'en_US'
@@ -37,4 +47,4 @@ export default defineEventHandler(async (event) => {
     })
     throw error
   }
-})
+}

@@ -108,8 +108,8 @@ export interface SyncPassCounters {
 /** A one-minute-resolution view of a pass, kept small on purpose. */
 export interface SyncReport extends SyncPassCounters {
   running: boolean
-  /** What started the pass: the site's own timer, or a page asking for its roster. */
-  source: 'timer' | 'on-demand' | null
+  /** What started the pass: the site's own timer, a page asking for its roster, or an administrator. */
+  source: 'timer' | 'on-demand' | 'manual' | null
   lastStartAt: number | null
   lastFinishAt: number | null
   lastDurationMs: number | null
@@ -133,6 +133,63 @@ export interface SyncReport extends SyncPassCounters {
   nextRetryAt: number | null
   /** The administrator's own single-character refreshes, counted apart from the passes. */
   manual: { count: number; lastAt: number | null; lastOutcome: 'updated' | 'unchanged' | 'failed' | null }
+}
+
+/**
+ * What asked for a Blizzard call, as a fixed vocabulary.
+ *
+ * The counters alone could say *what* was called and *what came back*, never *why it happened* - which is the
+ * question an operator has when a count is higher than the schedule explains. So every call is tagged at the
+ * place that knows the answer (the timer, the profile page, a card, an administrator's own press) and the tag
+ * travels down to the wrapper unseen by the code in between (`server/utils/blizzardSource.ts`, an
+ * `AsyncLocalStorage`).
+ *
+ * The list is closed and every entry has a producer in this codebase:
+ *
+ *   background_scan      the site's own timer (`server/plugins/characterSync.ts`)
+ *   profile_sync         the profile page asking for its roster to be filled (`/api/profile/sync`)
+ *   profile_read         a page, a shelf or the profile reading a character (public reads)
+ *   profile_refresh      the reader pressing Refresh (`?force=true`) on a character
+ *   account_refresh      the account's roster and collections being re-read (sign-in, `/api/profile/refresh`)
+ *   admin_manual_refresh an administrator refreshing one character from the panel
+ *   card_render          a card being drawn, which reads the character it draws
+ *   other                anything not tagged - a new caller that has not been classified yet
+ *
+ * `other` is not a dumping ground for convenience: it is the honest answer for a call nobody has attributed,
+ * and a non-zero `other` beside a healthy total is the signal that a new producer needs a tag.
+ */
+export const BLIZZARD_SOURCES = [
+  'background_scan',
+  'profile_sync',
+  'profile_read',
+  'profile_refresh',
+  'account_refresh',
+  'admin_manual_refresh',
+  'card_render',
+  'other'
+] as const
+
+export type BlizzardSource = (typeof BLIZZARD_SOURCES)[number]
+
+/** One row of the per-source breakdown. */
+export interface BlizzardSourceReport {
+  source: BlizzardSource
+  calls: number
+  ok: number
+  failed: number
+  rateLimited: number
+  timeouts: number
+  serverErrors: number
+  /** The newest call from this source, in seconds since the epoch. */
+  lastCallAt: number | null
+  /** The newest call's latency, in milliseconds. */
+  lastMs: number | null
+  averageMs: number | null
+  /**
+   * The safe category of the last failure from this source, or `null` when it has not failed: a word, never a
+   * status body - `timeout`, `rate-limited`, `server-5xx`, `client-4xx`, `network`.
+   */
+  lastError: string | null
 }
 
 /** One slot of the Blizzard call history. */
@@ -210,6 +267,8 @@ export interface BlizzardReport {
   buckets: BlizzardBucket[]
   /** The same counters, cut by the kind of endpoint that was called. */
   byCategory: BlizzardCategoryReport[]
+  /** The same counters, cut by what asked for the call - the answer to "why is this number this big". */
+  bySource: BlizzardSourceReport[]
   /** How many calls answered with each status, so a wave of 404s is visible as one. */
   byStatus: BlizzardStatusCount[]
   /**

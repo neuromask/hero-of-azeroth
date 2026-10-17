@@ -22,11 +22,18 @@
 import { isAchievementCategory, type AchievementCategory, type AchievementPage, type AchievementSummary } from '#shared/data/achievementsSchema'
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
 import { profileRevision } from '~~/server/utils/profileRevision'
+import { characterReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import type { H3Event } from 'h3'
 
 const summaries = createSwrCache<AchievementSummary>(2 * 60 * 60 * 1000, 256)
 const shelves = createSwrCache<AchievementPage>(2 * 60 * 60 * 1000, 512)
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler((event) =>
+  runWithBlizzardSource(characterReadSource(parseBoolFlag(getQuery(event).force)), () => readAchievements(event))
+)
+
+/** The shelf itself, under the tag its caller earned: a page view, or the reader's own Refresh. */
+async function readAchievements(event: H3Event) {
   const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
   const locale = apiLocale(query)
@@ -73,4 +80,4 @@ export default defineEventHandler(async (event) => {
   } catch (err) {
     mapBlizzardError(err, 'character achievements')
   }
-})
+}

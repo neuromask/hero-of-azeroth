@@ -30,11 +30,18 @@
 import { accountOwnerId, readAccountIds } from '~~/server/utils/accountPool'
 import type { ReputationJournal } from '#shared/data/reputationsSchema'
 import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
+import { characterReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import type { H3Event } from 'h3'
 import { profileRevision } from '~~/server/utils/profileRevision'
 
 const journals = createSwrCache<ReputationJournal>(2 * 60 * 60 * 1000, 256)
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler((event) =>
+  runWithBlizzardSource(characterReadSource(parseBoolFlag(getQuery(event).force)), () => readReputations(event))
+)
+
+/** The journal itself, under the tag its caller earned: a page view, or the reader's own Refresh. */
+async function readReputations(event: H3Event) {
   const { region, realm, name } = readCharacterRoute(event)
   const query = getQuery(event)
   const locale = apiLocale(query)
@@ -81,4 +88,4 @@ export default defineEventHandler(async (event) => {
   } catch (err) {
     mapBlizzardError(err, 'character reputations')
   }
-})
+}

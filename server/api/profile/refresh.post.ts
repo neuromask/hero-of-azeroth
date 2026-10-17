@@ -9,8 +9,17 @@
  * Read-only against Blizzard, and idempotent against SQLite: the same upsert the callback runs.
  */
 import { debugLog } from '~~/server/utils/logger'
+// The account's roster and its collections are read for the account, not for a character: their Blizzard calls are
+// counted under `account_refresh`, so the panel can tell a reader's own refresh from the timer's work.
+import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import type { H3Event } from 'h3'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler((event) =>
+  runWithBlizzardSource('account_refresh', () => refreshRoster(event))
+)
+
+/** The roster read itself, under the tag of the account that asked for it. */
+async function refreshRoster(event: H3Event) {
   const user = await requireUser(event)
   const region = await getSessionRegion(event)
 
@@ -38,4 +47,4 @@ export default defineEventHandler(async (event) => {
 
   debugLog('[profile/refresh] roster', JSON.stringify(result))
   return { ...result, collections }
-})
+}

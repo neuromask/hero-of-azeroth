@@ -19,6 +19,9 @@ import {
   type SiteSettings,
   type SiteSettingsPatch
 } from '#shared/data/siteSettings'
+// The one job an administrator may automate, and the rule that lays a stored row over the defaults
+// (`#shared/data/automationSettings`).
+import { normaliseAutomationSettings, type AutomationSettings } from '#shared/data/automationSettings'
 import type { MetricKey } from '#shared/data/historySchema'
 // A plain import rather than Nitro's auto-import, so this module works under the unit tests too (see
 // `./runtimeEnv`).
@@ -31,6 +34,8 @@ import { nowSec } from './db'
 const METRIC_MAXIMA_KEY = 'metricMaxima'
 const CONTENT_KEY = 'content'
 const ADMINS_KEY = 'admins'
+/** The automation an administrator owns: one namespace of the same store, so it survives a restart for free. */
+const AUTOMATION_KEY = 'automation'
 
 /** The names the store knows, and the shape of a copy key: a slug (`page.section.heading`). */
 const EDITABLE_MAXIMA: ReadonlySet<string> = new Set<string>(EDITABLE_METRIC_MAXIMA)
@@ -140,6 +145,31 @@ export function saveSiteSettings(patch: SiteSettingsPatch): SiteSettings {
   }
 
   return getSiteSettings()
+}
+
+/**
+ * The automation an administrator owns, laid over the values the site ships with.
+ *
+ * It lives in the same one-row-per-namespace table as the maxima (`./db`, `settings`), which is what makes it
+ * survive a restart without a schema of its own - and what makes a copy of the site that has never stored it run
+ * exactly as it did before the setting existed (`AUTOMATION_DEFAULTS`).
+ *
+ * Deliberately *not* part of `getSiteSettings()`: that answer is public (the comparison board is drawn from it),
+ * and how often the site scans its roster is not something a stranger has any business reading.
+ */
+export function getAutomationSettings(): AutomationSettings {
+  return normaliseAutomationSettings(readRow(AUTOMATION_KEY))
+}
+
+/**
+ * Writes the automation settings, and answers what the store now holds.
+ *
+ * The answer is the store's, not the request's - every reader of this module (the scanner, the panel) asks
+ * `getAutomationSettings()` and gets the normalised row, so there is one answer rather than two.
+ */
+export function saveAutomationSettings(settings: AutomationSettings): AutomationSettings {
+  writeRow(AUTOMATION_KEY, settings)
+  return getAutomationSettings()
 }
 
 /**

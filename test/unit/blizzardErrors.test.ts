@@ -240,4 +240,42 @@ describe('what the counters say a read cost', () => {
     // And what has to be acted on is the difference, which is nothing.
     expect(report.failed - report.toleratedAbsences).toBe(0)
   })
+
+  it('attributes every call to the thing that asked for it, and the parts add up to the whole', async () => {
+    const { getCharacter } = await load()
+    const { runWithBlizzardSource } = await import('../../server/utils/blizzardSource')
+
+    refusal = { status: 404 }
+    // The tag a character page sets (`server/api/character/...`), applied here around the read itself.
+    await runWithBlizzardSource('profile_read', () => getCharacter('gordunni', 'gone', 'eu', 'en_US').catch(() => null))
+
+    const { readDiagnosticBuffers } = await import('../../server/utils/adminDiagnostics')
+    const report = readDiagnosticBuffers().blizzardApi
+
+    // The breakdown is a partition of the total: every call is attributed once, and nothing is lost or doubled.
+    expect(report.bySource.reduce((sum, row) => sum + row.calls, 0)).toBe(report.total)
+    expect(report.bySource.reduce((sum, row) => sum + row.failed, 0)).toBe(report.failed)
+    expect(report.bySource.reduce((sum, row) => sum + row.ok, 0)).toBe(report.ok)
+
+    const read = report.bySource.find((row) => row.source === 'profile_read')
+    expect(read).toMatchObject({ calls: report.total, failed: 12 })
+    // The reason is a word, not a status body: what an operator can act on.
+    expect(read?.lastError).toBe('client-4xx')
+    // Nothing fell into `other`: every call this read made was tagged by the page that asked for it.
+    expect(report.bySource.some((row) => row.source === 'other')).toBe(false)
+  })
+
+  it('files a call nobody attributed under `other`, which is the signal to go and classify it', async () => {
+    const { getCharacter } = await load()
+
+    // No `runWithBlizzardSource`: a caller that has not been tagged (a new one, or a script).
+    refusal = { status: 404 }
+    await getCharacter('gordunni', 'gone', 'eu', 'en_US').catch(() => null)
+
+    const { readDiagnosticBuffers } = await import('../../server/utils/adminDiagnostics')
+    const report = readDiagnosticBuffers().blizzardApi
+
+    expect(report.bySource).toHaveLength(1)
+    expect(report.bySource[0]).toMatchObject({ source: 'other', calls: report.total })
+  })
 })

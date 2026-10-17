@@ -7,6 +7,9 @@
  * which the header's Refresh button sends, waits for a freshly drawn card instead.
  */
 import { parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRoute'
+// A card's Blizzard lookups are counted as the card's own, so the panel can tell a preview crawler's traffic from
+// a reader's page view (`server/utils/blizzardSource`).
+import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 
 const cards = createSwrCache<Buffer>(2 * 60 * 60 * 1000, 256)
 
@@ -29,7 +32,9 @@ export default defineEventHandler(async (event) => {
   return cards(
     `${region}:${locale}:${realm}:${name}`,
     async () => {
-      const character = await getCharacter(realm, name, region, locale, force)
+      // The reading is the card's own even when the reader pressed Refresh: a card is drawn for a preview and
+      // for a shared link, and the panel answers "how much traffic is cards" with one number.
+      const character = await runWithBlizzardSource('card_render', () => getCharacter(realm, name, region, locale, force))
 
       // The card is drawn from a profile, and reading a profile is what the site learns a character
       // from - so a card is fed into the sitemap's index, into the hall of fame's table, and, as

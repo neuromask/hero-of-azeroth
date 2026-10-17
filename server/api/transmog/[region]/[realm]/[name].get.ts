@@ -26,8 +26,17 @@
  */
 import { getCharacterTransmogs } from '~~/server/utils/blizzard'
 import { fileTransmogReading } from '~~/server/utils/profileFeed'
+// The wardrobe is read for a character page's tray, so its lookups are counted as that character's read
+// (`server/utils/blizzardSource`).
+import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
+import type { H3Event } from 'h3'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler((event) =>
+  runWithBlizzardSource('profile_read', () => readTransmogs(event))
+)
+
+/** The tray's one figure, read under the tag of the page that asked for it. */
+async function readTransmogs(event: H3Event) {
   const region = parseRegion(getRouterParam(event, 'region'))
   const realm = decodeRouteParam(getRouterParam(event, 'realm')).toLowerCase()
   const name = decodeRouteParam(getRouterParam(event, 'name')).toLowerCase()
@@ -46,4 +55,4 @@ export default defineEventHandler(async (event) => {
     /** The wardrobe belongs to the account, so this count is already the account's own. */
     accountWide: true
   }
-})
+}
