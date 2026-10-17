@@ -34,7 +34,9 @@ import { collectionReadSource, runWithBlizzardSource } from '~~/server/utils/bli
 import type { H3Event } from 'h3'
 import { profileRevision } from '~~/server/utils/profileRevision'
 
-const journals = createSwrCache<ReputationJournal>(2 * 60 * 60 * 1000, 256)
+const journals = createSwrCache<ReputationJournal>(2 * 60 * 60 * 1000, 64, {
+  persist: createSqliteStore('reputations-journal', jsonCodec<ReputationJournal>(), { maxRows: 300, maxAgeMs: 6 * 60 * 60 * 1000 })
+})
 
 export default defineEventHandler((event) =>
   runWithBlizzardSource(collectionReadSource(parseBoolFlag(getQuery(event).force)), () => readReputations(event))

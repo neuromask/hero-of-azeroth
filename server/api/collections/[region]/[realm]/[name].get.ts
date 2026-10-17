@@ -54,8 +54,10 @@ import { profileRevision } from '~~/server/utils/profileRevision'
 import { collectionReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 import type { H3Event } from 'h3'
 
-const shelves = createSwrCache<CollectionPage>(2 * 60 * 60 * 1000, 256)
-const summaries = createSwrCache<CollectionSummary>(2 * 60 * 60 * 1000, 256)
+const shelves = createSwrCache<CollectionPage>(2 * 60 * 60 * 1000, 64, {
+  persist: createSqliteStore('collections-shelf', jsonCodec<CollectionPage>(), { maxRows: 300, maxAgeMs: 6 * 60 * 60 * 1000 })
+})
+const summaries = createSwrCache<CollectionSummary>(2 * 60 * 60 * 1000, 100)
 
 export default defineEventHandler((event) =>
   runWithBlizzardSource(collectionReadSource(parseBoolFlag(getQuery(event).force)), () => readCollections(event))

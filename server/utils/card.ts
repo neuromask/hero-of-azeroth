@@ -1,6 +1,10 @@
-import { Resvg } from '@resvg/resvg-js'
+import { Resvg, renderAsync } from '@resvg/resvg-js'
 import type { ResvgRenderOptions } from '@resvg/resvg-js'
 import jpeg from 'jpeg-js'
+// The bounded cache the downscaled backdrops are kept in, and the gate that lets one card at a time hold the
+// rasteriser's pixels (`./lruStore`, `./taskGate`).
+import { createBoundedCache } from './lruStore'
+import { createTaskGate } from './taskGate'
 import { mPlusQualityHex, wowQualityHex } from '#shared/utils/wow-quality'
 // The one rule for how a figure is written on the site, shared with the pages the card previews.
 import { formatNumber } from '#shared/utils/formatNumber'
@@ -275,9 +279,36 @@ function rasterOptions(): ResvgRenderOptions {
   return resvgOptions
 }
 
-/** Rasterises a document to pixels, the way the card is rasterised. */
+/**
+ * Rasterises a document to pixels, the way the card is rasterised - *synchronously*, on the event loop.
+ *
+ * Kept only for the one caller that cannot wait: `measuredTextWidth`, which is asked from inside the layout code
+ * for a run `measureBatch` did not plan for (and which a card almost never needs). Everything that draws a card
+ * goes through `rasteriseAsync` below.
+ */
 function rasterise(svg: string) {
   return new Resvg(svg, rasterOptions()).render()
+}
+
+/**
+ * One rasteriser pass at a time.
+ *
+ * A pass holds the whole canvas in native memory - and the images the document embeds, decoded - until its
+ * pixels are handed on, none of which V8 sees or can collect. Two cards drawn together are two such peaks on top
+ * of each other; drawn one after another they never meet, and the host has 416 MiB for everything. Waiting
+ * requests sit in a bounded queue as plain promises, so other pages are answered while a card waits.
+ */
+const renderGate = createTaskGate(1, 12)
+
+/**
+ * Rasterises a document off the event loop (libuv's thread pool, `renderAsync`), one pass at a time.
+ *
+ * `Resvg#render` is synchronous: for the length of a card - the better part of a second, most of it the fonts -
+ * nothing else on the server is served. The async form does the same work on a worker thread and hands the
+ * pixels back, which is what keeps a burst of cards from stalling every other request.
+ */
+function rasteriseAsync(svg: string) {
+  return renderGate.run(() => renderAsync(svg, rasterOptions()))
 }
 
 /**
@@ -302,7 +333,17 @@ function renderSvg(svg: string): Buffer {
 let sharpModule: Promise<typeof import('sharp').default | null> | null = null
 
 function loadSharp() {
-  sharpModule ??= import('sharp').then((module) => module.default).catch(() => null)
+  sharpModule ??= import('sharp')
+    .then((module) => {
+      const lib = module.default
+      // libvips keeps a cache of recent operations (50 MB by default) and one worker thread per core. Neither is
+      // worth anything here - every card is a different picture, drawn once - and both are resident memory on a
+      // host with 416 MiB: the cache is switched off and the pipeline is held to one thread.
+      lib.cache(false)
+      lib.concurrency(1)
+      return lib
+    })
+    .catch(() => null)
   return sharpModule
 }
 
@@ -329,18 +370,35 @@ const JPEG_QUALITY = 80
  * that came with it.
  */
 async function encodeCard(svg: string): Promise<Buffer> {
-  const image = rasterise(svg)
-  const lib = await loadSharp()
+  // The rasteriser's canvas, its `RenderedImage`, and the 4.8 MB of RGBA read out of it are the heavy things
+  // of a card. They are held in `let`s so that each can be let go the moment the next stage has what it needs,
+  // rather than living on in this frame until the JPEG has been written.
+  let image: Awaited<ReturnType<typeof rasteriseAsync>> | null = await rasteriseAsync(svg)
+  // The document - a couple of megabytes of base64 with both photographs inside it - has been read by the
+  // rasteriser; this frame (and the gate's closure, which captured the binding) lets go of it now.
+  svg = ''
+  const width = image.width
+  const height = image.height
+  let pixels: Buffer | null = image.pixels
+  // The canvas is native memory held by the image object: dropping the only reference lets it be finalised.
+  image = null
 
-  if (lib) {
-    return lib(image.pixels, { raw: { width: image.width, height: image.height, channels: 4 } })
-      .jpeg({ quality: JPEG_QUALITY })
-      .toBuffer()
+  try {
+    const lib = await loadSharp()
+
+    if (lib) {
+      return await lib(pixels, { raw: { width, height, channels: 4 } })
+        .jpeg({ quality: JPEG_QUALITY })
+        .toBuffer()
+    }
+
+    // The pure-JS encoder, for a host whose native one cannot load: a card a little heavier than it
+    // should be beats no card at all.
+    return jpeg.encode({ data: pixels, width, height }, JPEG_QUALITY).data
+  } finally {
+    // Nothing below this line may touch the pixels: the stage that needed them has finished.
+    pixels = null
   }
-
-  // The pure-JS encoder, for a host whose native one cannot load: a card a little heavier than it
-  // should be beats no card at all.
-  return jpeg.encode({ data: image.pixels, width: image.width, height: image.height }, JPEG_QUALITY).data
 }
 
 /**
@@ -354,7 +412,9 @@ async function encodeCard(svg: string): Promise<Buffer> {
  *
  * A width is measured once and kept, because rendering a card is a hot path.
  */
-const measuredWidths = new Map<string, number>()
+// Bounded: the key carries the text itself, and the text of a card is a character's name and guild - so an
+// unbounded map here grew by every character anyone ever opened a card for.
+const measuredWidths = createBoundedCache<number>({ max: 2000 })
 
 /** A run of text whose drawn width the card needs, and the type it is set in. */
 interface MeasureRequest {
@@ -430,7 +490,9 @@ async function measureBatch(requests: MeasureRequest[]): Promise<void> {
   let bounds: (PngBounds | null)[] = missing.map(() => null)
 
   try {
-    bounds = pngAlphaBandBounds(rasterise(document).asPng(), bands)
+    // Drawn off the event loop and through the same gate as the card, then decoded and measured; the PNG is a
+    // local of this expression and is unreachable as soon as the bands are read out of it.
+    bounds = pngAlphaBandBounds((await rasteriseAsync(document)).asPng(), bands)
   } catch {
     // A document the rasteriser will not draw is not worth failing a card over: the widths below
     // fall back to the estimate, which is what `measuredTextWidth` does for a run it cannot draw.
@@ -646,18 +708,67 @@ function tileSvg(tile: Tile, x: number, y: number, width: number, numberSize: nu
   <rect x="${barX}" y="${barY}" width="${filled}" height="${TILE_BAR_HEIGHT}" rx="4" fill="url(#barGrad)"/>`
 }
 
+/**
+ * The class backdrops, already cut down to the size they are drawn at and encoded as data URIs.
+ *
+ * There are thirteen classes and a backdrop is the same for every character of one, so what is kept is the
+ * *finished* `<image>` element: the next card of that class downloads nothing, decodes nothing and re-encodes
+ * nothing. Bounded by count and by bytes all the same - a CDN that started answering with something enormous
+ * must not be able to fill the heap - and for a day, because the artwork changes with a patch.
+ */
+const backdrops = createBoundedCache<string>({ max: 16, maxBytes: 4 * 1024 * 1024, ttlMs: 24 * 60 * 60 * 1000 })
+
+/**
+ * The width the backdrop is cut down to: the card's own. The artwork is 2400 px wide and `slice`-fitted onto a
+ * 1200 px card, so everything past 1200 px is decoded, held and then thrown away by the rasteriser - 18 MB of
+ * RGBA for a picture that is drawn from 4.5 MB of it.
+ */
+const BACKDROP_WIDTH = CARD_WIDTH
+
+/** Cuts a backdrop down to the width it is drawn at, or hands it back as it is when that cannot be done. */
+async function fitBackdrop(image: Buffer): Promise<{ bytes: Buffer; mime: string }> {
+  const lib = await loadSharp()
+  if (!lib) return { bytes: image, mime: 'image/jpeg' }
+
+  try {
+    const bytes = await lib(image, { sequentialRead: true })
+      .resize({ width: BACKDROP_WIDTH, withoutEnlargement: true })
+      .jpeg({ quality: 88 })
+      .toBuffer()
+
+    return { bytes, mime: 'image/jpeg' }
+  } catch {
+    // A picture sharp will not read is one the rasteriser may still draw, as it came.
+    return { bytes: image, mime: 'image/jpeg' }
+  }
+}
+
 /** Downloads the Armoury class backdrop (JPEG) used behind the character. */
 async function loadBackground(url: string): Promise<string> {
   if (!url) return ''
+
+  const held = backdrops.get(url)
+  if (held !== undefined) return held
+
   try {
-    const image = await callExternal<ArrayBuffer>('render_cdn', url, { responseType: 'arrayBuffer' })
-    if (!image || !image.byteLength) return ''
-    const data = toDataUri(Buffer.from(image), url.endsWith('.png') ? 'image/png' : 'image/jpeg')
+    let download: ArrayBuffer | null = await callExternal<ArrayBuffer>('render_cdn', url, { responseType: 'arrayBuffer' })
+    if (!download || !download.byteLength) return ''
+
+    let source: Buffer | null = Buffer.from(download)
+    download = null
+
+    const fitted = url.endsWith('.png') ? { bytes: source, mime: 'image/png' } : await fitBackdrop(source)
+    // The artwork as downloaded is not needed once it has been cut down.
+    source = null
+
     // The class artwork is a character-free scene, so it simply covers the card:
     // `slice` crops the vertical overflow and leaves the floor line of the scene
     // where the feet of the render end up. `bgPop` restores the punch the art has
     // on the Armoury before the scrim dims it for the text.
-    return `<image href="${data}" x="0" y="0" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" preserveAspectRatio="xMidYMid slice" filter="url(#bgPop)"/>`
+    const element = `<image href="${toDataUri(fitted.bytes, fitted.mime)}" x="0" y="0" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" preserveAspectRatio="xMidYMid slice" filter="url(#bgPop)"/>`
+
+    backdrops.set(url, element)
+    return element
   } catch {
     return ''
   }
@@ -674,7 +785,10 @@ async function loadBackground(url: string): Promise<string> {
 async function loadRender(url: string): Promise<string> {
   if (!url) return ''
   try {
+    // `Buffer.from(arrayBuffer)` is a view over the download, not a copy: one allocation for the whole render.
     const image = Buffer.from(await callExternal<ArrayBuffer>('render_cdn', url, { responseType: 'arrayBuffer' }))
+    // The bounds are read off a decode that is local to this call - the 1600x1200 RGBA it makes (7.7 MB) is
+    // garbage the moment the box has been measured.
     const bounds = pngAlphaBounds(image)
     const box = bounds || DEFAULT_RENDER_BOX
 

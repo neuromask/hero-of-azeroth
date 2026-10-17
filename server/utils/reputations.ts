@@ -25,7 +25,7 @@
  * reading across the site: an Exalted faction, a renown ladder at its last level and a delve companion at its
  * hundredth rank all count the same, and the accounts's own figure is measured against the same atlas.
  */
-import { callBlizzard, getBlizzardToken, recallCharacterDoc } from './blizzard'
+import { callBlizzard, getBlizzardToken, recallReputations } from './blizzard'
 import {
   REPUTATION_MAX_STEPS,
   REPUTATION_STANDING_KEYS,
@@ -182,10 +182,10 @@ export async function getReputationStandings(
   name: string,
   locale: string
 ): Promise<Map<number, CharacterStanding>> {
-  // The document the profile just read (to count the maxed factions) is the one this journal is about to read
-  // (for the full standings), so it is reused rather than read again (`recallCharacterDoc`).
-  const cached = recallCharacterDoc(region, realm, name, locale, 'reputations')
-  if (cached) return standingsFrom(cached as { reputations?: any[] })
+  // The standings the profile just read (to count the maxed factions) are the ones this journal is about to
+  // read, so they are reused rather than read again (`recallReputations` - a slim copy, not the document).
+  const cached = recallReputations(region, realm, name, locale)
+  if (cached) return standingsFrom(cached)
 
   const token = await getBlizzardToken(region)
   const url =

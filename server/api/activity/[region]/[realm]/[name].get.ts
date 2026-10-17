@@ -11,7 +11,7 @@ import { apiLocale, mapBlizzardError, parseBoolFlag, readCharacterRoute } from '
 import { collectionReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 import type { H3Event } from 'h3'
 
-const feeds = createSwrCache<ActivityFeed>(2 * 60 * 60 * 1000, 256)
+const feeds = createSwrCache<ActivityFeed>(2 * 60 * 60 * 1000, 100)
 
 export default defineEventHandler((event) =>
   runWithBlizzardSource(collectionReadSource(parseBoolFlag(getQuery(event).force)), () => readActivity(event))

@@ -48,6 +48,12 @@ export function useDb(): DatabaseSync {
   connection.exec('PRAGMA foreign_keys = ON')
   connection.exec('PRAGMA synchronous = NORMAL')
   connection.exec('PRAGMA cache_size = -8000')
+  // The render cache (`./sqliteStore`) writes cards and shelves of a few hundred kilobytes each: left alone, the
+  // write-ahead log grows with them and is never given back. It is checkpointed early (every ~800 KB of log) and
+  // truncated to 4 MiB after a checkpoint, and temporary B-trees for a big sort stay out of the heap.
+  connection.exec('PRAGMA wal_autocheckpoint = 200')
+  connection.exec('PRAGMA journal_size_limit = 4194304')
+  connection.exec('PRAGMA temp_store = FILE')
   connection.exec(SCHEMA)
   migrate(connection)
 

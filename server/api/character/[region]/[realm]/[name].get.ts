@@ -15,7 +15,9 @@ import { bumpProfileRevision } from '~~/server/utils/profileRevision'
 import { characterReadSource, runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 import type { H3Event } from 'h3'
 
-const profiles = createSwrCache<CharacterData>(2 * 60 * 60 * 1000)
+// A profile is about a kilobyte of figures (never the Blizzard documents), so it stays in memory - but at most a
+// hundred of them, the least recently used first out, and nothing is kept past three times its freshness.
+const profiles = createSwrCache<CharacterData>(2 * 60 * 60 * 1000, 100, { maxBytes: 2 * 1024 * 1024 })
 
 export default defineEventHandler((event) =>
   runWithBlizzardSource(characterReadSource(parseBoolFlag(getQuery(event).force)), () => readCharacter(event))

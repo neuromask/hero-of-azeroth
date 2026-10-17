@@ -14,6 +14,8 @@
  * that one sits outside the handler and keys on the whole URL, so it can neither hand a
  * `?force=true` request a fresh copy *and* refresh the copy the plain URL is served from.
  */
+import { createBoundedCache, estimateBytes } from './lruStore'
+
 export interface SwrCache<T> {
   /** The value for `key`, fetching it with `producer` when it is missing, stale or forced. */
   (key: string, producer: () => Promise<T>, force?: boolean): Promise<T>
@@ -39,9 +41,111 @@ export interface SwrCache<T> {
   invalidate(key: string): void
 }
 
-export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<T> {
-  const values = new Map<string, { value: T; at: number }>()
+/**
+ * Where an answer lives instead of the process's memory: a disk tier (`./sqliteStore`).
+ *
+ * Every method may throw; the store treats a throw as a miss (a read) or a shrug (a write), because a cache
+ * that can take a page down is worse than no cache.
+ */
+export interface SwrPersistence<T> {
+  /** The answer on file for `key` and when it was fetched (milliseconds), or `null`. */
+  read(key: string): { value: T; at: number } | null
+  /** Only the moment of the answer on file (milliseconds), without reading the answer itself. */
+  readAt(key: string): number | null
+  write(key: string, value: T, at: number): void
+  remove(key: string): void
+}
+
+/**
+ * The hard limits of one store, on top of its freshness.
+ *
+ * The site runs in 416 MiB for everything, so a store may not be bounded by *how many* answers it holds
+ * alone: a card is a few hundred kilobytes and a shelf a few hundred more, and "512 entries" of those is
+ * the whole heap. Every store therefore also has a byte budget, and the oldest answers are dropped as soon
+ * as either limit is crossed.
+ */
+export interface SwrCacheOptions<T> {
+  /** The most bytes the store may hold, by `sizeOf`. Defaults to 8 MiB. */
+  maxBytes?: number
+  /** What an answer weighs. Defaults to the byte length of a `Buffer`, or a few times the JSON length of anything else. */
+  sizeOf?: (value: T) => number
+  /**
+   * A disk tier. When given, the answers are kept *there* and not in memory at all: a read is one indexed
+   * SELECT, the bytes are in the heap only until the response is sent, and the process holds nothing between
+   * requests but the in-flight markers. Without it the store is an in-memory LRU, bounded by `maxBytes`.
+   */
+  persist?: SwrPersistence<T>
+}
+/** The default byte budget of one store: all of them side by side stay well inside the host's limit. */
+const DEFAULT_MAX_BYTES = 8 * 1024 * 1024
+
+/** How much longer than its freshness an answer is kept to be served stale before it is forgotten for good. */
+const STALE_WINDOW = 3
+
+/**
+ * What a JavaScript object graph costs on the heap relative to the length of its JSON: property names are shared
+ * but every object, array and string carries a header, so the figure is a few times the text. The budget is a
+ * guard against the heap, so it is counted in heap-ish bytes rather than in the bytes of the wire.
+ */
+const HEAP_FACTOR = 3
+
+function defaultSizeOf(value: unknown): number {
+  return Buffer.isBuffer(value) ? value.byteLength : estimateBytes(value) * HEAP_FACTOR
+}
+
+export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512, options: SwrCacheOptions<T> = {}): SwrCache<T> {
+  const sizeOf = options.sizeOf ?? defaultSizeOf
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
+  const persist = options.persist
+
+  // An LRU rather than a bare `Map`: the cap is on entries *and* on bytes, an answer nobody has asked for in
+  // `STALE_WINDOW` freshness spans is forgotten by the clock, and a read moves its entry to the safe end.
+  // With a disk tier it is never filled: the answers live in the file and this stays empty.
+  const values = createBoundedCache<{ value: T; at: number }>({
+    max: maxEntries,
+    maxBytes,
+    ttlMs: maxAgeMs * STALE_WINDOW,
+    sizeOf: (entry) => sizeOf(entry.value)
+  })
   const inflight = new Map<string, Promise<T>>()
+
+  /** The answer on hand for `key` and when it was fetched, from whichever tier this store keeps them in. */
+  function recall(key: string): { value: T; at: number } | undefined {
+    if (!persist) return values.get(key)
+
+    try {
+      return persist.read(key) ?? undefined
+    } catch {
+      // A tier that cannot be read is a miss: the caller fetches, which is what it would do with no cache.
+      return undefined
+    }
+  }
+
+  function keep(key: string, value: T, at: number): void {
+    if (!persist) {
+      values.set(key, { value, at })
+      return
+    }
+
+    try {
+      persist.write(key, value, at)
+    } catch {
+      // A tier that cannot be written costs the next caller a fetch and nothing else.
+    }
+  }
+
+  function forget(key: string): void {
+    if (!persist) {
+      values.delete(key)
+      return
+    }
+
+    try {
+      persist.remove(key)
+    } catch {
+      // As above: nothing is lost by not forgetting what could not be read in the first place.
+    }
+  }
 
   /**
    * Fetches once per key: two callers that miss together share the one answer rather than
@@ -56,14 +160,10 @@ export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<
 
     const fetching = producer()
       .then((value) => {
-        // Re-setting an existing key moves it to the end, so the map's front is the least
-        // recently seen entry and the one the cap drops.
-        values.delete(key)
-        values.set(key, { value, at: Date.now() })
-        if (values.size > maxEntries) {
-          const oldest = values.keys().next().value
-          if (oldest !== undefined) values.delete(oldest)
-        }
+        // The LRU evicts the least recently used entries itself when either cap - the count or the bytes -
+        // is crossed, and refuses an answer that alone outweighs the budget (it is still handed to the
+        // callers waiting on it, it just is not kept).
+        keep(key, value, Date.now())
         return value
       })
       .finally(() => {
@@ -80,9 +180,10 @@ export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<
    * `fetchedAt`.
    */
   const cache = ((key: string, producer: () => Promise<T>, force = false) => {
-    const cached = values.get(key)
+    if (force) return start(key, producer)
 
-    if (force || !cached) return start(key, producer)
+    const cached = recall(key)
+    if (!cached) return start(key, producer)
 
     if (Date.now() - cached.at <= maxAgeMs) return Promise.resolve(cached.value)
 
@@ -93,12 +194,24 @@ export function createSwrCache<T>(maxAgeMs: number, maxEntries = 512): SwrCache<
   }) as SwrCache<T>
 
   cache.fetchedAt = (key) => {
-    const cached = values.get(key)
-    return cached ? Math.floor(cached.at / 1000) : null
+    let at: number | null | undefined
+
+    if (persist) {
+      try {
+        at = persist.readAt(key)
+      } catch {
+        at = null
+      }
+    } else {
+      // `peek`: asking *when* is not a use of the answer, so it must not keep the entry alive.
+      at = values.peek(key)?.at
+    }
+
+    return at ? Math.floor(at / 1000) : null
   }
 
   cache.invalidate = (key) => {
-    values.delete(key)
+    forget(key)
   }
 
   return cache

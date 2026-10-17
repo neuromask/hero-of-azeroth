@@ -12,6 +12,8 @@ import { currentBlizzardSource } from './blizzardSource'
 import { privateSetting } from './runtimeEnv'
 import { isReputationMaxed, reputationTotal } from './reputations'
 import { mountTotal } from './mounts'
+// The bounded, self-expiring stores every in-memory cache of this module is built from (`./lruStore`).
+import { createBoundedCache, estimateBytes } from './lruStore'
 
 let cachedToken: { access_token: string; expires_at: number } | null = null
 
@@ -634,21 +636,41 @@ const FALLBACK_REGIONS = ['eu', 'us']
  */
 
 /**
- * Loads a character from a single region. Throws a 404 when the character does
- * not exist in that region.
+ * What one profile read keeps of the documents it fetched: the figures and the ids, never the documents.
  *
- * `force` is a refresh: the site reads Blizzard again rather than serving what it already holds, and it
- * waits for the one figure it cannot read for itself - the mount journal the Armoury publishes
- * (`refreshMountJournal`). A page is never made to wait for that page, which is why the plain read starts
- * the same journal read and answers without it (`server/utils/armory`).
+ * A profile is thirteen Blizzard documents read at once, and the collection ones are large - the pets document
+ * alone is megabytes of JSON. The page needs a handful of numbers out of them, so they are reduced to those
+ * numbers *inside* `readProfileDigest`: the documents are unreachable the moment it returns, and nothing holds a
+ * raw Blizzard answer across the awaits that follow (the class background, the Armoury journal), let alone in a
+ * cache.
  */
-async function fetchCharacterProfile(
+interface ProfileDigest {
+  charData: any
+  mainRaw: string | undefined
+  mainRender: string | undefined
+  avatarAsset: string | undefined
+  mounts: number
+  pets: number
+  toys: number
+  decor: number
+  maxedReputations: number
+  reputationEntries: number
+  mPlusScore: number
+  totals: CollectionTotals
+  titles: number
+  quests: number
+  recipes: number
+  honorableKills: number
+  honorLevel: number
+}
+
+/** Reads the thirteen documents of a profile and reduces them to a `ProfileDigest`. */
+async function readProfileDigest(
   realm: string,
   name: string,
   region: string,
-  locale: string,
-  force = false
-): Promise<CharacterData> {
+  locale: string
+): Promise<ProfileDigest> {
   const token = await getBlizzardToken(region)
   const headers = { Authorization: `Bearer ${token}` }
   const baseUrl = `https://${region}.api.blizzard.com/profile/wow/character/${realm}/${encodeURIComponent(name)}`
@@ -763,6 +785,51 @@ async function fetchCharacterProfile(
     ? Math.round(mplusData.current_mythic_rating.rating)
     : 0
 
+  // The four figures read beside the collections are counted as sets of unique ids where Blizzard names them by
+  // id: the ids are what the account's own figures are taken from (`server/utils/accountPool`), and a count taken
+  // here would be a count of one character's rows. `honorableKills` and `honorLevel` are numbers instead - the
+  // first adds up over a roster, the second is an account's own standing.
+  return {
+    charData,
+    mainRaw,
+    mainRender,
+    avatarAsset,
+    mounts: mountIds.size,
+    pets: collectedSpecies.size,
+    toys: toysData?.toys?.length || 0,
+    decor: decorData?.decor_collected?.length || 0,
+    maxedReputations: maxedReputations.length,
+    reputationEntries: repsData?.reputations?.length || 0,
+    mPlusScore,
+    totals: totalsData,
+    titles: idsIn(titlesData?.titles).size,
+    quests: idsIn(questsData?.quests).size,
+    recipes: recipeIdsOf(professionsData).size,
+    honorableKills: Number(pvpData?.honorable_kills) || 0,
+    honorLevel: Number(pvpData?.honor_level) || 0
+  }
+}
+
+/**
+ * Loads a character from a single region. Throws a 404 when the character does
+ * not exist in that region.
+ *
+ * `force` is a refresh: the site reads Blizzard again rather than serving what it already holds, and it
+ * waits for the one figure it cannot read for itself - the mount journal the Armoury publishes
+ * (`refreshMountJournal`). A page is never made to wait for that page, which is why the plain read starts
+ * the same journal read and answers without it (`server/utils/armory`).
+ */
+async function fetchCharacterProfile(
+  realm: string,
+  name: string,
+  region: string,
+  locale: string,
+  force = false
+): Promise<CharacterData> {
+  // Only the digest crosses the awaits below: the raw documents went out of scope when it was returned.
+  const digest = await readProfileDigest(realm, name, region, locale)
+  const { charData, mainRaw, mainRender, avatarAsset, totals: totalsData, mPlusScore } = digest
+
   const achievementPoints = charData.achievement_points || 0
 
   const backgroundUrl = await resolveArmoryBackground({
@@ -787,18 +854,6 @@ async function fetchCharacterProfile(
 
   const mountJournal = readMountJournal(region, realm, name)
 
-  /**
-   * The four figures read beside the collections, as sets of unique ids where Blizzard names them by id.
-   *
-   * They are sets rather than lengths because the ids are what the account's own figures are taken from: a
-   * title or a quest earned on one character is part of the account's union (`server/utils/accountPool`), and a
-   * count taken here would be a count of one character's rows. `honorableKills` and `honorLevel` are numbers
-   * instead - the first adds up over a roster, the second is an account's own standing.
-   */
-  const titleIds = idsIn(titlesData?.titles)
-  const questIds = idsIn(questsData?.quests)
-  const recipeIds = recipeIdsOf(professionsData)
-
   return {
     name: charData.name,
     title: charData.active_title?.display_string?.replace('{name}', charData.name) || '',
@@ -819,18 +874,18 @@ async function fetchCharacterProfile(
     gender: charData.gender?.type || '',
     backgroundUrl,
     stats: {
-      mounts: { count: mountIds.size, total: mountTotal(mountJournal?.total, totalsData.mounts, mountIds.size) },
-      pets: { count: collectedSpecies.size, total: totalsData.pets },
-      toys: { count: toysData?.toys?.length || 0, total: totalsData.toys },
-      decor: { count: decorData?.decor_collected?.length || 0, total: totalsData.decor },
+      mounts: { count: digest.mounts, total: mountTotal(mountJournal?.total, totalsData.mounts, digest.mounts) },
+      pets: { count: digest.pets, total: totalsData.pets },
+      toys: { count: digest.toys, total: totalsData.toys },
+      decor: { count: digest.decor, total: totalsData.decor },
       reputations: {
         // What this character alone has taken to the top of its ladder. The account's own
         // figure is the union of finished factions across the roster and is laid over this
         // one where the site holds such a pool (`server/utils/accountPool`).
-        count: maxedReputations.length,
+        count: digest.maxedReputations,
         // What a character of this faction can reach: Blizzard's index minus the other
         // side's factions and minus the entries that only group the rest.
-        total: reputationTotal(charData.faction?.type || 'NEUTRAL', totalsData.reputations, repsData?.reputations?.length || 0),
+        total: reputationTotal(charData.faction?.type || 'NEUTRAL', totalsData.reputations, digest.reputationEntries),
         // Set by the pool: on its own the reading is this character's, and says so.
         accountWide: false
       },
@@ -838,11 +893,11 @@ async function fetchCharacterProfile(
       // The four figures that are counts of what a character has *done* rather than of what it keeps. Each is
       // the character's own reading here; the account's own union is laid over them where the site holds a pool
       // (`overlayPool` in `server/utils/accountPool`), exactly as it is for the reputations above.
-      titles: { count: titleIds.size },
-      quests: { count: questIds.size },
-      recipes: { count: recipeIds.size },
-      honorableKills: { count: Number(pvpData?.honorable_kills) || 0 },
-      honorLevel: { count: Number(pvpData?.honor_level) || 0 }
+      titles: { count: digest.titles },
+      quests: { count: digest.quests },
+      recipes: { count: digest.recipes },
+      honorableKills: { count: digest.honorableKills },
+      honorLevel: { count: digest.honorLevel }
     }
   }
 }
@@ -870,8 +925,21 @@ const CHARACTER_CACHE_SECONDS = 10 * 60
  */
 const FORCE_COOLDOWN_SECONDS = 15
 
+/**
+ * The characters kept: a hundred at most, and the least recently used is the first to go.
+ *
+ * A reading is about a kilobyte of figures (never the Blizzard documents it was counted from), so the count is
+ * the bound that matters. `CHARACTER_CACHE_KEEP_SECONDS` is how long one is *kept*, which is longer than how long
+ * it is *served* (`CHARACTER_CACHE_SECONDS`): the last known figures are what `carryForward` falls back on when a
+ * document of the next read does not arrive.
+ */
+const CHARACTER_CACHE_KEEP_SECONDS = 60 * 60
+
 /** Characters already read, and when each of them stops being served. */
-const cachedCharacters = new Map<string, { data: CharacterData; expires_at: number }>()
+const cachedCharacters = createBoundedCache<{ data: CharacterData; expires_at: number }>({
+  max: 100,
+  ttlMs: CHARACTER_CACHE_KEEP_SECONDS * 1000
+})
 
 /**
  * The reads still in flight, under the same key.
@@ -882,43 +950,133 @@ const cachedCharacters = new Map<string, { data: CharacterData; expires_at: numb
  */
 const pendingCharacters = new Map<string, Promise<CharacterData>>()
 
-/** The entries kept before the expired ones are swept, so the map cannot grow without end. */
-const CHARACTER_CACHE_LIMIT = 500
-
-/**
- * The raw collection and reputation documents a profile read fetched, kept so a shelf or the journal that
- * follows the page does not read them again.
- *
- * `fetchCharacterProfile` reads four collections and the reputations to compute the overview tiles, and a
- * reader who then opens a shelf or the journal is asking for the very documents those tiles were counted from.
- * Without this the second ask is a second Blizzard read - four collections and the reputations fetched again
- * a moment after they were fetched - so the documents are filed here as the profile is read, under the
- * character's own address and locale, and answered for as long as the profile itself is served
- * (`CHARACTER_CACHE_SECONDS`). A shelf still reads the document itself: what is shared is the bytes, not the
- * view, so a shelf and a tile can never disagree about a number.
- */
-const characterDocs = new Map<string, { at: number; data: Partial<Record<CharacterDocKind, unknown>> }>()
-
 /** The documents a profile read carries, by the endpoint path that produces each. */
 export type CharacterDocKind = 'mounts' | 'pets' | 'toys' | 'decor' | 'reputations'
 
-/** The entries kept before the expired ones are swept, so the map cannot grow without end. */
-const CHARACTER_DOCS_LIMIT = 500
+/** The four collection documents, and where in each one the id of a collected entry lives. */
+const COLLECTION_DOCS = {
+  mounts: { list: 'mounts', field: 'mount' },
+  pets: { list: 'pets', field: 'species' },
+  toys: { list: 'toys', field: 'toy' },
+  decor: { list: 'decor_collected', field: 'decor' }
+} as const
 
-/** The raw document of one kind, or `undefined` when none is on file or it has expired. */
-export function recallCharacterDoc(
+type CollectionDocKind = keyof typeof COLLECTION_DOCS
+
+/** One faction's standing, cut down to the fields the journal and the maxed-faction rule read. */
+interface SlimReputation {
+  faction: { id: number }
+  standing: { tier?: number; renown_level?: number; raw: number; value: number; max: number; name: string }
+}
+
+/**
+ * What the process keeps of a profile's raw documents: their *ids*, not the documents.
+ *
+ * The raw collection documents are megabytes - a collector's pets alone - and used to be kept whole, per
+ * character, for ten minutes, which is what let a handful of readers walk the process into its memory limit. A
+ * shelf wants the ids of what the character collected, and the journal wants a standing per faction: those are
+ * kept, as a `Uint32Array` (four bytes an id) and a short list of a few fields each - kilobytes where the
+ * documents were megabytes.
+ */
+interface CharacterDocs {
+  collections: Partial<Record<CollectionDocKind, Uint32Array>>
+  reputations?: SlimReputation[]
+}
+
+/** The ids a collection document names, as a compact array. */
+function collectedIdsOf(doc: any, kind: CollectionDocKind): Uint32Array {
+  const { list, field } = COLLECTION_DOCS[kind]
+  const ids: number[] = []
+
+  for (const entry of doc?.[list] || []) {
+    const id = entry?.[field]?.id
+    if (typeof id === 'number') ids.push(id)
+  }
+
+  return Uint32Array.from(ids)
+}
+
+/** A reputations document, cut down to the fields anything reads. */
+function slimReputations(doc: any): SlimReputation[] {
+  const slim: SlimReputation[] = []
+
+  for (const entry of doc?.reputations || []) {
+    const id = entry?.faction?.id
+    if (typeof id !== 'number') continue
+
+    const standing = entry.standing || {}
+    slim.push({
+      faction: { id },
+      standing: {
+        ...(typeof standing.tier === 'number' ? { tier: standing.tier } : {}),
+        ...(typeof standing.renown_level === 'number' ? { renown_level: standing.renown_level } : {}),
+        raw: Number(standing.raw || 0),
+        value: Number(standing.value || 0),
+        max: Number(standing.max || 0),
+        name: String(standing.name || '')
+      }
+    })
+  }
+
+  return slim
+}
+
+/** What an entry of `characterDocs` weighs: its ids, and the text of its standings. */
+function characterDocsBytes(docs: CharacterDocs): number {
+  let bytes = 64
+
+  for (const ids of Object.values(docs.collections)) bytes += ids?.byteLength ?? 0
+  if (docs.reputations) bytes += estimateBytes(docs.reputations)
+
+  return bytes
+}
+
+/**
+ * The compact form of the documents a profile read fetched, kept so a shelf or the journal that follows the
+ * page does not read them again - answered for as long as the profile itself is served
+ * (`CHARACTER_CACHE_SECONDS`). A shelf still reads the *view* itself: what is shared is the ids, so a shelf and
+ * a tile can never disagree about a number.
+ *
+ * Bounded three ways: a hundred characters, four megabytes, and the profile's own ten minutes.
+ */
+const characterDocs = createBoundedCache<CharacterDocs>({
+  max: 100,
+  maxBytes: 4 * 1024 * 1024,
+  ttlMs: CHARACTER_CACHE_SECONDS * 1000,
+  sizeOf: characterDocsBytes
+})
+
+function docsKey(region: string, realm: string, name: string, locale: string): string {
+  return `${region}:${realm}:${name}:${locale}`.toLowerCase()
+}
+
+/** The ids of a collection the profile just read, or `undefined` when none are on file or they have expired. */
+export function recallCollectedIds(
   region: string,
   realm: string,
   name: string,
   locale: string,
-  kind: CharacterDocKind
-): unknown {
-  const entry = characterDocs.get(`${region}:${realm}:${name}:${locale}`.toLowerCase())
-  if (!entry || entry.at + CHARACTER_CACHE_SECONDS < Math.floor(Date.now() / 1000)) return undefined
-  return entry.data[kind]
+  kind: CollectionDocKind
+): Set<number> | undefined {
+  const ids = characterDocs.get(docsKey(region, realm, name, locale))?.collections[kind]
+  return ids ? new Set(ids) : undefined
 }
 
-/** Files the documents a profile read fetched, so a shelf or the journal can reuse them. */
+/** The reputations the profile just read, in their slim form, or `undefined` when none are on file. */
+export function recallReputations(
+  region: string,
+  realm: string,
+  name: string,
+  locale: string
+): { reputations: SlimReputation[] } | undefined {
+  const reputations = characterDocs.get(docsKey(region, realm, name, locale))?.reputations
+  return reputations ? { reputations } : undefined
+}
+
+/**
+ * Files what a profile read fetched, so a shelf or the journal can reuse it. The raw documents are *taken*, not
+ * kept: they are reduced to ids and slim standings here, and the caller's references are the only ones left.
+ */
 export function rememberCharacterDocs(
   region: string,
   realm: string,
@@ -926,28 +1084,25 @@ export function rememberCharacterDocs(
   locale: string,
   data: Partial<Record<CharacterDocKind, unknown>>
 ): void {
-  const key = `${region}:${realm}:${name}:${locale}`.toLowerCase()
-  const now = Math.floor(Date.now() / 1000)
-
-  if (characterDocs.size >= CHARACTER_DOCS_LIMIT && !characterDocs.has(key)) {
-    for (const [heldKey, entry] of characterDocs) {
-      if (entry.at + CHARACTER_CACHE_SECONDS < now) characterDocs.delete(heldKey)
-    }
-  }
-
-  const entry = characterDocs.get(key) ?? { at: now, data: {} }
+  const key = docsKey(region, realm, name, locale)
+  const held = characterDocs.peek(key)
+  // A document this read could not get leaves what an earlier read filed for the same character in place.
+  const entry: CharacterDocs = { collections: { ...held?.collections }, reputations: held?.reputations }
   let filed = false
-  for (const kind of ['mounts', 'pets', 'toys', 'decor', 'reputations'] as const) {
+
+  for (const kind of Object.keys(COLLECTION_DOCS) as CollectionDocKind[]) {
     if (data[kind] != null) {
-      entry.data[kind] = data[kind]
+      entry.collections[kind] = collectedIdsOf(data[kind], kind)
       filed = true
     }
   }
 
-  if (filed) {
-    entry.at = now
-    characterDocs.set(key, entry)
+  if (data.reputations != null) {
+    entry.reputations = slimReputations(data.reputations)
+    filed = true
   }
+
+  if (filed) characterDocs.set(key, entry)
 }
 
 /** Drops every document, for a test that has to start from a clean map. */
@@ -1055,13 +1210,7 @@ export async function getCharacter(
         // than at the zero the tile would otherwise print (`carryForward`).
         const data = carryForward(cached?.data, read)
 
-        if (cachedCharacters.size >= CHARACTER_CACHE_LIMIT) {
-          const cutoff = Math.floor(Date.now() / 1000)
-          for (const [expiredKey, entry] of cachedCharacters) {
-            if (entry.expires_at <= cutoff) cachedCharacters.delete(expiredKey)
-          }
-        }
-
+        // The LRU drops the least recently used reading itself once a hundred are held (`cachedCharacters`).
         cachedCharacters.set(key, {
           data,
           expires_at: Math.floor(Date.now() / 1000) + CHARACTER_CACHE_SECONDS
@@ -1253,8 +1402,8 @@ export async function getCharacterRecipeIds(realm: string, name: string, region:
   }
 }
 
-/** The appearance sources read per character, and when that reading stops being served. */
-const cachedTransmogs = new Map<string, { count: number; expires_at: number }>()
+/** The appearance sources read per character, kept for a day: a number each, so the count is the bound. */
+const cachedTransmogs = createBoundedCache<{ count: number }>({ max: 500, ttlMs: 24 * 60 * 60 * 1000 })
 
 /** The reads still in flight, under the same key, so a tray opened twice waits once. */
 const pendingTransmogs = new Map<string, Promise<number | null>>()
@@ -1287,7 +1436,7 @@ export async function getCharacterTransmogs(realm: string, name: string, region:
   const now = Math.floor(Date.now() / 1000)
 
   const held = cachedTransmogs.get(key)
-  if (held && held.expires_at > now) return held.count
+  if (held) return held.count
 
   const running = pendingTransmogs.get(key)
   if (running) return running
@@ -1308,10 +1457,8 @@ export async function getCharacterTransmogs(realm: string, name: string, region:
         0
       )
 
-      if (count > 0) {
-        if (cachedTransmogs.size > 500) cachedTransmogs.clear()
-        cachedTransmogs.set(key, { count, expires_at: now + 24 * 60 * 60 })
-      }
+      // `data` - the 2.5 MB document - is not referenced past this line: only the number is kept.
+      if (count > 0) cachedTransmogs.set(key, { count })
 
       return count
     } catch {

@@ -15,7 +15,7 @@
  * shared across every character of an account. The account's shelf is also the one drawn without the
  * faction filter: an account holds characters on both sides, so nothing it holds is out of its reach.
  */
-import { callBlizzard, getBlizzardToken, recallCharacterDoc, type CharacterDocKind } from './blizzard'
+import { callBlizzard, getBlizzardToken, recallCollectedIds } from './blizzard'
 // The account's own ids, for the one shelf a reader is allowed to see as their account's rather than as
 // this character's. The pool is keyed by its own kind names, which `POOL_KIND` below translates into this
 // module's (`decors` is the shelf; `decor` is the pool's own spelling of it).
@@ -191,15 +191,10 @@ export async function getCollectedIds(
 ): Promise<Set<number>> {
   const { path, key, field } = PROFILE[kind]
 
-  // The document the profile just read (to count the tile) is the one this shelf is about to read (for the
-  // ids), so it is reused rather than read again (`recallCharacterDoc`).
-  const cached = recallCharacterDoc(region, realm, name, locale, path as CharacterDocKind)
-  if (cached) {
-    const list = (cached as Record<string, any[]>)?.[key] || []
-    return new Set(
-      list.map((entry) => entry?.[field]?.id).filter((id): id is number => typeof id === 'number')
-    )
-  }
+  // The ids the profile just read (to count the tile) are the ones this shelf is about to read, so they are
+  // reused rather than read again (`recallCollectedIds` - the ids only; the document itself is not kept).
+  const cached = recallCollectedIds(region, realm, name, locale, path as 'mounts' | 'pets' | 'toys' | 'decor')
+  if (cached) return cached
 
   const token = await getBlizzardToken(region)
   const url =

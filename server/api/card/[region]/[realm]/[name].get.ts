@@ -11,7 +11,12 @@ import { parseBoolFlag, readCharacterRoute } from '~~/server/utils/characterRout
 // a reader's page view (`server/utils/blizzardSource`).
 import { runWithBlizzardSource } from '~~/server/utils/blizzardSource'
 
-const cards = createSwrCache<Buffer>(2 * 60 * 60 * 1000, 256)
+// A card is a JPEG of a few hundred kilobytes, so it is kept in the site's own SQLite file and not in the
+// process: the heap holds it only between the read and the response (`server/utils/sqliteStore`). The newest
+// 200 are kept, none older than the two hours the card is fresh for, plus the stale window.
+const cards = createSwrCache<Buffer>(2 * 60 * 60 * 1000, 200, {
+  persist: createSqliteStore('card', bufferCodec, { maxRows: 200, maxAgeMs: 6 * 60 * 60 * 1000 })
+})
 
 export default defineEventHandler(async (event) => {
   const { region, realm, name } = readCharacterRoute(event)
